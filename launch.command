@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Ripple launcher. Double-click in Finder, or run from a terminal.
 #
+#   ./launch.command          start the app and open a browser
+#   ./launch.command --test   run the test suite instead
+#
 # Path-safe: resolves its own directory through symlinks and quotes every
-# expansion, so it works from a path containing spaces, and does not depend on
+# expansion, so it works from a path containing spaces and does not depend on
 # the caller's working directory.
 
 set -euo pipefail
 
-# Resolve this script's real directory, following symlinks.
 script_source="${BASH_SOURCE[0]}"
 while [ -L "$script_source" ]; do
   link_target="$(readlink "$script_source")"
@@ -21,27 +23,51 @@ cd "$REPO_ROOT"
 
 VENV="$REPO_ROOT/tools/.venv"
 PYTHON="$VENV/bin/python"
+BASE_PORT="${RIPPLE_PORT:-8420}"
 
 echo "Ripple  ·  $REPO_ROOT"
 echo
 
 if [ ! -x "$PYTHON" ]; then
   echo "Creating the virtual environment..."
-  if command -v python3 >/dev/null 2>&1; then
-    python3 -m venv "$VENV"
-  else
+  command -v python3 >/dev/null 2>&1 || {
     echo "python3 was not found on PATH. Install Python 3.11 or newer." >&2
     exit 1
-  fi
+  }
+  python3 -m venv "$VENV"
 fi
 
 echo "Installing dependencies..."
 "$PYTHON" -m pip install --quiet --upgrade pip
 "$PYTHON" -m pip install --quiet -e ".[dev]"
 
-echo "Running the test suite..."
-echo
-"$PYTHON" -m pytest
+if [ "${1:-}" = "--test" ]; then
+  echo "Running the test suite..."
+  echo
+  exec "$PYTHON" -m pytest
+fi
+
+# Find a free port, starting at the default and trying up to twenty above it.
+# An instance of Ripple already listening is reused rather than duplicated.
+PORT=""
+for offset in $(seq 0 20); do
+  candidate=$((BASE_PORT + offset))
+  holder="$(lsof -ti ":$candidate" -sTCP:LISTEN 2>/dev/null || true)"
+  if [ -z "$holder" ]; then
+    PORT="$candidate"
+    break
+  fi
+  if ps -p "$holder" -o command= 2>/dev/null | grep -q "ripple.web.app"; then
+    echo "Ripple is already running on port $candidate. Opening it."
+    open "http://127.0.0.1:$candidate" 2>/dev/null || true
+    exit 0
+  fi
+done
+
+if [ -z "$PORT" ]; then
+  echo "No free port between $BASE_PORT and $((BASE_PORT + 20))." >&2
+  exit 1
+fi
 
 echo
 echo "Optional tools:"
@@ -53,12 +79,22 @@ for binary in tesseract pdftoppm; do
   fi
 done
 
+URL="http://127.0.0.1:$PORT"
 echo
-echo "Re-render the demo corpus:"
-echo "  \"$PYTHON\" tools/render_screenplay.py"
+echo "Starting Ripple on $URL"
+echo "Press Control-C to stop."
+echo
 
-# Keep the window open when launched by double-click from Finder.
-if [ -t 1 ] && [ "${TERM_PROGRAM:-}" = "Apple_Terminal" ]; then
-  echo
-  read -r -p "Press Return to close." _
-fi
+# Open the browser once the server answers, rather than immediately, so the
+# first page load is not a connection error.
+(
+  for _ in $(seq 1 40); do
+    if curl -fsS -o /dev/null "$URL" 2>/dev/null; then
+      open "$URL" 2>/dev/null || true
+      exit 0
+    fi
+    sleep 0.25
+  done
+) &
+
+exec "$PYTHON" -m uvicorn ripple.web.app:app --host 127.0.0.1 --port "$PORT" --log-level info

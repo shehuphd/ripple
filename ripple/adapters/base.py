@@ -283,10 +283,16 @@ SHOT_PREFIX = re.compile(
     re.IGNORECASE,
 )
 # Character cues carry optional extensions and an optional dual-dialogue caret.
+#
+# The name class is Unicode-aware rather than [A-Z]: MATIAS and MATÍAS are both
+# valid cues, and an ASCII-only class silently demotes every accented name to
+# an action line. Case is checked separately by parse_character_cue, so a
+# lowercase match here is filtered there.
 CHARACTER_CUE = re.compile(
-    r"^(?P<name>[A-Z0-9][A-Z0-9 .'\-#&]*?)"
+    r"^(?P<name>[^\W\d_][\w .'\-#&]*?)"
     r"(?P<extension>(?:\s*\((?:[^)]*)\))*)"
-    r"\s*(?P<dual>\^)?\s*$"
+    r"\s*(?P<dual>\^)?\s*$",
+    re.UNICODE,
 )
 # Times of day recognised without a model. Anything else stays None rather
 # than being guessed, because a wrong time of day misleads scheduling.

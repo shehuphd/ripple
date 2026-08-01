@@ -6,7 +6,9 @@ The loop is: select a unit, inspect its graph, edit it, see the ripple, decide.
 
 ## Status
 
-Import adapters and the demo corpus are implemented. The graph extraction, ripple preview, and web application are in progress.
+Working: import adapters, the demo corpus, persistence, provider settings, scene-level graph extraction, the deterministic diff engine, continuity retrieval, and a web application covering the library, reader, requirement pane, and settings.
+
+In progress: the synthesizer that writes the ripple explanation, the change-set service for accepting and undoing an edit, and a graph renderer for the local graph view.
 
 ## Requirements
 
@@ -19,7 +21,9 @@ Import adapters and the demo corpus are implemented. The graph extraction, rippl
 ./launch.command
 ```
 
-This creates `tools/.venv`, installs the package with its development extras, and runs the test suite. It is safe to run repeatedly and works from a path containing spaces.
+This creates `tools/.venv`, installs the package, picks a free port, starts the server, and opens a browser. The library seeds the three bundled screenplays on first run, so there is something to read immediately. Run `./launch.command --test` to run the test suite instead.
+
+To build a graph, add a provider key in Settings and choose a model. Nothing else needs a credential: import, the reader, the diff engine, and the deterministic continuity findings all work without one.
 
 Manual equivalent:
 

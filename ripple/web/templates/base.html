@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Ripple{% endblock %}</title>
+<link rel="stylesheet" href="/static/css/ripple-fonts.css">
+<link rel="stylesheet" href="/static/css/ripple-tokens.css">
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+<header>
+  <a class="brand" href="/"><span class="mark"></span>Ripple</a>
+  <nav>
+    <a href="/" class="{% block nav_library %}{% endblock %}">Library</a>
+    <a href="/settings" class="{% block nav_settings %}{% endblock %}">Settings</a>
+  </nav>
+</header>
+<main><div class="wrap">{% block content %}{% endblock %}</div></main>
+<script src="/static/js/app.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

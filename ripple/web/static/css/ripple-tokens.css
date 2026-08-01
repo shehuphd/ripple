@@ -1,0 +1,13 @@
+/* Ripple — design tokens
+   Dark-first surfaces, one accent (projector cyan), fixed diff semantics,
+   ten department hues. Values are the source of truth for the mockups. */
+:root{--sf:"Archivo","Helvetica Neue",sans-serif;--mono:"Courier Prime",ui-monospace,monospace;--serif:"Instrument Serif",Georgia,serif;
+--app:#0D0E10;--panel:#121316;--card:#17191C;--raised:#1C1E22;--inset:#08090A;
+--t1:#EDE9E3;--t2:#A29D94;--t3:#7C776E;--t4:#5C5850;--bd:#22252A;--bd2:#2C3037;
+--ac:#2FA8C7;--ac-d:#1B7D97;--ac-w:rgba(47,168,199,.12);--green:#4E9F6A;--red:#C9564F;--amber:#C98A2E;
+--cast:#B08AD6;--transport:#5AA9D6;--props:#C2A24E;--set:#63B08A;--wardrobe:#CE7BAE;--sound:#7E93D9}
+
+/* Light surfaces (optional): same token names, paper values. */
+[data-theme="light"]{--app:#F6F5F3;--panel:#FFFFFF;--card:#FFFFFF;--raised:#F1EFEC;--inset:#FBFAF8;
+--t1:#1B1A18;--t2:#5C5850;--t3:#7C776E;--t4:#9C978E;--bd:#E2DFDA;--bd2:#D4D0C9;
+--ac:#1B7D97;--ac-d:#166378;--ac-w:rgba(27,125,151,.10);--green:#2F7A4C;--red:#A83B34;--amber:#9A6612}

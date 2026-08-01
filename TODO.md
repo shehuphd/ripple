@@ -18,11 +18,13 @@
 - [x] LLM provider adapters behind one contract
 - [x] Scene-level graph extraction, resumable and browser-driven
 - [x] Settings: per-provider credential entry, validation, and model selection
-- [ ] Deterministic diff engine
-- [ ] Continuity retrieval and the ripple preview pipeline
+- [x] Deterministic diff engine
+- [x] Continuity retrieval and the deterministic orphaned-reference finding
+- [ ] Synthesizer wired onto the preview, so the ripple carries a written explanation
 - [ ] Change-set service with atomic acceptance and latest-only undo
 - [ ] Natural-language query grounded in accepted assertions
-- [ ] Web application and the local graph view
+- [x] Web application: library, reader, requirement pane, settings, extraction loop
+- [ ] Local graph rendered as a graph rather than a node list (renderer still undecided)
 
 ## Decisions still open
 

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ script.title }} — Ripple{% endblock %}
+{% block content %}
+<div class="row spread" style="margin-bottom:4px">
+  <h1>{{ script.title }}</h1>
+  <div class="row">
+    {% if selected_model[1] %}
+      <span class="tag ac">{{ selected_model[1] }}</span>
+      <button class="btn pri" id="extract">Build graph</button>
+    {% else %}
+      <a class="btn" href="/settings">Choose a model to build the graph</a>
+    {% endif %}
+  </div>
+</div>
+<p class="sub">
+  <span class="num">{{ scenes|length }} scenes</span> ·
+  graph {{ script.graph_status.replace('_',' ') }} ·
+  select any line to see its production requirements
+</p>
+
+<div id="run" class="card" style="display:none;margin-bottom:14px">
+  <div class="row spread" style="margin-bottom:8px">
+    <strong id="run-label">Extracting</strong>
+    <span class="tiny muted num" id="run-count"></span>
+  </div>
+  <div class="bar"><i id="run-bar" style="width:0"></i></div>
+</div>
+
+<div class="reader">
+  <div class="card">
+    {% for scene in scenes %}
+    <section class="scene" data-scene="{{ scene.id }}">
+      <h3><span class="n num">{{ scene.display_scene_number or loop.index }}</span>{{ scene.heading }}</h3>
+      {% for unit in scene.units %}
+        {% if unit.unit_type != 'scene_heading' %}
+        <div class="unit {{ unit.unit_type }}" data-unit="{{ unit.id }}">{{ unit.current_text }}</div>
+        {% endif %}
+      {% endfor %}
+    </section>
+    {% endfor %}
+  </div>
+
+  <aside class="pane stack">
+    <div class="card">
+      <div class="hd">Requirements</div>
+      <div id="requirements"><p class="muted tiny" style="margin:0">Select a line.</p></div>
+    </div>
+    <div class="card">
+      <div class="hd">Local graph</div>
+      <div id="graph"><p class="muted tiny" style="margin:0">Select a line.</p></div>
+    </div>
+    <div class="card">
+      <div class="hd">Edit and see the ripple</div>
+      <textarea class="field" id="proposed" placeholder="Select a line, then edit it here."></textarea>
+      <div class="row" style="margin-top:9px">
+        <button class="btn pri" id="see-ripple" disabled>See ripple</button>
+        <span class="tiny muted">Nothing is applied until you accept.</span>
+      </div>
+      <div id="ripple" style="margin-top:12px"></div>
+    </div>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}<script src="/static/js/reader.js"></script>{% endblock %}

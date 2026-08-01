@@ -1,0 +1,15 @@
+/* Ripple — typefaces
+   Archivo         UI chrome (400/500/600)
+   Instrument Serif script titles only
+   Courier Prime   screenplay text only — never for UI numerals (use .num)
+
+   Hosted (default): */
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap");
+
+/* Self-hosted: drop the .woff2 files into assets/fonts/ and swap the @import above
+   for these rules. All three families are SIL Open Font License 1.1.
+@font-face{font-family:"Archivo";font-weight:400 600;font-style:normal;font-display:swap;src:url("../fonts/Archivo-Variable.woff2") format("woff2-variations")}
+@font-face{font-family:"Instrument Serif";font-weight:400;font-style:normal;font-display:swap;src:url("../fonts/InstrumentSerif-Regular.woff2") format("woff2")}
+@font-face{font-family:"Courier Prime";font-weight:400;font-style:normal;font-display:swap;src:url("../fonts/CourierPrime-Regular.woff2") format("woff2")}
+@font-face{font-family:"Courier Prime";font-weight:700;font-style:normal;font-display:swap;src:url("../fonts/CourierPrime-Bold.woff2") format("woff2")}
+*/

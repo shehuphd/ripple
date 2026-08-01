@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block nav_settings %}on{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<p class="sub">
+  Keys are stored in the environment and a local file with owner-only permissions,
+  never in the database and never sent back to this page. On Replit, add them through
+  Replit Secrets instead.
+</p>
+
+<div class="stack">
+{% for status in statuses %}
+  <div class="card" data-provider="{{ status.provider }}">
+    <div class="row spread" style="margin-bottom:11px">
+      <div class="row">
+        <span class="dot {{ 'on' if status.configured else 'off' }}"></span>
+        <strong>{{ status.provider }}</strong>
+        {% if status.is_submission_provider %}
+          <span class="tag ac">ships with the submission</span>
+        {% else %}
+          <span class="tag warn">development only</span>
+        {% endif %}
+      </div>
+      <span class="tiny muted">{{ status.credential_variable }} · {{ status.source.replace('_',' ') }}</span>
+    </div>
+    <div class="row">
+      <input type="password" class="field key" placeholder="Paste a key to validate"
+             autocomplete="off" spellcheck="false">
+      <button class="btn validate">Validate</button>
+      <button class="btn pri save">Save</button>
+      {% if status.configured %}<button class="btn forget">Forget</button>{% endif %}
+    </div>
+    <div class="result tiny" style="margin-top:9px"></div>
+    <div class="models" style="margin-top:11px"></div>
+  </div>
+{% endfor %}
+</div>
+
+<div class="card" style="margin-top:18px">
+  <h2>Active model</h2>
+  {% if selected_provider %}
+    <p style="margin:0">
+      <span class="tag ac">{{ selected_provider }}</span>
+      <span class="mono">{{ selected_model }}</span>
+    </p>
+  {% else %}
+    <p class="muted" style="margin:0">
+      No model selected. Validate a provider above, then pick one from its list.
+    </p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}<script src="/static/js/settings.js"></script>{% endblock %}

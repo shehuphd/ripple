@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block nav_library %}on{% endblock %}
+{% block content %}
+<h1>Script library</h1>
+<p class="sub">Select a screenplay to read, or import Fountain, Final Draft XML, PDF, or plain text.</p>
+
+<div class="card" style="margin-bottom:18px">
+  <div class="row spread">
+    <div>
+      <h2>Import a screenplay</h2>
+      <p class="tiny muted" style="margin:0">
+        Format is detected from content. Up to {{ '%.0f'|format(max_bytes / 1048576) }} MB.
+      </p>
+    </div>
+    <form id="upload" class="row">
+      <input type="file" name="file" id="file" class="field" style="width:280px"
+             accept=".fountain,.fdx,.pdf,.txt,.xml,.text">
+      <button class="btn pri" type="submit">Import</button>
+    </form>
+  </div>
+  <div id="upload-result" style="margin-top:12px"></div>
+</div>
+
+{% if rows %}
+<div class="grid">
+  {% for row in rows %}
+  <div class="card">
+    <div class="row spread" style="margin-bottom:8px">
+      <a href="/scripts/{{ row.script.id }}" style="font-weight:600;font-size:15px">
+        {{ row.script.title }}</a>
+      <span class="tag {{ 'ok' if row.script.import_status == 'accepted' else 'warn' }}">
+        {{ row.script.import_status.replace('_',' ') }}</span>
+    </div>
+    <div class="row tiny muted" style="gap:14px">
+      <span class="num">{{ row.scenes }} scenes</span>
+      <span class="num">{{ row.entities }} entities</span>
+      <span class="num">{{ row.assertions }} assertions</span>
+    </div>
+    <div class="row spread" style="margin-top:11px">
+      <span class="tag {{ 'ac' if row.script.graph_status == 'ready' else '' }}">
+        graph: {{ row.script.graph_status.replace('_',' ') }}</span>
+      <button class="btn sm danger" data-delete="{{ row.script.id }}"
+              data-title="{{ row.script.title }}">Delete</button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+<div class="row" style="margin-top:18px">
+  <button class="btn sm danger" id="clear-graphs">Clear all graphs</button>
+  <span class="tiny muted">Removes extracted graph data. Scripts and parsed units stay.</span>
+</div>
+{% else %}
+<div class="card"><p class="muted" style="margin:0">No scripts yet. Import one above.</p></div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}<script src="/static/js/library.js"></script>{% endblock %}

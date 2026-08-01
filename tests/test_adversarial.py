@@ -247,3 +247,44 @@ class TestStructuralEdgeCases:
         assert result.scene_count == 400
         assert any(w.code == "scene_limit" for w in result.warnings)
         assert result.outcome is ImportOutcome.NEEDS_REVIEW
+
+
+class TestNonAsciiNames:
+    """Accented cues are cues. Found by script 03 rendering MATÍAS as action."""
+
+    @pytest.mark.parametrize("name", ["MATÍAS", "BÉLA VARGA", "ILONA", "JOSÉ", "ZOË"])
+    def test_an_accented_character_cue_is_recognised(self, name):
+        from ripple.adapters.base import parse_character_cue
+
+        parsed = parse_character_cue(name)
+        assert parsed is not None, f"{name} was not read as a cue"
+        assert parsed[0] == name
+
+    def test_accented_dialogue_parses_in_the_corpus(self):
+        from pathlib import Path
+
+        from ripple.adapters import UnitType
+
+        source = Path("demo-scripts/03-seven-minutes/seven-minutes.fountain")
+        if not source.exists():
+            pytest.skip("corpus missing")
+        result = import_screenplay(source.read_bytes(), "seven-minutes.fountain")
+        speakers = {
+            unit.speaker_name
+            for scene in result.scenes
+            for unit in scene.units
+            if unit.unit_type is UnitType.CHARACTER
+        }
+        assert "MATÍAS" in speakers
+        assert "BÉLA" in speakers
+
+    def test_an_accented_name_still_resolves_to_one_entity(self):
+        """NFKC means the composed and decomposed forms are one key."""
+        import unicodedata
+
+        from ripple.db.naming import normalize
+
+        composed = "MATÍAS"
+        decomposed = unicodedata.normalize("NFD", composed)
+        assert composed != decomposed
+        assert normalize(composed) == normalize(decomposed)
