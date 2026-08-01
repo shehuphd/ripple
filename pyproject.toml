@@ -1,0 +1,21 @@
+[project]
+name = "ripple"
+version = "0.1.0"
+description = "Script graph agents for production impact analysis"
+requires-python = ">=3.11"
+dependencies = [
+    "defusedxml>=0.7.1",
+    "pdf-inspector>=0.2.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-randomly", "reportlab", "pypdf", "screenplain==0.12.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# pytest-randomly stays enabled: a failure caused by test order is a real bug.
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 90
+target-version = "py311"

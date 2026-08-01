@@ -1,0 +1,3 @@
+screenplain==0.12.0
+reportlab
+pypdf

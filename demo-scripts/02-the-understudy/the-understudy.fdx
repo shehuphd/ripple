@@ -1,0 +1,616 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<FinalDraft DocumentType="Script" Template="No" Version="1">
+
+  <Content>
+    <Paragraph Type="Scene Heading" Number="1">
+      <Text>EXT. THE ALBION THEATRE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Manchester, 1931. Rain on a playbill under glass: THE WINTER WIDOW, and beneath it, in smaller type, MISS EVELYN ALDRIDGE.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>A queue of wet umbrellas goes round the corner.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="2">
+      <Text>INT. ALBION THEATRE - STAGE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>A row of gas footlights along the lip of the stage, each one hooded in brass, each one burning.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Behind them, a painted parlour. A woman in an emerald gown crosses to a window that opens onto nothing.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>ANGLE ON - THE FOOTLIGHTS</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>One hood hangs loose on its bracket. The flame inside leans.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="3">
+      <Text>INT. ALBION THEATRE - PROMPT CORNER - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Stage left, half a metre of floor and a shelf. VERA COYNE, 20s, holds the prompt book open with her thumb, mouthing every line a half-beat ahead of the actress.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>She does not look at the page. She has not needed to for a month.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="4">
+      <Text>INT. ALBION THEATRE - WINGS - CONTINUOUS</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>STAGE MANAGER HOLLOWAY, 40s, clipboard, checks a watch against nothing.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>HOLLOWAY</Text>
+    </Paragraph>
+    <Paragraph Type="Parenthetical">
+      <Text>(low)</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Where's her change?</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA (O.S.)</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Second interval.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>HOLLOWAY</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>She's got ninety seconds.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA (O.S.)</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>She's had ninety seconds for four hundred performances.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="5">
+      <Text>INT. ALBION THEATRE - DRESSING ROOM ONE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Mirror bulbs, half of them out. EVELYN ALDRIDGE, 40s, holds herself very straight while a dresser works the hooks up the back of the emerald gown.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The gown is beaded to the shoulder. It weighs what a small child weighs.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>EVELYN</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Tighter.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>DRESSER</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>It's at the last hook, Miss Aldridge.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>EVELYN</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Then move the hook.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="6">
+      <Text>INT. ALBION THEATRE - CORRIDOR - CONTINUOUS</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Vera passes the door with the prompt book under her arm. Slows. Doesn't stop.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="7">
+      <Text>INT. ALBION THEATRE - STAGE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Evelyn, in the emerald gown, delivers the curtain line to a house that has already begun to gather its coats.</Text>
+    </Paragraph>
+    <Paragraph Type="Transition">
+      <Text>CUT TO:</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="8">
+      <Text>INT. ALBION THEATRE - PROMPT CORNER - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Vera closes the prompt book. Rules a line under the date.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="9">
+      <Text>INT. PUBLIC HOUSE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Low ceiling. Company members crowded round two tables. Vera on the end of a bench, half in her coat.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>DESMOND CARR, 30s, leading man, drops onto the bench beside her.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>DESMOND</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>You were three words ahead of her all night.</Text>
+    </Paragraph>
+    <Paragraph>
+      <DualDialogue>
+    <Paragraph Type="Character">
+      <Text>VERA</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Four, in the second act.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>DESMOND</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>You were four ahead in the second act.</Text>
+    </Paragraph>
+      </DualDialogue>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>They both stop. Laugh.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="10">
+      <Text>INT. PUBLIC HOUSE - LATER</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>DESMOND</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Ask Holloway for the Thursday matinee.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Holloway doesn't give matinees. Holloway gives notes.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>DESMOND</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Ask anyway.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="11">
+      <Text>INT. ALBION THEATRE - HOLLOWAY'S OFFICE - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>A desk, a safe, a schedule board. Holloway does not offer the chair.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>HOLLOWAY</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>No.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>I know the whole of it.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>HOLLOWAY</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Everyone knows the whole of it. That's what a prompt book is for.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="11A">
+      <Text>INT. ALBION THEATRE - HOLLOWAY'S OFFICE - CONTINUOUS</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Vera puts the prompt book on the desk. Doesn't let go of it yet.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Then take it off me and give me the Thursday.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Holloway looks at her hand on the book.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>HOLLOWAY</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Leave it there.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="12">
+      <Text>INT. ALBION THEATRE - CORRIDOR - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Vera walks out with nothing under her arm. Her hand keeps closing on air.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="13">
+      <Text>INT. ALBION THEATRE - STAGE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Evelyn, in the emerald gown, misses a cue.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The pause runs two seconds long. Three.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA (O.S.)</Text>
+    </Paragraph>
+    <Paragraph Type="Parenthetical">
+      <Text>(from the prompt corner, barely audible)</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>The window, Aunt Beatrice.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Evelyn crosses to the window.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="14">
+      <Text>MONTAGE - EIGHT PERFORMANCES</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Evelyn late on a cue. Vera's mouth moving in the dark. The emerald gown going up on its hanger, coming down off its hanger, going up again.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The hood on the footlight, still loose.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>END MONTAGE</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="15">
+      <Text>INT. ALBION THEATRE - DRESSING ROOM ONE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Evelyn, out of the gown, in a robe, works cold cream across her face with both hands.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Her hands are not steady. She watches them until they are.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="16">
+      <Text>INT. ALBION THEATRE - WINGS - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Desmond, in costume, waiting on his entrance. Vera beside him.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>DESMOND</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>She's ill.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>She's tired.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>DESMOND</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Those are the same word in this building.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="17">
+      <Text>INT. ALBION THEATRE - STAGE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>CLOSE ON - the loose hood. The flame leans against the brass and blackens it.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>A stagehand walks past it for the ninth night running.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="18">
+      <Text>INT. ALBION THEATRE - HOLLOWAY'S OFFICE - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Holloway, on the telephone, writing nothing down.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>HOLLOWAY</Text>
+    </Paragraph>
+    <Paragraph Type="Parenthetical">
+      <Text>(into phone)</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Then send whoever the agency has. Tonight.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="19">
+      <Text>INT. ALBION THEATRE - GREEN ROOM - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The company reads a notice pinned to the board. Nobody speaks.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Vera reads it twice.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="20">
+      <Text>INT. ALBION THEATRE - DRESSING ROOM TWO - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Smaller mirror. Fewer bulbs. The emerald gown hangs on the back of the door, let out two inches at the waist.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Vera looks at it the way you look at a dog that might not know you.</Text>
+    </Paragraph>
+    <Paragraph Type="Transition">
+      <Text>DISSOLVE TO:</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="21">
+      <Text>INT. ALBION THEATRE - STAGE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Vera, in the emerald gown, in the parlour that opens onto nothing.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>She does not miss the cue.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="22">
+      <Text>INT. ALBION THEATRE - WINGS - CONTINUOUS</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Holloway watches from the dark with the clipboard against his chest, not writing.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="23">
+      <Text>INT. PUBLIC HOUSE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The company, louder than usual. Vera in the middle of it for the first time.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>DESMOND</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>To Thursday.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>COMPANY</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>To Thursday.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="24">
+      <Text>INT. ALBION THEATRE - CORRIDOR - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Evelyn, in a coat, walking out past the notice board. She does not read it.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>She passes Vera in the corridor. Neither says anything.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="25">
+      <Text>INT. ALBION THEATRE - PROMPT CORNER - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>A YOUNG ASM, 19, holds the prompt book badly, thumb in the wrong place.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>She loses her line. Finds it. Loses it again.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="26">
+      <Text>INT. ALBION THEATRE - STAGE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Vera covers the silence with a piece of business the play does not contain.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The house never knows.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="27">
+      <Text>INT. ALBION THEATRE - HOLLOWAY'S OFFICE - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>HOLLOWAY</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>You added four lines.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>I added six.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>HOLLOWAY</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Don't do it again.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>A beat.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>HOLLOWAY (CONT'D)</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Do it again on Saturday if she drops it again.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="28">
+      <Text>INT. ALBION THEATRE - STAGE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The emerald gown under the footlights. Vera turns downstage.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Behind her, the loose hood tips off its bracket and hangs by one screw.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Nobody in the house looks at it.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="29">
+      <Text>INT. ALBION THEATRE - WINGS - CONTINUOUS</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Holloway sees it. Starts forward. The scene is still running.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>He stops.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="30">
+      <Text>INT. ALBION THEATRE - STAGE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The hood drops. The flame goes sideways into the painted parlour flat.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Canvas takes light the way paper does.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="30A">
+      <Text>INT. ALBION THEATRE - STAGE - CONTINUOUS</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Vera turns into it. The beaded hem of the emerald gown goes up first.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>She gets two steps before Desmond hits her at the waist and takes her down out of frame.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="31">
+      <Text>INT. ALBION THEATRE - AUDITORIUM - CONTINUOUS</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Four hundred people stand at once. The house lights come up on a room already full of smoke.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="32">
+      <Text>INT. ALBION THEATRE - STAGE - CONTINUOUS</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Desmond rolls Vera in the safety curtain's weighted skirt.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The gown is gone from the knee down. Her right forearm, where she put it out, is burned from wrist to elbow.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>She is not making any sound at all.</Text>
+    </Paragraph>
+    <Paragraph Type="Transition">
+      <Text>FADE TO:</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="33">
+      <Text>INT. HOSPITAL WARD - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Rows of beds. Vera's right forearm dressed from wrist to elbow.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Desmond, in his own clothes for once, on a chair too small for him.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>DESMOND</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Holloway's saying the bracket was sound.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>The bracket was loose in September.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>DESMOND</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>I know.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>You walked past it too.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="34">
+      <Text>INT. HOSPITAL WARD - LATER</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Vera alone. She works the fingers of the right hand, one at a time, and gets three of them.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="35">
+      <Text>INT. ALBION THEATRE - STAGE - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Daylight through the scene dock doors. The parlour flat is a black frame with nothing in it.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Vera walks the stage with her sleeve buttoned to the wrist over the dressing.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="36">
+      <Text>INT. ALBION THEATRE - HOLLOWAY'S OFFICE - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The schedule board is wiped. The safe is open and empty.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>HOLLOWAY</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>The company's dissolved as of Friday.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>And the inquiry?</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>HOLLOWAY</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>There's no inquiry. There's an insurer.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="37">
+      <Text>INT. ALBION THEATRE - PROMPT CORNER - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The prompt book on the shelf, cover scorched along one edge.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>Vera picks it up left-handed.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="38">
+      <Text>EXT. THE ALBION THEATRE - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The playbill case is empty. A bill-poster works a paste brush over the glass.</Text>
+    </Paragraph>
+    <Paragraph Type="Scene Heading" Number="39">
+      <Text>INT. REPERTORY THEATRE, LEEDS - AUDITION ROOM - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>A trestle table. Three people behind it. Vera in front of it, sleeve buttoned to the wrist.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>CASTING WOMAN</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>And you've played the Widow.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Eleven times.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>CASTING WOMAN</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>For Aldridge.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>After her.</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>The casting woman looks at the sleeve. Vera unbuttons it and puts the arm on the table.</Text>
+    </Paragraph>
+    <Paragraph Type="Character">
+      <Text>VERA (CONT'D)</Text>
+    </Paragraph>
+    <Paragraph Type="Dialogue">
+      <Text>Do you want the second act or the third?</Text>
+    </Paragraph>
+    <Paragraph Type="Action">
+      <Text>FADE OUT.</Text>
+    </Paragraph>
+  </Content>
+</FinalDraft>
