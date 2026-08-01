@@ -186,30 +186,36 @@ class TestActionableErrors:
             "AQ.Ab8RN6KWfzGBqBkazzf0Smxxxxxxxxxxxxxxxxxxxx",
             "AIzaSyC-an-older-format-key-0000000000000",
             "some-future-format-nobody-has-seen-yet",
+            "sk-proj-lots-of-dashes-and_underscores.and.dots",
+            '{"looks":"like json but might not be"}',
+            "a key with a space in it",
+            "x" * 1024,
         ],
     )
-    def test_no_key_is_refused_for_its_prefix(self, monkeypatch, tmp_path, key):
-        """AI Studio has issued keys beginning `AIza` and, more recently, `AQ.`.
+    def test_only_the_provider_judges_a_key(self, monkeypatch, tmp_path, key):
+        """No local check may reject a value for its shape.
 
-        A prefix allowlist rejects valid keys, which is a worse failure than
-        the provider error it was meant to pre-empt: the user cannot get past
-        it at all, and the app is confidently wrong about their credential.
+        AI Studio has issued keys beginning `AIza` and, more recently, `AQ.`,
+        and any allowlist of prefixes, character sets, or lengths will be wrong
+        again the next time a format changes. Rejecting a working key is worse
+        than the provider error it was meant to pre-empt: the user cannot get
+        past it, and the app is confidently wrong about their credential.
         """
         result = self._validate_google(monkeypatch, tmp_path, key)
-        assert result.error_code != "wrong_credential_type", key
+        assert result.error_code != "unusable_credential", key
 
     @pytest.mark.parametrize(
-        "key, because",
+        "value, because",
         [
-            ('{"type": "service_account", "project_id": "x"}', "service-account"),
-            ("AQ.key with a space in it", "space"),
-            ("AQ.key\nwith-a-newline", "space"),
+            (b"\x89PNG\r\n\x1a\n", "text"),
+            ("key-with-a-\x00-null-byte", "binary"),
+            ("x" * 1025, "longer than any API key"),
+            ("   ", "Enter a key"),
         ],
     )
-    def test_a_paste_that_cannot_be_a_key_is_refused_locally(
-        self, monkeypatch, tmp_path, key, because
-    ):
-        """Only structural impossibilities, never a guess at the format."""
-        result = self._validate_google(monkeypatch, tmp_path, key)
-        assert result.error_code == "wrong_credential_type"
-        assert because in result.error_message
+    def test_a_value_that_cannot_be_sent_at_all_is_refused(self, value, because):
+        """Type and size only: what a credential must be to reach an endpoint."""
+        from ripple.services.settings import unusable_credential
+
+        message = unusable_credential(value)
+        assert message and because in message

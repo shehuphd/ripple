@@ -20,6 +20,47 @@ from ripple.llm.base import ModelInfo
 logger = logging.getLogger(__name__)
 
 
+# Long enough that no credential any provider issues could exceed it, short
+# enough to catch a pasted file. Not a guess at any provider's key length: the
+# point is only to refuse a value that cannot be a credential at all.
+MAX_CREDENTIAL_LENGTH = 1024
+
+
+def unusable_credential(value: object) -> str | None:
+    """Say why a value cannot be sent to a provider, or None to send it.
+
+    This is the whole of Ripple's local checking, and it is deliberately blind
+    to format. Prefixes, character sets, and lengths differ per provider and
+    change without notice, so the provider's own endpoint decides whether a key
+    is valid. A local gate that rejects a working key is worse than the error it
+    was meant to pre-empt: the user cannot get past it, and the app is
+    confidently wrong about their credential.
+
+    What is left is the type and size a credential has to be to be sent at all.
+    """
+    if not isinstance(value, str):
+        return "A credential must be text."
+    key = value.strip()
+    if not key:
+        return "Enter a key."
+    if len(key) > MAX_CREDENTIAL_LENGTH:
+        return (
+            f"This is {len(key)} characters long, which is longer than any API "
+            "key. It looks like a file or a document rather than a credential."
+        )
+    if any(character in key for character in _CONTROL_CHARACTERS):
+        return "This contains binary data rather than text. Paste the key itself."
+    return None
+
+
+# Control characters, which no credential contains and which mark a paste as
+# binary rather than text. Tab, carriage return, and newline are excluded: they
+# come from ordinary copying and are stripped rather than refused.
+_CONTROL_CHARACTERS = frozenset(
+    chr(code) for code in list(range(32)) + [127] if chr(code) not in "\t\r\n"
+)
+
+
 @dataclass(frozen=True)
 class ProviderStatus:
     """One row of the settings screen. Holds no credential material."""
@@ -83,16 +124,20 @@ class SettingsService:
 
             variable = provider.credential_variable
             restore = (variable, os.environ.get(variable))
-            os.environ[variable] = api_key.strip()
+            os.environ[variable] = api_key.strip() if isinstance(api_key, str) else ""
 
         try:
-            warning = getattr(provider, "shape_warning", lambda: None)()
-            if warning:
+            # Only a value the user just submitted is checked. Re-validating
+            # what is already stored goes straight to the provider, and with
+            # nothing stored the provider's own "not configured" error names
+            # the variable to set.
+            unusable = unusable_credential(api_key) if api_key is not None else None
+            if unusable:
                 return ValidationResult(
                     provider=provider_name,
                     valid=False,
-                    error_code="wrong_credential_type",
-                    error_message=warning,
+                    error_code="unusable_credential",
+                    error_message=unusable,
                 )
             models = provider.list_models()
             return ValidationResult(

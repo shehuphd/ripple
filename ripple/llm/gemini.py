@@ -40,31 +40,6 @@ class GeminiProvider:
         """True when a Google credential is in the environment."""
         return bool(os.environ.get(CREDENTIAL_VARIABLE, "").strip())
 
-    def shape_warning(self) -> str | None:
-        """Refuse only what is structurally not an API key at all.
-
-        Deliberately not a prefix check. AI Studio has issued keys beginning
-        `AIza` and, more recently, `AQ.`, and any list of accepted prefixes
-        will be wrong again the next time the format changes. A gate that
-        rejects a valid key is worse than the provider error it was meant to
-        pre-empt, so the provider decides and this only catches pastes that
-        cannot be a key in any format.
-        """
-        key = os.environ.get(CREDENTIAL_VARIABLE, "").strip()
-        if not key:
-            return None
-        if key.startswith("{"):
-            return (
-                "That looks like the contents of a service-account JSON file. "
-                "The Gemini API wants an API key from aistudio.google.com/apikey."
-            )
-        if any(character.isspace() for character in key):
-            return (
-                "This credential contains a space or line break, so it was "
-                "probably copied with surrounding text. Paste the key alone."
-            )
-        return None
-
     def _client(self):
         """Build a client, or say which variable is missing."""
         if not self.is_configured():
