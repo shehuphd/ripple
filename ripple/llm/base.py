@@ -168,9 +168,10 @@ def explain_auth_failure(provider: str, detail: str) -> str:
     if "access_token_type_unsupported" in lowered or "oauth 2 access token" in lowered:
         return (
             "Google rejected this credential as the wrong type. The Gemini API "
-            "wants an AI Studio API key, which begins 'AIza'. An OAuth token, a "
-            "service-account JSON, or a gcloud access token will not work here. "
-            "Create one at aistudio.google.com/apikey."
+            "wants an API key from aistudio.google.com/apikey, not an OAuth "
+            "token, a gcloud access token, or a service-account JSON. If it is "
+            "an API key, check that the Generative Language API is enabled on "
+            "the project that issued it."
         )
     if "api key not valid" in lowered or "api_key_invalid" in lowered:
         return (

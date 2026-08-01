@@ -154,7 +154,7 @@ class TestActionableErrors:
     @pytest.mark.parametrize(
         "detail, expected",
         [
-            ("401 UNAUTHENTICATED ... ACCESS_TOKEN_TYPE_UNSUPPORTED", "AI Studio"),
+            ("401 UNAUTHENTICATED ... ACCESS_TOKEN_TYPE_UNSUPPORTED", "aistudio"),
             ("API key not valid. Please pass a valid API key.", "Generative Language"),
             ("Error 401 Authentication Fails, Your api key is invalid", "revoked"),
             ("429 insufficient_quota", "quota or billing"),
@@ -173,28 +173,43 @@ class TestActionableErrors:
 
         assert "could not be reached" in explain_auth_failure("openai", "socket closed")
 
-    def test_a_google_credential_of_the_wrong_shape_is_refused_locally(
-        self, monkeypatch, tmp_path
-    ):
-        """Refusing before the call saves a round trip and explains better."""
+    def _validate_google(self, monkeypatch, tmp_path, key):
         from ripple.config.secrets import SecretStore
         from ripple.services.settings import SettingsService
 
-        monkeypatch.setenv("GOOGLE_API_KEY", "ya29.an-oauth-access-token")
-        service = SettingsService(SecretStore(tmp_path / "s.env"))
-        result = service.validate("google")
-        assert not result.valid
+        monkeypatch.setenv("GOOGLE_API_KEY", key)
+        return SettingsService(SecretStore(tmp_path / "s.env")).validate("google")
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "AQ.Ab8RN6KWfzGBqBkazzf0Smxxxxxxxxxxxxxxxxxxxx",
+            "AIzaSyC-an-older-format-key-0000000000000",
+            "some-future-format-nobody-has-seen-yet",
+        ],
+    )
+    def test_no_key_is_refused_for_its_prefix(self, monkeypatch, tmp_path, key):
+        """AI Studio has issued keys beginning `AIza` and, more recently, `AQ.`.
+
+        A prefix allowlist rejects valid keys, which is a worse failure than
+        the provider error it was meant to pre-empt: the user cannot get past
+        it at all, and the app is confidently wrong about their credential.
+        """
+        result = self._validate_google(monkeypatch, tmp_path, key)
+        assert result.error_code != "wrong_credential_type", key
+
+    @pytest.mark.parametrize(
+        "key, because",
+        [
+            ('{"type": "service_account", "project_id": "x"}', "service-account"),
+            ("AQ.key with a space in it", "space"),
+            ("AQ.key\nwith-a-newline", "space"),
+        ],
+    )
+    def test_a_paste_that_cannot_be_a_key_is_refused_locally(
+        self, monkeypatch, tmp_path, key, because
+    ):
+        """Only structural impossibilities, never a guess at the format."""
+        result = self._validate_google(monkeypatch, tmp_path, key)
         assert result.error_code == "wrong_credential_type"
-        assert "AIza" in result.error_message
-
-    def test_a_well_shaped_google_key_is_not_refused_locally(
-        self, monkeypatch, tmp_path
-    ):
-        """The shape check must not stand in for the provider's own answer."""
-        from ripple.config.secrets import SecretStore
-        from ripple.services.settings import SettingsService
-
-        monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSy-shaped-like-a-key-but-not-real")
-        service = SettingsService(SecretStore(tmp_path / "s.env"))
-        result = service.validate("google")
-        assert result.error_code != "wrong_credential_type"
+        assert because in result.error_message
