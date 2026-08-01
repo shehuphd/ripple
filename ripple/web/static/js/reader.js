@@ -1,4 +1,48 @@
-const state = { unit: null, text: '', sceneNo: null, changeSet: null };
+/* Drafts are edits the user has typed but not accepted. They live only in the
+   page: the accepted script is unchanged until a ripple is accepted, which is
+   the guarantee the whole product rests on. */
+const state = {
+  unit: null, text: '', sceneNo: null, changeSet: null,
+  drafts: new Map(), applying: false,
+};
+
+const draftCount = document.getElementById('draft-count');
+const revertAll = document.getElementById('revert-all');
+
+const acceptedTextOf = (node) => node.dataset.accepted;
+
+function currentTextOf(unitId) {
+  if (state.drafts.has(unitId)) return state.drafts.get(unitId);
+  const node = document.querySelector(`.u[data-unit="${unitId}"]`);
+  return node ? acceptedTextOf(node) : '';
+}
+
+function refreshDraftIndicator() {
+  const count = state.drafts.size;
+  draftCount.classList.toggle('hide', count === 0);
+  draftCount.querySelector('span').textContent =
+    `${count} line${count === 1 ? '' : 's'} edited`;
+  revertAll.disabled = count === 0;
+}
+
+function noteDraft(node) {
+  const unitId = node.dataset.unit;
+  if (node.textContent === acceptedTextOf(node)) {
+    state.drafts.delete(unitId);
+    node.classList.remove('edited');
+  } else {
+    state.drafts.set(unitId, node.textContent);
+    node.classList.add('edited');
+  }
+  refreshDraftIndicator();
+}
+
+function revertLine(node) {
+  node.textContent = acceptedTextOf(node);
+  state.drafts.delete(node.dataset.unit);
+  node.classList.remove('edited');
+  refreshDraftIndicator();
+}
 
 const requirements = document.getElementById('requirements');
 const reqChips = document.getElementById('req-chips');
@@ -29,8 +73,7 @@ document.querySelectorAll('.scene-row').forEach((row) => {
   });
 });
 
-document.querySelectorAll('.u').forEach((node) => {
-  node.addEventListener('click', async () => {
+async function selectUnit(node) {
     document.querySelectorAll('.u.sel').forEach((n) => n.classList.remove('sel'));
     document.querySelectorAll('.ucap').forEach((n) => n.remove());
     node.classList.add('sel');
@@ -67,14 +110,58 @@ document.querySelectorAll('.u').forEach((node) => {
       graph.innerHTML =
         '<div class="empty">Nothing in the graph yet. Build it to see edges.</div>';
     }
+}
+
+document.querySelectorAll('.u').forEach((node) => {
+  // Focus is selection: clicking into a line to type is the same gesture as
+  // choosing it, so the two are not separate interactions.
+  node.addEventListener('focus', () => selectUnit(node));
+  node.addEventListener('input', () => {
+    noteDraft(node);
+    state.text = node.textContent;
   });
+  node.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      revertLine(node);
+      node.blur();
+    }
+    // A screenplay unit is one block. Enter would split it into markup the
+    // parser never produced, so it opens the ripple instead.
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (state.drafts.has(node.dataset.unit)) openPreview();
+    }
+  });
+  // Paste as plain text, flattened: pasted markup or line breaks would become
+  // part of a unit that the parser never produced that way.
+  node.addEventListener('paste', (event) => {
+    event.preventDefault();
+    const text = (event.clipboardData || window.clipboardData).getData('text');
+    document.execCommand('insertText', false, text.replace(/\s*\n\s*/g, ' '));
+  });
+});
+
+revertAll.addEventListener('click', () => {
+  if (!window.confirm(`Discard ${state.drafts.size} unapplied edit(s)?`)) return;
+  document.querySelectorAll('.u.edited').forEach(revertLine);
+});
+
+// Unapplied edits live only in the page, so leaving loses them.
+window.addEventListener('beforeunload', (event) => {
+  if (state.drafts.size && !state.applying) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
 });
 
 /* Ripple preview */
 function openPreview() {
+  if (!state.unit) return;
+  const node = document.querySelector(`.u[data-unit="${state.unit}"]`);
   preview.classList.remove('hide');
-  document.getElementById('pv-accepted').textContent = state.text;
-  document.getElementById('pv-proposed').value = state.text;
+  document.getElementById('pv-accepted').textContent = acceptedTextOf(node);
+  document.getElementById('pv-proposed').value = currentTextOf(state.unit);
   document.getElementById('pv-crumb').textContent =
     `unit ${state.unit.slice(0, 8)} · scene ${state.sceneNo} · nothing is applied until you accept`;
   runPreview();
@@ -147,7 +234,17 @@ async function runPreview() {
 seeRipple.addEventListener('click', openPreview);
 document.getElementById('pv-close').addEventListener('click',
   () => preview.classList.add('hide'));
-document.getElementById('pv-keep').addEventListener('click', runPreview);
+// Keep editing writes the overlay's text back to the line, so the script and
+// the preview never disagree about what the proposal is.
+document.getElementById('pv-keep').addEventListener('click', () => {
+  const node = document.querySelector(`.u[data-unit="${state.unit}"]`);
+  if (node) {
+    node.textContent = document.getElementById('pv-proposed').value;
+    noteDraft(node);
+  }
+  preview.classList.add('hide');
+  if (node) node.focus();
+});
 
 document.getElementById('pv-reject').addEventListener('click', async () => {
   if (!state.changeSet) return;
@@ -160,6 +257,8 @@ document.getElementById('pv-accept').addEventListener('click', async () => {
   if (!state.changeSet) return;
   try {
     const body = await api(`/api/changes/${state.changeSet}/accept`, { method: 'POST' });
+    state.drafts.delete(state.unit);
+    state.applying = true;
     toast(`Accepted · ${body.operations_applied} operations · now v${body.script_version}`);
     setTimeout(() => window.location.reload(), 900);
   } catch (error) {

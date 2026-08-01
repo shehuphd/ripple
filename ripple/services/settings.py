@@ -86,6 +86,14 @@ class SettingsService:
             os.environ[variable] = api_key.strip()
 
         try:
+            warning = getattr(provider, "shape_warning", lambda: None)()
+            if warning:
+                return ValidationResult(
+                    provider=provider_name,
+                    valid=False,
+                    error_code="wrong_credential_type",
+                    error_message=warning,
+                )
             models = provider.list_models()
             return ValidationResult(
                 provider=provider_name, valid=True, model_count=len(models)

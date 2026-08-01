@@ -6,6 +6,9 @@ All notable changes to Ripple are documented here.
 
 ### Added
 
+- **The script is editable in place.** Every line is a `contenteditable` block. Typing marks it "edited, not applied" in amber, the toolbar counts unapplied edits, Escape reverts a line, and Revert edits discards them all. Drafts live only in the page: the accepted script is unchanged until a ripple is accepted, which is the guarantee the product rests on. Enter opens the ripple rather than splitting the unit, and paste is flattened to plain text, because both would otherwise produce markup the parser never emitted.
+- **Actionable provider errors.** A raw 401 tells the user their key failed, which they knew. `explain_auth_failure` names which of the several causes applies and what to do: wrong credential type, key not valid, restricted key, revoked key, or quota. The Gemini adapter also refuses a credential that is not shaped like an AI Studio key before spending a call on it.
+
 - **Collapsible side panes**, with the choice persisted per pane. The sidebar collapses on every page; the reader's requirement pane and the graph's detail pane have their own toggles. Below 900px the sidebar becomes a drawer over the content with a backdrop, because a 238px column at that width leaves nothing for the script.
 - **Asset cache-busting.** Every stylesheet and script carries a version derived from the newest file modification time. Without it a browser keeps a stylesheet it already has and runs old CSS against new markup, which fails invisibly: the file on disk is right, the served file is right, and only the loaded sheet is stale.
 - **Responsive breakpoints**, verified by measuring the rendered page at 1600, 1024, and 480 pixels rather than by inspection: no horizontal scrolling at any of them, the reader stacks below 1080px, the graph panes stack below 820px, and the library drops its lowest-value columns below 640px.

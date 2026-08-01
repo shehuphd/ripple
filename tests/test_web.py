@@ -421,3 +421,39 @@ class TestAssetVersioning:
         target = web.HERE / "static" / "css" / "app.css"
         target.touch()
         assert web.asset_version() >= first
+
+
+class TestInlineEditing:
+    """The script itself is editable; nothing is applied until accept."""
+
+    def test_every_line_is_editable(self, client):
+        import re
+
+        script_id = _first_script(client)
+        body = client.get(f"/scripts/{script_id}").text
+        units = re.findall(r'<div class="u [^"]*"[^>]*>', body)
+        assert units
+        assert all('contenteditable="plaintext-only"' in unit for unit in units)
+
+    def test_each_line_carries_its_accepted_text(self, client):
+        """The draft has to be comparable against what is actually accepted."""
+        script_id = _first_script(client)
+        body = client.get(f"/scripts/{script_id}").text
+        assert 'data-accepted="' in body
+
+    def test_the_reader_offers_a_way_to_discard_edits(self, client):
+        script_id = _first_script(client)
+        body = client.get(f"/scripts/{script_id}").text
+        assert 'id="revert-all"' in body
+        assert 'id="draft-count"' in body
+
+    def test_editing_alone_changes_no_stored_text(self, client):
+        """A draft lives in the page. Only acceptance touches the database."""
+        script_id = _first_script(client)
+        unit_id = _units(client, script_id)[0]
+        before = client.get(f"/api/units/{unit_id}/requirements").json()["unit"]["text"]
+        client.post(
+            f"/api/units/{unit_id}/preview", data={"proposed_text": "Something else."}
+        )
+        after = client.get(f"/api/units/{unit_id}/requirements").json()["unit"]["text"]
+        assert after == before

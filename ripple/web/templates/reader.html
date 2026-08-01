@@ -32,8 +32,12 @@
     <button class="btn" disabled title="Choose a model in Settings first">
       Build graph</button>
   {% endif %}
+  <span class="chip hide" id="draft-count"><i class="dot medium"></i>
+    <span>0 edited</span></span>
+  <button class="btn" id="revert-all" disabled
+          title="Discard every unapplied edit">Revert edits</button>
   <button class="btn pri" id="see-ripple" disabled
-          title="Select a line in the script first">≋ See ripple</button>
+          title="Edit a line, then see what it changes">≋ See ripple</button>
   <button class="toggle" data-pane="reader" data-target=".reader"
           title="Show or hide the requirement pane" aria-label="Toggle pane">⬒</button>
 </div>
@@ -64,7 +68,10 @@
         <span>{{ scene.heading }}</span></div>
       {% for unit in scene.units %}
       <div class="u {{ unit.type }}" data-unit="{{ unit.id }}"
-           data-scene-no="{{ scene.number }}">{{ unit.text }}</div>
+           data-scene-no="{{ scene.number }}"
+           data-accepted="{{ unit.text }}"
+           contenteditable="plaintext-only" spellcheck="false"
+           role="textbox" aria-label="Script line">{{ unit.text }}</div>
       {% endfor %}
     </section>
     {% endfor %}

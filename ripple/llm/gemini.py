@@ -16,6 +16,7 @@ from ripple.llm.base import (
     ModelInfo,
     ProviderError,
     ProviderNotConfigured,
+    explain_auth_failure,
     infer_tier,
     is_text_model,
     strip_code_fence,
@@ -35,9 +36,24 @@ class GeminiProvider:
     name = "google"
     credential_variable = CREDENTIAL_VARIABLE
 
+    #: AI Studio keys carry this prefix. A credential without it is some other
+    #: kind of Google credential and will be refused by the Gemini endpoint.
+    KEY_PREFIX = "AIza"
+
     def is_configured(self) -> bool:
         """True when a Google credential is in the environment."""
         return bool(os.environ.get(CREDENTIAL_VARIABLE, "").strip())
+
+    def shape_warning(self) -> str | None:
+        """Say a credential is the wrong kind before spending a call on it."""
+        key = os.environ.get(CREDENTIAL_VARIABLE, "").strip()
+        if key and not key.startswith(self.KEY_PREFIX):
+            return (
+                "This does not look like an AI Studio API key: those begin "
+                f"'{self.KEY_PREFIX}'. A service-account JSON or an OAuth token "
+                "will be refused by the Gemini endpoint."
+            )
+        return None
 
     def _client(self):
         """Build a client, or say which variable is missing."""
@@ -58,7 +74,7 @@ class GeminiProvider:
             listed = list(client.models.list())
         except Exception as error:  # SDK raises provider-specific types
             raise ProviderError(
-                "list_failed", f"Gemini model list failed: {error}"
+                "auth_failed", explain_auth_failure("Google", str(error))
             ) from error
 
         models: list[ModelInfo] = []

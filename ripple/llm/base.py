@@ -156,6 +156,47 @@ def strip_code_fence(text: str) -> str:
     return match.group("body") if match else text.strip()
 
 
+def explain_auth_failure(provider: str, detail: str) -> str:
+    """Turn a provider's raw rejection into something the user can act on.
+
+    A pasted 401 body tells the user their key failed, which they already knew.
+    What it does not say is which of the several possible causes applies, and
+    those have different fixes.
+    """
+    lowered = detail.lower()
+
+    if "access_token_type_unsupported" in lowered or "oauth 2 access token" in lowered:
+        return (
+            "Google rejected this credential as the wrong type. The Gemini API "
+            "wants an AI Studio API key, which begins 'AIza'. An OAuth token, a "
+            "service-account JSON, or a gcloud access token will not work here. "
+            "Create one at aistudio.google.com/apikey."
+        )
+    if "api key not valid" in lowered or "api_key_invalid" in lowered:
+        return (
+            "Google rejected this key. Check it was copied whole, and that the "
+            "Generative Language API is enabled on the project that issued it."
+        )
+    if "permission" in lowered and "denied" in lowered:
+        return (
+            f"{provider} accepted the key but refused the request. The key is "
+            "probably restricted to other APIs, or the project lacks access."
+        )
+    if "authentication fails" in lowered or "invalid_request_error" in lowered:
+        return (
+            f"{provider} rejected this key as invalid. Check it has not been "
+            "revoked or rotated, and that it was copied whole."
+        )
+    if "insufficient" in lowered or "quota" in lowered or "billing" in lowered:
+        return (
+            f"The key is valid but {provider} refused on quota or billing. Top "
+            "up the account or wait for the quota window to reset."
+        )
+    if "401" in detail or "unauthorized" in lowered or "unauthenticated" in lowered:
+        return f"{provider} rejected this key. It may be expired, revoked, or mistyped."
+    return f"{provider} could not be reached with this key."
+
+
 @runtime_checkable
 class LLMProvider(Protocol):
     """Contract every provider adapter satisfies."""

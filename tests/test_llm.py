@@ -146,3 +146,55 @@ class TestJsonHandling:
     )
     def test_a_fenced_json_reply_is_unwrapped(self, raw, expected):
         assert strip_code_fence(raw) == expected
+
+
+class TestActionableErrors:
+    """A pasted 401 tells the user their key failed, which they knew."""
+
+    @pytest.mark.parametrize(
+        "detail, expected",
+        [
+            ("401 UNAUTHENTICATED ... ACCESS_TOKEN_TYPE_UNSUPPORTED", "AI Studio"),
+            ("API key not valid. Please pass a valid API key.", "Generative Language"),
+            ("Error 401 Authentication Fails, Your api key is invalid", "revoked"),
+            ("429 insufficient_quota", "quota or billing"),
+            ("403 PERMISSION_DENIED on this resource", "restricted"),
+        ],
+    )
+    def test_a_failure_names_a_cause_and_a_fix(self, detail, expected):
+        from ripple.llm.base import explain_auth_failure
+
+        message = explain_auth_failure("Google", detail)
+        assert expected in message
+        assert len(message) > 40
+
+    def test_an_unrecognised_failure_still_says_something(self):
+        from ripple.llm.base import explain_auth_failure
+
+        assert "could not be reached" in explain_auth_failure("openai", "socket closed")
+
+    def test_a_google_credential_of_the_wrong_shape_is_refused_locally(
+        self, monkeypatch, tmp_path
+    ):
+        """Refusing before the call saves a round trip and explains better."""
+        from ripple.config.secrets import SecretStore
+        from ripple.services.settings import SettingsService
+
+        monkeypatch.setenv("GOOGLE_API_KEY", "ya29.an-oauth-access-token")
+        service = SettingsService(SecretStore(tmp_path / "s.env"))
+        result = service.validate("google")
+        assert not result.valid
+        assert result.error_code == "wrong_credential_type"
+        assert "AIza" in result.error_message
+
+    def test_a_well_shaped_google_key_is_not_refused_locally(
+        self, monkeypatch, tmp_path
+    ):
+        """The shape check must not stand in for the provider's own answer."""
+        from ripple.config.secrets import SecretStore
+        from ripple.services.settings import SettingsService
+
+        monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSy-shaped-like-a-key-but-not-real")
+        service = SettingsService(SecretStore(tmp_path / "s.env"))
+        result = service.validate("google")
+        assert result.error_code != "wrong_credential_type"

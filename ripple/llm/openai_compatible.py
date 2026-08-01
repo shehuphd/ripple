@@ -18,6 +18,7 @@ from ripple.llm.base import (
     ModelInfo,
     ProviderError,
     ProviderNotConfigured,
+    explain_auth_failure,
     infer_tier,
     is_text_model,
     strip_code_fence,
@@ -62,7 +63,7 @@ class OpenAICompatibleProvider:
             listed = list(client.models.list())
         except Exception as error:
             raise ProviderError(
-                "list_failed", f"{self.name} model list failed: {error}"
+                "auth_failed", explain_auth_failure(self.name, str(error))
             ) from error
 
         models = [
