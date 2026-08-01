@@ -23,10 +23,25 @@ function renderModels(card, provider, models) {
 document.querySelectorAll('[data-provider]').forEach((card) => {
   const provider = card.dataset.provider;
   const result = card.querySelector('.result');
+  const configured = card.querySelector('.dot').classList.contains('accepted');
+
+  // An empty field is answered where it happened, with no request and no
+  // error text: there is nothing to send and nothing for a provider to judge.
+  function flashEmpty(input) {
+    input.classList.remove('empty');
+    void input.offsetWidth;  // restart the animation on a repeated click
+    input.classList.add('empty');
+    input.setAttribute('aria-invalid', 'true');
+    input.focus();
+    setTimeout(() => input.classList.remove('empty'), 900);
+  }
 
   async function check(save) {
-    const key = card.querySelector('.key').value.trim();
-    if (save && !key) { toast('Paste a key first.', true); return; }
+    const field = card.querySelector('.key');
+    const key = field.value.trim();
+    // Validate with an empty field re-checks a stored key. With nothing typed
+    // and nothing stored, and for any Save, there is no credential to check.
+    if (!key && (save || !configured)) { flashEmpty(field); return; }
     result.innerHTML = '<span class="muted">Checking…</span>';
     try {
       const url = save ? '/api/settings/save' : '/api/settings/validate';
@@ -50,23 +65,17 @@ document.querySelectorAll('[data-provider]').forEach((card) => {
     }
   }
 
-  // A control that cannot work is disabled. Save needs a key; Validate needs
-  // either a typed key or one already stored.
+  // Both buttons stay live. An empty required field is an incomplete input
+  // rather than an unavailable feature, so it earns a flash on click, not a
+  // disabled control the user can press and get nothing from.
   const key = card.querySelector('.key');
   const save = card.querySelector('.save');
   const validate = card.querySelector('.validate');
-  const configured = card.querySelector('.dot').classList.contains('accepted');
 
-  function refresh() {
-    const typed = key.value.trim().length > 0;
-    save.disabled = !typed;
-    save.title = typed ? '' : 'Paste a key to save it';
-    validate.disabled = !typed && !configured;
-    validate.title = validate.disabled
-      ? 'Paste a key, or save one first' : '';
-  }
-  key.addEventListener('input', refresh);
-  refresh();
+  key.addEventListener('input', () => {
+    key.classList.remove('empty');
+    key.removeAttribute('aria-invalid');
+  });
 
   validate.addEventListener('click', () => check(false));
   save.addEventListener('click', () => check(true));

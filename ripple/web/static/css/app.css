@@ -345,6 +345,17 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
   padding:8px 11px;font:inherit;font-size:13px;flex:1}
 .field:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px var(--ac-w)}
 
+/* A required field left empty. The flash answers the click where the click
+   happened, so it needs no error text and nothing leaves the browser. */
+.field.empty,.field.empty:focus{border-color:var(--red);
+  box-shadow:0 0 0 3px rgba(201,86,79,.16);animation:field-flash .5s ease-out}
+@keyframes field-flash{
+  0%,100%{transform:translateX(0)}
+  25%{transform:translateX(-3px)}
+  75%{transform:translateX(3px)}
+}
+@media (prefers-reduced-motion:reduce){.field.empty{animation:none}}
+
 /* Locked features. A control that cannot work is disabled and says what to
    do about it, rather than failing when pressed. */
 .locked{opacity:.4;pointer-events:none;filter:grayscale(.5)}
