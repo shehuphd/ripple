@@ -16,7 +16,8 @@
 - [x] TraceAct instrumentation on `script.import`
 - [x] SQLAlchemy models and persistence
 - [x] LLM provider adapters behind one contract
-- [ ] Scene-level graph extraction, resumable and browser-driven
+- [x] Scene-level graph extraction, resumable and browser-driven
+- [x] Settings: per-provider credential entry, validation, and model selection
 - [ ] Deterministic diff engine
 - [ ] Continuity retrieval and the ripple preview pipeline
 - [ ] Change-set service with atomic acceptance and latest-only undo

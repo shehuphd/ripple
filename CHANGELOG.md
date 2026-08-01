@@ -6,6 +6,12 @@ All notable changes to Ripple are documented here.
 
 ### Added
 
+- **Scene-level graph extraction**, resumable and browser-driven. One scene is claimed per request through an atomic `UPDATE ... WHERE status='pending'`, so two tabs polling at once cannot extract and pay for the same scene twice. Each scene commits independently, so a failure late in a run keeps everything before it.
+- **Extraction cache.** A scene already extracted from identical input under the same prompt version and model gets no job created at all: no row, no call, no spend. Editing any unit changes the content hash and invalidates it.
+- **Output validation against Schema Lock v1.** Predicate signatures live in `ripple/graph/predicates.py` and are rendered into the prompt from the same source of truth. An assertion citing a unit the model was never shown, violating a signature, or falling below the confidence floor is dropped with a recorded reason rather than repaired. One bad assertion never loses the good ones in the same scene.
+- **Provider settings.** Per-provider credential entry, validation against the provider's own models endpoint, and model selection. Keys go to the process environment and a gitignored `data/secrets.env` at mode 0600, or to Replit Secrets in production; never to the database and never back to the browser, not even masked. An invalid key is not stored.
+- **Fixture provider** for deterministic tests without a credential. Absent from the shipped registry, and an unrecorded prompt raises rather than answering emptily, since an empty extraction is a legitimate outcome.
+
 - **SQLAlchemy models for all 18 tables**, implementing the ERD with the kinded assertion endpoints Schema Lock v1 requires, so a scene can be a graph node. Enumerated values are CHECK constraints rather than native enums, keeping the schema portable between PostgreSQL and SQLite.
 - **Persistence layer.** `persist_import` writes a parsed screenplay and its provenance; `delete_script`, `delete_all_scripts`, and `clear_all_graphs` implement ERD section 10 with counts returned before anything is removed.
 - **Foreign keys enforced on SQLite** through a per-connection pragma, so local tests prove referential integrity rather than appearing to.
