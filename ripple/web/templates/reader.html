@@ -26,12 +26,26 @@
   {% endif %}
   {% if model %}<span class="chip">◎ {{ model }}</span>
     <button class="btn" id="extract">Build graph</button>
-  {% else %}<a class="chip" href="/settings">◎ choose a model</a>{% endif %}
-  <button class="btn pri" id="see-ripple" disabled>≋ See ripple</button>
+  {% else %}
+    <a class="chip" href="/settings" title="Choose a model to build the graph">
+      ◎ no model</a>
+    <button class="btn" disabled title="Choose a model in Settings first">
+      Build graph</button>
+  {% endif %}
+  <button class="btn pri" id="see-ripple" disabled
+          title="Select a line in the script first">≋ See ripple</button>
 </div>
 {% endblock %}
 
+{% block content_class %}panes{% endblock %}
+
 {% block content %}
+{% if not model %}
+<div class="lock"><span class="ic">◎</span>
+  <span>No model is selected, so the graph cannot be built. The script, the
+    diff, and the deterministic continuity findings all work without one.</span>
+  <a href="/settings">Choose a model</a></div>
+{% endif %}
 <div id="run" class="card" style="display:none;margin-bottom:14px">
   <div style="display:flex"><strong id="run-label">Extracting</strong>
     <span class="tiny muted num" id="run-count" style="margin-left:auto"></span></div>
@@ -39,7 +53,7 @@
 </div>
 
 <div class="reader">
-  <div class="page" id="page">
+  <div><div class="page" id="page">
     <div class="phd"><span>{{ script.title }}</span>
       <span class="pno">{{ pages }} pages</span></div>
     {% for scene in scenes %}
@@ -52,7 +66,7 @@
       {% endfor %}
     </section>
     {% endfor %}
-  </div>
+  </div></div>
 
   <aside class="pane">
     <div class="card">

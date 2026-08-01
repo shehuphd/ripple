@@ -50,8 +50,26 @@ document.querySelectorAll('[data-provider]').forEach((card) => {
     }
   }
 
-  card.querySelector('.validate').addEventListener('click', () => check(false));
-  card.querySelector('.save').addEventListener('click', () => check(true));
+  // A control that cannot work is disabled. Save needs a key; Validate needs
+  // either a typed key or one already stored.
+  const key = card.querySelector('.key');
+  const save = card.querySelector('.save');
+  const validate = card.querySelector('.validate');
+  const configured = card.querySelector('.dot').classList.contains('accepted');
+
+  function refresh() {
+    const typed = key.value.trim().length > 0;
+    save.disabled = !typed;
+    save.title = typed ? '' : 'Paste a key to save it';
+    validate.disabled = !typed && !configured;
+    validate.title = validate.disabled
+      ? 'Paste a key, or save one first' : '';
+  }
+  key.addEventListener('input', refresh);
+  refresh();
+
+  validate.addEventListener('click', () => check(false));
+  save.addEventListener('click', () => check(true));
   const forget = card.querySelector('.forget');
   if (forget) {
     forget.addEventListener('click', async () => {

@@ -5,7 +5,7 @@
 {% block toolbar %}
 <h1>{{ heading }}</h1>
 <span class="sub">{{ rows|length }} screenplay{{ '' if rows|length == 1 else 's' }}
-  · Fountain, Final Draft XML, PDF, plain text</span>
+  · {{ subtitle }}</span>
 <div class="right">
   <div class="search"><span class="ic">⌕</span>
     <input id="search" placeholder="Search" autocomplete="off"></div>
@@ -39,7 +39,7 @@
   {% endfor %}
   </tbody>
 </table>
-{% if not rows %}<div class="empty" style="padding:18px">No scripts yet.</div>{% endif %}
+{% if not rows %}<div class="empty" style="padding:18px">{{ empty_message }}</div>{% endif %}
 
 <div class="cards two" style="margin-top:16px">
   <div class="card progress" id="progress-card" style="display:none">

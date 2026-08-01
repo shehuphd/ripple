@@ -140,6 +140,10 @@ class Script(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
     )
+    # When the reader last displayed this script. Distinct from updated_at,
+    # which moves on any write: a script edited by an accepted change was not
+    # thereby opened, and "Recently opened" means what the user looked at.
+    last_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     imports: Mapped[list[Import]] = relationship(
         back_populates="script", cascade="all, delete-orphan"

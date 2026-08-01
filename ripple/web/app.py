@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,7 @@ from ripple.db.models import (
     ChangeSet,
     ContinuityFinding,
     Entity,
+    EntityAlias,
     ExtractionRun,
     Import,
     QueryLog,
@@ -157,7 +159,7 @@ def sidebar_counts(session: Session) -> dict[str, int]:
 
     return {
         "scripts": count(Script),
-        "recent": count(Script),
+        "recent": count(Script, Script.last_opened_at.is_not(None)),
         "needs_review": count(Script, Script.import_status == "needs_review"),
         "reports": count(RippleReport),
         "findings": count(ContinuityFinding, ContinuityFinding.status == "open"),
@@ -192,6 +194,12 @@ def library(
     query = select(Script).order_by(Script.created_at.desc())
     if filter == "review":
         query = query.where(Script.import_status == "needs_review")
+    elif filter == "recent":
+        query = (
+            select(Script)
+            .where(Script.last_opened_at.is_not(None))
+            .order_by(Script.last_opened_at.desc())
+        )
     scripts = list(session.scalars(query))
 
     rows = []
@@ -228,8 +236,19 @@ def library(
         {
             "rows": rows,
             "counts": sidebar_counts(session),
-            "active": "review" if filter == "review" else "all",
-            "heading": "Needs review" if filter == "review" else "All scripts",
+            "active": {"review": "review", "recent": "recent"}.get(filter, "all"),
+            "heading": {
+                "review": "Needs review",
+                "recent": "Recently opened",
+            }.get(filter, "All scripts"),
+            "subtitle": {
+                "review": "Imports that need a human to look before the graph is built",
+                "recent": "Ordered by when you last opened them",
+            }.get(filter, "Fountain, Final Draft XML, PDF, plain text"),
+            "empty_message": {
+                "review": "No import needs review.",
+                "recent": "No scripts opened yet. Open one from All scripts.",
+            }.get(filter, "No scripts yet. Import one above."),
             "model": model,
             "max_bytes": MAX_UPLOAD_BYTES,
         },
@@ -242,6 +261,10 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
     script = session.get(Script, _uuid(script_id))
     if script is None:
         raise HTTPException(404, "No such script")
+
+    # Opening is what "Recently opened" means, so record it here rather than
+    # relying on updated_at, which moves on any write.
+    script.last_opened_at = datetime.now(UTC)
 
     _, model = settings_service.selected_model(session)
     page_total = script_pages(session, script.id)
@@ -265,7 +288,11 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
         scenes.append(
             {
                 "id": str(scene.id),
-                "number": scene.display_scene_number or scene.sequence_index + 1,
+                # An unnumbered scene shows no number rather than a position.
+                # Intercut sub-scenes carry no number of their own, and
+                # substituting sequence_index + 1 invents one that collides
+                # with the real scene holding that number later in the script.
+                "number": scene.display_scene_number or "",
                 "heading": scene.heading,
                 "page": page_of(running),
                 "eighths": eighths(characters),
@@ -339,7 +366,198 @@ def ask_page(
                 if chosen
                 else 0
             ),
+            "lock": _graph_lock(session) if chosen else None,
         },
+    )
+
+
+def _list_page(request, session, **kwargs):
+    """Render the shared list template with the sidebar counts filled in."""
+    return templates.TemplateResponse(
+        request, "list.html", {"counts": sidebar_counts(session), **kwargs}
+    )
+
+
+def _graph_lock(session) -> dict[str, str] | None:
+    """Why the graph pages are empty, when they are.
+
+    An empty page with no explanation reads as a broken feature. Naming the
+    missing step, and linking to it, is the difference.
+    """
+    if session.scalar(select(func.count()).select_from(Assertion)):
+        return None
+    _, model = settings_service.selected_model(session)
+    if not model:
+        return {
+            "message": "No graph has been built yet, and no model is selected.",
+            "action": "Choose a model in Settings",
+            "href": "/settings",
+        }
+    return {
+        "message": "No graph has been built yet.",
+        "action": "Open a script and build its graph",
+        "href": "/",
+    }
+
+
+@app.get("/reports")
+def reports_page(request: Request, session: Session = Depends(get_session)):
+    """Every ripple report, newest first."""
+    rows = session.execute(
+        select(RippleReport, ChangeSet, Script)
+        .join(ChangeSet, RippleReport.change_set_id == ChangeSet.id)
+        .join(Script, ChangeSet.script_id == Script.id)
+        .order_by(RippleReport.generated_at.desc())
+    ).all()
+    items = [
+        {
+            "tag": report.severity,
+            "tag_class": {"high": "stunt", "medium": "prop", "low": "set_design"}.get(
+                report.severity, ""
+            ),
+            "title": report.summary,
+            "sub": f"{script.title} · {change_set.kind} · {change_set.status}"
+            + (f" · {report.model_id}" if report.model_id else " · deterministic"),
+            "right": report.generated_at.strftime("%d %b %H:%M"),
+        }
+        for report, change_set, script in rows
+    ]
+    return _list_page(
+        request,
+        session,
+        heading="Ripple reports",
+        active="reports",
+        subtitle=f"{len(items)} report(s) · one per proposal",
+        items=items,
+        empty="No reports yet. Edit a line and press See ripple.",
+        lock=None,
+    )
+
+
+@app.get("/findings")
+def findings_page(request: Request, session: Session = Depends(get_session)):
+    """Continuity findings across every script."""
+    rows = session.execute(
+        select(ContinuityFinding, Script)
+        .join(ChangeSet, ContinuityFinding.change_set_id == ChangeSet.id)
+        .join(Script, ChangeSet.script_id == Script.id)
+        .order_by(ContinuityFinding.created_at.desc())
+    ).all()
+    items = [
+        {
+            "tag": finding.status,
+            "tag_class": {
+                "open": "stunt",
+                "dismissed": "",
+                "resolved": "set_design",
+            }.get(finding.status, ""),
+            "title": finding.message,
+            "sub": f"{script.title} · {finding.finding_type} · {finding.severity}"
+            + (
+                f" · dismissed: {finding.dismissal_reason}"
+                if finding.dismissal_reason
+                else ""
+            ),
+            "right": finding.created_at.strftime("%d %b %H:%M"),
+        }
+        for finding, script in rows
+    ]
+    return _list_page(
+        request,
+        session,
+        heading="Continuity findings",
+        active="findings",
+        subtitle=f"{len(items)} finding(s) · warnings do not block a decision",
+        items=items,
+        empty="No findings yet.",
+        lock=None,
+    )
+
+
+@app.get("/entities")
+def entities_page(request: Request, session: Session = Depends(get_session)):
+    """Every extracted entity, with its aliases and how often it is asserted."""
+    rows = session.execute(
+        select(Entity, Script)
+        .join(Script, Entity.script_id == Script.id)
+        .order_by(Entity.entity_type, Entity.canonical_name)
+    ).all()
+    items = []
+    for entity, script in rows:
+        aliases = list(
+            session.scalars(
+                select(EntityAlias.alias).where(EntityAlias.entity_id == entity.id)
+            )
+        )
+        uses = session.scalar(
+            select(func.count())
+            .select_from(Assertion)
+            .where(
+                Assertion.active.is_(True),
+                (Assertion.subject_entity_id == entity.id)
+                | (Assertion.object_entity_id == entity.id),
+            )
+        )
+        items.append(
+            {
+                "tag": entity.entity_type.replace("_", " "),
+                "tag_class": entity.entity_type,
+                "title": entity.canonical_name,
+                "sub": f"{script.title}"
+                + (
+                    f" · also: {', '.join(sorted(set(aliases))[:4])}" if aliases else ""
+                ),
+                "right": f"{uses} assertions",
+            }
+        )
+    return _list_page(
+        request,
+        session,
+        heading="Entities",
+        active="entities",
+        subtitle=f"{len(items)} entity(s) across every script",
+        items=items,
+        empty="No entities yet.",
+        lock=_graph_lock(session),
+    )
+
+
+@app.get("/assertions")
+def assertions_page(request: Request, session: Session = Depends(get_session)):
+    """Every active assertion, with the unit that supports it."""
+    scripts = {script.id: script for script in session.scalars(select(Script))}
+    items = []
+    for script_id, script in scripts.items():
+        labels = _labels(session, script_id)
+        rows = list(
+            session.scalars(
+                select(Assertion).where(
+                    Assertion.script_id == script_id, Assertion.active.is_(True)
+                )
+            )
+        )
+        for row in rows[:500]:
+            subject = labels.get(row.subject_entity_id or row.subject_scene_id, "?")
+            obj = labels.get(row.object_entity_id or row.object_scene_id, "?")
+            items.append(
+                {
+                    "tag": row.predicate,
+                    "tag_class": "location",
+                    "title": f"{subject} → {obj}",
+                    "sub": f"{script.title} · {row.provenance}"
+                    + (f" · {row.model_id}" if row.model_id else ""),
+                    "right": f"{row.confidence:.2f}",
+                }
+            )
+    return _list_page(
+        request,
+        session,
+        heading="Assertions",
+        active="assertions",
+        subtitle=f"{len(items)} active assertion(s)",
+        items=items,
+        empty="No assertions yet.",
+        lock=_graph_lock(session),
     )
 
 

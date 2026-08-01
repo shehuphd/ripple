@@ -8,20 +8,34 @@
 <span class="sub">
   {% if script %}{{ script.title }} · <span class="num">{{ assertions }}</span>
     accepted assertions · <span class="num">{{ entities }}</span> entities
-  {% else %}Choose a script from the library first{% endif %}</span>
+  {% else %}No scripts yet{% endif %}</span>
 {% endblock %}
 
 {% block content %}
-{% if script %}
-<div class="askbox">
-  <input id="q" placeholder="Which scenes include the blue car?" autocomplete="off">
-  <button class="btn pri" id="ask">Ask</button>
-</div>
-<div id="out"><div class="empty">
-  Answers come from accepted assertions only. Nothing is generated from the
-  screenplay text.</div></div>
+{% if not script %}
+  <div class="lock"><span class="ic">◎</span>
+    <span>There are no scripts to ask about.</span>
+    <a href="/">Import one</a></div>
 {% else %}
-<div class="empty">Open a script, then use Ask the graph.</div>
+  {% if lock %}
+  <div class="lock"><span class="ic">◎</span>
+    <span>{{ lock.message }} Questions are answered from accepted assertions,
+      so there is nothing to answer from yet.</span>
+    <a href="{{ lock.href }}">{{ lock.action }}</a></div>
+  {% endif %}
+
+  <div id="askform" class="{{ 'locked' if lock }}"
+       data-script="{{ script.id }}" data-ready="{{ 'no' if lock else 'yes' }}">
+    <div class="askbox">
+      <input id="q" placeholder="Which scenes include the blue sedan?"
+             autocomplete="off" {{ 'disabled' if lock }}>
+      <button class="btn pri" id="ask" {{ 'disabled' if lock }}>Ask</button>
+    </div>
+  </div>
+
+  <div id="out"><div class="empty">
+    Answers come from accepted assertions only. Nothing is generated from the
+    screenplay text.</div></div>
 {% endif %}
 {% endblock %}
 

@@ -6,6 +6,16 @@ All notable changes to Ripple are documented here.
 
 ### Added
 
+- **Analysis and Graph pages**: Ripple reports, Continuity findings, Entities, and Assertions. These were linked in the sidebar before they existed, so every one of them 404'd.
+- **Recently opened** is a real filter. `Script.last_opened_at` is set when the reader displays a script, distinct from `updated_at`, which moves on any write: a script changed by an accepted edit was not thereby opened.
+- **Locked features look locked.** A control that cannot work is disabled, greyed, and accompanied by a banner naming the missing prerequisite with a link to it. Applied to Ask the graph and the Entities and Assertions pages when no graph exists, to Build graph when no model is selected, and to Validate and Save in Settings until a key is typed.
+- **Independent pane scrolling.** The reader's scene list, script, and requirement pane each own their scroll, as do the two columns of the ripple preview. Scrolling the script no longer drags the requirement pane off screen.
+
+### Fixed
+
+- **Ask the graph sent a null script id**, because the page read the script from a query parameter the server had not put there. It now comes from the server, which also handles the fallback to the most recent script.
+- **Unnumbered scenes were given invented numbers.** Intercut sub-scenes carry no number of their own, and substituting the position produced a sidebar listing two scene 9s.
+
 - **The UI rebuilt against the design mockups.** App-window shell with a fixed sidebar carrying live counts, a toolbar per screen, a script table with format, pages, scenes, runtime, and import outcome, a reader whose sidebar lists scenes with page, eighths, and entity counts, and a full-screen ripple preview with the accepted and proposed text side by side, the graph diff, continuity findings, per-stage pipeline timings, and source provenance.
 - **Change-set service.** Atomic acceptance with base-version checks, rejection that changes nothing, and latest-only undo through an inverse change set. The original becomes `reverted`, never `rejected`. A unit's wording moves through a `set_unit_text` operation carrying before and after, which is what makes undo able to restore the original text.
 - **Synthesizer.** Explains a diff the engine already computed, and is given only that diff and the findings, never the screenplay. Severity is computed in code so it cannot vary between runs. With no provider configured it assembles a deterministic sentence from the diff instead of failing.

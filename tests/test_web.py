@@ -277,3 +277,102 @@ class TestAskTheGraph:
         script_id = _first_script(client)
         client.post(f"/api/scripts/{script_id}/ask", data={"question": "Anything?"})
         assert client.get("/ask").status_code == 200
+
+
+class TestSceneNumbering:
+    def test_an_unnumbered_scene_shows_no_number(self, client):
+        """Intercut sub-scenes carry no number, and one must not be invented.
+
+        Substituting the position would collide with the real scene holding
+        that number later in the script, so the sidebar would list two 9s.
+        """
+        import re
+
+        rows = client.get("/").text
+        match = re.search(
+            r'data-id="([0-9a-f-]{36})"[^>]*data-title="SEVEN MINUTES"', rows
+        )
+        script_id = match.group(1) if match else _first_script(client)
+        body = client.get(f"/scripts/{script_id}").text
+        numbers = re.findall(r'<span class="no">([^<]*)</span>', body)
+        filled = [n.strip() for n in numbers if n.strip()]
+        assert len(filled) == len(set(filled)), f"duplicate scene numbers: {filled}"
+
+
+class TestEveryNavLinkResolves:
+    """A 404 from the app's own sidebar is worse than an absent entry."""
+
+    def test_no_nav_link_is_dead(self, client):
+        import re
+
+        body = client.get("/").text
+        hrefs = {
+            href
+            for href in re.findall(r'class="srow[^"]*" href="([^"]+)"', body)
+            if href.startswith("/")
+        }
+        assert hrefs, "the sidebar rendered no links"
+        for href in sorted(hrefs):
+            assert client.get(href).status_code == 200, f"dead nav link: {href}"
+
+    @pytest.mark.parametrize(
+        "path", ["/reports", "/findings", "/entities", "/assertions", "/ask"]
+    )
+    def test_each_analysis_page_renders(self, client, path):
+        assert client.get(path).status_code == 200
+
+
+class TestRecentlyOpened:
+    def test_it_is_empty_until_a_script_is_opened(self, client):
+        import re
+
+        body = client.get("/?filter=recent").text
+        assert "Recently opened" in body
+        assert not re.findall(r'data-id="', body)
+
+    def test_opening_a_script_puts_it_there(self, client):
+        script_id = _first_script(client)
+        client.get(f"/scripts/{script_id}")
+        body = client.get("/?filter=recent").text
+        assert script_id in body
+
+    def test_it_differs_from_all_scripts(self, client):
+        """The two entries must not be the same list under two names."""
+        import re
+
+        script_id = _first_script(client)
+        client.get(f"/scripts/{script_id}")
+        every = len(re.findall(r'data-id="', client.get("/").text))
+        recent = len(re.findall(r'data-id="', client.get("/?filter=recent").text))
+        assert every == 3
+        assert recent == 1
+
+
+class TestLockedFeatures:
+    def test_ask_is_locked_when_the_graph_is_empty(self, client):
+        body = client.get("/ask").text
+        assert 'class="locked"' in body
+        assert "disabled" in body
+        assert "No graph has been built yet" in body
+        assert "/settings" in body
+
+    def test_the_reader_says_why_the_graph_cannot_be_built(self, client):
+        script_id = _first_script(client)
+        body = client.get(f"/scripts/{script_id}").text
+        assert "No model is selected" in body
+        assert 'href="/settings"' in body
+
+    def test_the_graph_pages_name_the_missing_step(self, client):
+        for path in ("/entities", "/assertions"):
+            body = client.get(path).text
+            assert "No graph has been built yet" in body, path
+            assert 'href="/settings"' in body, path
+
+    def test_a_locked_page_offers_no_live_control(self, client):
+        """Greying alone is not enough: the control has to be disabled."""
+        import re
+
+        body = client.get("/ask").text
+        form = re.search(r'id="askform".*?</div>\s*</div>', body, re.DOTALL)
+        assert form, "the ask form did not render"
+        assert form.group(0).count("disabled") >= 2

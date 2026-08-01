@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_nav.html" import sidebar %}
+{% block title %}{{ heading }} — Ripple{% endblock %}
+{% block sidebar %}{{ sidebar(counts, active) }}{% endblock %}
+
+{% block toolbar %}
+<h1>{{ heading }}</h1>
+<span class="sub">{{ subtitle }}</span>
+{% endblock %}
+
+{% block content %}
+{% if lock %}
+<div class="lock"><span class="ic">◎</span>
+  <span>{{ lock.message }}</span>
+  {% if lock.href %}<a href="{{ lock.href }}">{{ lock.action }}</a>{% endif %}
+</div>
+{% endif %}
+
+{% if items %}
+<div class="list">
+  {% for item in items %}
+  <div class="item">
+    {% if item.tag %}<span class="tag {{ item.tag_class }}">{{ item.tag }}</span>{% endif %}
+    <div class="grow">
+      <div>{{ item.title }}</div>
+      {% if item.sub %}<div class="sub">{{ item.sub }}</div>{% endif %}
+    </div>
+    {% if item.right %}<span class="r">{{ item.right }}</span>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">{{ empty }}</div>
+{% endif %}
+{% endblock %}

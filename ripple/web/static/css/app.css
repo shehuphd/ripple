@@ -67,6 +67,10 @@ button{font:inherit}
 .search .ic{position:absolute;left:10px;top:7px;color:var(--t4)}
 
 .content{flex:1;overflow-y:auto;padding:18px}
+/* Panes scroll independently. The container is fixed and hidden; each pane
+   inside owns its own scroll. min-height:0 is required, or a grid child
+   refuses to shrink below its content and the page scrolls instead. */
+.content.panes{overflow:hidden;display:flex;flex-direction:column;min-height:0}
 
 /* Buttons and chips */
 .btn{background:var(--raised);color:var(--t1);border:.5px solid var(--bd2);border-radius:7px;
@@ -142,7 +146,9 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .track i{display:block;height:100%;background:var(--ac);transition:width .25s}
 
 /* Reader page */
-.reader{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;align-items:start}
+.reader{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;
+  flex:1;min-height:0}
+.reader > *{overflow-y:auto;min-height:0}
 @media(max-width:1200px){.reader{grid-template-columns:1fr}}
 .page{background:var(--card);border:.5px solid var(--bd);border-radius:9px;padding:30px 34px;
   font-family:var(--mono);font-size:13.5px;line-height:1.6}
@@ -165,7 +171,7 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .ucap{font-family:var(--sf);font-size:11.5px;color:var(--t4);margin:-8px 0 14px 43px}
 
 /* Requirement pane */
-.pane{display:flex;flex-direction:column;gap:14px}
+.pane{display:flex;flex-direction:column;gap:14px;padding-right:2px}
 .chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
 .edge{display:flex;align-items:baseline;gap:9px;padding:7px 0;font-size:13px;
   border-bottom:.5px solid var(--bd)}
@@ -185,8 +191,9 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
   flex-direction:column}
 .overlay .obar{height:56px;flex:0 0 auto;display:flex;align-items:center;gap:14px;
   padding:0 18px;border-bottom:.5px solid var(--bd)}
-.overlay .obody{flex:1;overflow-y:auto;padding:18px;display:grid;
-  grid-template-columns:minmax(0,1fr) 420px;gap:16px;align-items:start}
+.overlay .obody{flex:1;overflow:hidden;padding:18px;display:grid;
+  grid-template-columns:minmax(0,1fr) 420px;gap:16px;min-height:0}
+.overlay .obody > *{overflow-y:auto;min-height:0;align-content:start}
 @media(max-width:1200px){.overlay .obody{grid-template-columns:1fr}}
 .overlay .ofoot{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:14px 18px;
   border-top:.5px solid var(--bd);background:var(--panel)}
@@ -256,6 +263,26 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .field{background:var(--inset);border:.5px solid var(--bd2);border-radius:7px;color:var(--t1);
   padding:8px 11px;font:inherit;font-size:13px;flex:1}
 .field:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px var(--ac-w)}
+
+/* Locked features. A control that cannot work is disabled and says what to
+   do about it, rather than failing when pressed. */
+.locked{opacity:.4;pointer-events:none;filter:grayscale(.5)}
+.lock{display:flex;align-items:center;gap:10px;background:var(--raised);
+  border:.5px solid var(--bd2);border-radius:8px;padding:11px 14px;font-size:13px;
+  color:var(--t2);margin-bottom:14px}
+.lock .ic{color:var(--amber);flex:0 0 auto}
+.lock a{color:var(--ac)}
+.lock .why{margin-left:auto;color:var(--t4);font-size:12px}
+
+/* List pages */
+.list{background:var(--card);border:.5px solid var(--bd);border-radius:9px}
+.item{display:flex;align-items:baseline;gap:12px;padding:13px 17px;
+  border-bottom:.5px solid var(--bd);font-size:13px}
+.item:last-child{border-bottom:0}
+.item .grow{flex:1;min-width:0}
+.item .sub{color:var(--t3);font-size:12px;margin-top:3px}
+.item .r{margin-left:auto;color:var(--t4);font-variant-numeric:tabular-nums;
+  flex:0 0 auto}
 
 .toast{position:fixed;right:18px;bottom:18px;background:var(--raised);
   border:.5px solid var(--bd2);border-radius:8px;padding:11px 15px;font-size:13px;

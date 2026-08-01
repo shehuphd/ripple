@@ -2,8 +2,10 @@ const ask = document.getElementById('ask');
 if (ask) {
   const question = document.getElementById('q');
   const out = document.getElementById('out');
-  const scriptId = new URLSearchParams(window.location.search).get('script')
-    || document.body.dataset.script;
+  // The chosen script comes from the server, not the query string: the page
+  // falls back to the most recent script when none is named, and reading the
+  // absent parameter sent "null" to the API.
+  const scriptId = document.getElementById('askform').dataset.script;
 
   async function run() {
     if (!question.value.trim()) return;
