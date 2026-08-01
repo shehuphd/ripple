@@ -46,6 +46,8 @@
   base v{{ script.current_version }}</span>
 <div class="right">
   <span class="chip" id="fit-info">—</span>
+  <button class="toggle" data-pane="graph" data-target=".gsplit"
+          title="Show or hide the detail pane" aria-label="Toggle pane">⬒</button>
   <a class="btn" href="/scripts/{{ script.id }}">Close</a>
 </div>
 {% endblock %}
@@ -69,4 +71,4 @@
 </div>
 {% endblock %}
 
-{% block scripts %}<script src="/static/js/graph.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/graph.js?v={{ asset_version }}"></script>{% endblock %}

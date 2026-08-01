@@ -6,6 +6,10 @@ All notable changes to Ripple are documented here.
 
 ### Added
 
+- **Collapsible side panes**, with the choice persisted per pane. The sidebar collapses on every page; the reader's requirement pane and the graph's detail pane have their own toggles. Below 900px the sidebar becomes a drawer over the content with a backdrop, because a 238px column at that width leaves nothing for the script.
+- **Asset cache-busting.** Every stylesheet and script carries a version derived from the newest file modification time. Without it a browser keeps a stylesheet it already has and runs old CSS against new markup, which fails invisibly: the file on disk is right, the served file is right, and only the loaded sheet is stale.
+- **Responsive breakpoints**, verified by measuring the rendered page at 1600, 1024, and 480 pixels rather than by inspection: no horizontal scrolling at any of them, the reader stacks below 1080px, the graph panes stack below 820px, and the library drops its lowest-value columns below 640px.
+
 - **Graph rendering, 2D.** A deterministic server-side layout in `ripple/graph/layout.py` places the focus at the centre, scenes on a horizontal spine in script order, and entities in fixed angular wedges by department, so a department occupies the same region in every view. Drawn as hand-rolled SVG: no graph library, no WebGL. Parallel edges fan apart and stagger their labels along the edge by an amount computed from the label width and the edge length. PRD section 17's renderer question is resolved.
 - **Expanded graph view** at `/graph/{unit}` with department filters, depth 1 to 3, a minimum-confidence threshold, a removed-edge overlay, and a detail pane listing a selected node's edges.
 - **`tools/seed_graph.py`**, a developer command that writes the graph a correct extraction should produce for scene 14 of the first demo script, taken from that script's `dependencies.md`. Rows carry `provenance="system"` so they are distinguishable from a model's output. Nothing calls it automatically.

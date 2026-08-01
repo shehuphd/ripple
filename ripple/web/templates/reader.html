@@ -34,6 +34,8 @@
   {% endif %}
   <button class="btn pri" id="see-ripple" disabled
           title="Select a line in the script first">≋ See ripple</button>
+  <button class="toggle" data-pane="reader" data-target=".reader"
+          title="Show or hide the requirement pane" aria-label="Toggle pane">⬒</button>
 </div>
 {% endblock %}
 
@@ -152,5 +154,5 @@
 </div>
 {% endblock %}
 
-{% block scripts %}<script src="/static/js/graph.js"></script>
-<script src="/static/js/reader.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/graph.js?v={{ asset_version }}"></script>
+<script src="/static/js/reader.js?v={{ asset_version }}"></script>{% endblock %}

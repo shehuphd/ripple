@@ -376,3 +376,48 @@ class TestLockedFeatures:
         form = re.search(r'id="askform".*?</div>\s*</div>', body, re.DOTALL)
         assert form, "the ask form did not render"
         assert form.group(0).count("disabled") >= 2
+
+
+class TestCollapsiblePanes:
+    """Every side pane has a visible control that hides it."""
+
+    def test_the_sidebar_toggle_is_on_every_page(self, client):
+        for path in ("/", "/settings", "/ask", "/entities", "/reports"):
+            body = client.get(path).text
+            assert 'id="toggle-side"' in body, path
+            assert "aria-label" in body, path
+
+    def test_the_reader_has_a_pane_toggle(self, client):
+        script_id = _first_script(client)
+        body = client.get(f"/scripts/{script_id}").text
+        assert 'data-pane="reader"' in body
+        assert 'data-target=".reader"' in body
+
+    def test_the_graph_page_has_a_detail_toggle(self, client):
+        script_id = _first_script(client)
+        unit_id = _units(client, script_id)[0]
+        body = client.get(f"/graph/{unit_id}").text
+        assert 'data-pane="graph"' in body
+        assert 'data-target=".gsplit"' in body
+
+
+class TestAssetVersioning:
+    def test_every_asset_link_is_versioned(self, client):
+        """An unversioned asset leaves a browser running old CSS against new
+        markup, which fails invisibly: the file on disk is right and only the
+        loaded stylesheet is stale."""
+        import re
+
+        body = client.get("/").text
+        assets = re.findall(r'(?:href|src)="(/static/[^"]+)"', body)
+        assert assets
+        for asset in assets:
+            assert "?v=" in asset, f"unversioned asset: {asset}"
+
+    def test_the_version_changes_when_a_file_changes(self, tmp_path, monkeypatch):
+        from ripple.web import app as web
+
+        first = web.asset_version()
+        target = web.HERE / "static" / "css" / "app.css"
+        target.touch()
+        assert web.asset_version() >= first

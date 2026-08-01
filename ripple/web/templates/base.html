@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{% block title %}Ripple{% endblock %}</title>
-<link rel="stylesheet" href="/static/css/ripple-fonts.css">
-<link rel="stylesheet" href="/static/css/ripple-tokens.css">
-<link rel="stylesheet" href="/static/css/app.css">
+<link rel="stylesheet" href="/static/css/ripple-fonts.css?v={{ asset_version }}">
+<link rel="stylesheet" href="/static/css/ripple-tokens.css?v={{ asset_version }}">
+<link rel="stylesheet" href="/static/css/app.css?v={{ asset_version }}">
 </head>
 <body>
-<div class="win">
+<div class="win" id="shell">
   <aside class="side">
     <div class="side-top">
       <div class="lights"><i class="l1"></i><i class="l2"></i><i class="l3"></i></div>
@@ -20,6 +20,8 @@
 
   <div class="main">
     <div class="bar">
+      <button class="toggle" id="toggle-side" title="Show or hide the sidebar"
+              aria-label="Toggle sidebar">☰</button>
       <div class="nav">
         <a href="javascript:history.back()" title="Back">‹</a>
         <a href="javascript:history.forward()" title="Forward">›</a>
@@ -30,7 +32,7 @@
   </div>
 </div>
 {% block overlay %}{% endblock %}
-<script src="/static/js/app.js"></script>
+<script src="/static/js/app.js?v={{ asset_version }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

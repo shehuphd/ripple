@@ -126,6 +126,27 @@ templates = Jinja2Templates(directory=HERE / "templates")
 settings_service = SettingsService()
 
 
+def asset_version() -> str:
+    """A cache key for the static assets, from their newest modification time.
+
+    Without it a browser keeps a stylesheet it already has and the page runs
+    old CSS against new markup. That failure is invisible: the file on disk is
+    correct, the served file is correct, and only the loaded sheet is stale.
+    """
+    newest = max(
+        (
+            path.stat().st_mtime
+            for path in (HERE / "static").rglob("*")
+            if path.is_file()
+        ),
+        default=0.0,
+    )
+    return f"{int(newest)}"
+
+
+templates.env.globals["asset_version"] = asset_version()
+
+
 @app.exception_handler(ProviderError)
 async def provider_error_handler(_request: Request, error: ProviderError):
     """Provider failures are expected states, not server faults."""

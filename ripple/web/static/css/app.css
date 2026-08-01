@@ -26,6 +26,25 @@ button{font:inherit}
 
 /* Window shell */
 .win{height:100vh;display:grid;grid-template-columns:238px 1fr}
+/* Collapsing removes the track rather than zeroing it. A zero-width track
+   still participates in auto-placement, so the main column lands in it and
+   ends up zero wide too. */
+.win.side-off{grid-template-columns:1fr}
+.win.side-off > .side{display:none}
+
+/* Below this the sidebar is a drawer over the content rather than a column
+   beside it: at this width a 238px column leaves nothing for the script. */
+/* Compact mode: below 900px the sidebar is a drawer over the content rather
+   than a column beside it, because a 238px column leaves nothing for the
+   script. The breakpoint is evaluated in JS and applied as a class, so the
+   drawer's open and closed states are ordinary top-level rules with no
+   media-query nesting between them. */
+.win.compact{grid-template-columns:1fr}
+.win.compact .side{position:fixed;left:-238px;top:0;bottom:0;width:238px;
+  z-index:50;transition:left .18s ease;box-shadow:14px 0 34px rgba(0,0,0,.45)}
+.win.compact.side-on .side{left:0}
+.win.compact.side-on::after{content:"";position:fixed;inset:0;z-index:49;
+  background:rgba(0,0,0,.45)}
 .side{background:var(--panel);border-right:.5px solid var(--bd);display:flex;
   flex-direction:column;overflow:hidden}
 .side-top{height:56px;display:flex;align-items:center;padding:0 15px;gap:10px;flex:0 0 auto}
@@ -59,9 +78,22 @@ button{font:inherit}
 
 /* Main column */
 .main{display:flex;flex-direction:column;min-width:0;overflow:hidden}
-.bar{height:56px;flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:0 18px;
-  border-bottom:.5px solid var(--bd)}
+.bar{min-height:56px;flex:0 0 auto;display:flex;align-items:center;gap:14px;
+  padding:8px 18px;border-bottom:.5px solid var(--bd);flex-wrap:wrap}
+@media(max-width:820px){
+  .bar .sub{display:none}
+  .search input{width:150px}
+}
+@media(max-width:640px){
+  .search{display:none}
+  table.scripts th:nth-child(3), table.scripts td:nth-child(3),
+  table.scripts th:nth-child(5), table.scripts td:nth-child(5){display:none}
+}
 .bar .nav{display:flex;gap:4px;color:var(--t4)}
+.bar .toggle{background:none;border:0;color:var(--t3);cursor:pointer;padding:6px 7px;
+  border-radius:5px;font-size:15px;line-height:1}
+.bar .toggle:hover{background:var(--raised);color:var(--t1)}
+.bar .toggle.on{color:var(--ac)}
 .bar .nav a{width:24px;height:24px;display:grid;place-items:center;border-radius:5px}
 .bar .nav a:hover{background:var(--raised);color:var(--t1)}
 .bar h1{font-size:16px;font-weight:600;margin:0;white-space:nowrap}
@@ -157,7 +189,13 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .reader{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;
   flex:1;min-height:0}
 .reader > *{overflow-y:auto;min-height:0}
-@media(max-width:1200px){.reader{grid-template-columns:1fr}}
+.reader.pane-off{grid-template-columns:minmax(0,1fr)}
+.reader.pane-off .pane{display:none}
+/* Below this the requirement pane would leave the script too narrow to read,
+   so the two stack and the pane sits under the script. */
+@media(max-width:1080px){
+  .reader{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}
+}
 .page{background:var(--card);border:.5px solid var(--bd);border-radius:9px;padding:30px 34px;
   font-family:var(--mono);font-size:13.5px;line-height:1.6}
 .page .phd{display:flex;color:var(--t4);font-size:12.5px;margin-bottom:22px}
@@ -202,7 +240,12 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .overlay .obody{flex:1;overflow:hidden;padding:18px;display:grid;
   grid-template-columns:minmax(0,1fr) 420px;gap:16px;min-height:0}
 .overlay .obody > *{overflow-y:auto;min-height:0;align-content:start}
-@media(max-width:1200px){.overlay .obody{grid-template-columns:1fr}}
+.overlay .obody.pane-off{grid-template-columns:minmax(0,1fr)}
+.overlay .obody.pane-off > :last-child{display:none}
+@media(max-width:1080px){
+  .overlay .obody{grid-template-columns:1fr;overflow-y:auto}
+  .overlay .obody > *{overflow:visible}
+}
 .overlay .ofoot{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:14px 18px;
   border-top:.5px solid var(--bd);background:var(--panel)}
 .overlay .ofoot .btns{margin-left:auto;display:flex;gap:10px}
@@ -235,6 +278,8 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 /* Graph canvas */
 .gsplit{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:0;
   flex:1;min-height:0;border:.5px solid var(--bd);border-radius:9px;overflow:hidden}
+.gsplit.pane-off{grid-template-columns:minmax(0,1fr)}
+.gsplit.pane-off .gdetail{display:none}
 /* Below this the detail column would squeeze the canvas to nothing, so the
    two stack instead. A zero-width canvas draws every node at the origin. */
 @media(max-width:820px){
