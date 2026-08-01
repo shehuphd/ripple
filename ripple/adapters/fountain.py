@@ -44,7 +44,9 @@ SECTION = re.compile(r"^\s*#{1,6}\s+\S")
 CENTRED = re.compile(r"^\s*>\s*(?P<body>.+?)\s*<\s*$")
 
 
-def _blank_out(text: str, pattern: re.Pattern[str]) -> tuple[str, list[tuple[int, str]]]:
+def _blank_out(
+    text: str, pattern: re.Pattern[str]
+) -> tuple[str, list[tuple[int, str]]]:
     """Replace each match with spaces of equal length, returning what was removed.
 
     Blanking rather than deleting keeps every later character at its original
@@ -75,7 +77,9 @@ class FountainAdapter:
         detected, confidence = detect_format(payload)
         return confidence if detected is DetectedFormat.FOUNTAIN else 0.0
 
-    def parse(self, payload: SourcePayload) -> tuple[list[ParsedScene], list[ImportWarning]]:
+    def parse(
+        self, payload: SourcePayload
+    ) -> tuple[list[ParsedScene], list[ImportWarning]]:
         """Parse the payload into scenes plus any non-fatal findings."""
         source = payload.text()
         warnings: list[ImportWarning] = []
@@ -146,9 +150,7 @@ class _LineParser:
     previous element type, sequence counters) cannot leak between parses.
     """
 
-    def __init__(
-        self, text: str, start: int, notes_by_offset: dict[int, str]
-    ) -> None:
+    def __init__(self, text: str, start: int, notes_by_offset: dict[int, str]) -> None:
         self._text = text
         self._start = start
         self._notes = notes_by_offset
@@ -239,7 +241,7 @@ class _LineParser:
         else:
             parsed = parse_character_cue(candidate) or (candidate, None, False)
 
-        name, extension, is_dual = parsed
+        name, _extension, is_dual = parsed
         text = candidate.rstrip("^ ").strip()
         self._add_unit(
             "character",
@@ -360,6 +362,10 @@ class _LineParser:
         chosen = self._scenes[0]
         for scene in self._scenes:
             anchor = scene.units[0].anchor if scene.units else None
-            if anchor and anchor.start_offset is not None and anchor.start_offset <= offset:
+            if (
+                anchor
+                and anchor.start_offset is not None
+                and anchor.start_offset <= offset
+            ):
                 chosen = scene
         return chosen

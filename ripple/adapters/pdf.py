@@ -242,8 +242,13 @@ class PdfAdapter:
 
         text = completed.stdout.decode("utf-8", "replace")
         lines = [
-            _Line(page=1, x=float(len(line) - len(line.lstrip())), y=-index,
-                  text=line.strip(), is_bold=False)
+            _Line(
+                page=1,
+                x=float(len(line) - len(line.lstrip())),
+                y=-index,
+                text=line.strip(),
+                is_bold=False,
+            )
             for index, line in enumerate(text.splitlines())
             if line.strip()
         ]
@@ -280,8 +285,16 @@ class PdfAdapter:
             if unit_type is UnitType.SCENE_HEADING:
                 scene = self._start_scene(scenes, text, margin_number)
                 previous, speaker = unit_type, None
-                self._append(scene, unit_type, scene.heading, block, block_index,
-                             method, confidence, None)
+                self._append(
+                    scene,
+                    unit_type,
+                    scene.heading,
+                    block,
+                    block_index,
+                    method,
+                    confidence,
+                    None,
+                )
                 continue
 
             if scene is None:
@@ -303,10 +316,19 @@ class PdfAdapter:
                 speaker = None
 
             self._append(
-                scene, unit_type, text, block, block_index, method, confidence,
-                speaker if unit_type in (
-                    UnitType.CHARACTER, UnitType.DIALOGUE, UnitType.PARENTHETICAL
-                ) else None,
+                scene,
+                unit_type,
+                text,
+                block,
+                block_index,
+                method,
+                confidence,
+                (
+                    speaker
+                    if unit_type
+                    in (UnitType.CHARACTER, UnitType.DIALOGUE, UnitType.PARENTHETICAL)
+                    else None
+                ),
             )
             previous = unit_type
 
@@ -379,7 +401,9 @@ class PdfAdapter:
 
         offset = left - margin
         in_speech = previous in (
-            UnitType.CHARACTER, UnitType.DIALOGUE, UnitType.PARENTHETICAL
+            UnitType.CHARACTER,
+            UnitType.DIALOGUE,
+            UnitType.PARENTHETICAL,
         )
 
         if offset >= CHARACTER_POINTS and parse_character_cue(text):
@@ -406,9 +430,7 @@ class PdfAdapter:
         scene = ParsedScene(
             sequence_index=len(scenes),
             heading=heading,
-            display_scene_number=(
-                match.group("number") if match else margin_number
-            ),
+            display_scene_number=(match.group("number") if match else margin_number),
             int_ext=int_ext,
             time_of_day=time_of_day,
         )

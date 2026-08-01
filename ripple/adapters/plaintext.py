@@ -137,10 +137,12 @@ class PlainTextAdapter:
                 offset,
                 raw_line,
                 confidence,
-                speaker
-                if unit_type
-                in (UnitType.CHARACTER, UnitType.DIALOGUE, UnitType.PARENTHETICAL)
-                else None,
+                (
+                    speaker
+                    if unit_type
+                    in (UnitType.CHARACTER, UnitType.DIALOGUE, UnitType.PARENTHETICAL)
+                    else None
+                ),
             )
             previous = unit_type
             offset += len(raw_line)
@@ -160,9 +162,7 @@ class PlainTextAdapter:
 
     def _measure_margins(self, lines: list[str]) -> _Margins:
         """Derive this document's column positions from its own content."""
-        indents = Counter(
-            self._indent_of(line) for line in lines if line.strip()
-        )
+        indents = Counter(self._indent_of(line) for line in lines if line.strip())
         if not indents:
             raise ImportRejected("empty_document", "The file contains no text.")
 

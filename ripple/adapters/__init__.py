@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import logging
 
+from traceact import ActionTrace
+
 from ripple.adapters.base import (
     MAX_SCENES,
     MAX_UNITS_PER_SCENE,
@@ -33,6 +35,7 @@ from ripple.adapters.fountain import FountainAdapter
 from ripple.adapters.pdf import PdfAdapter
 from ripple.adapters.plaintext import PlainTextAdapter
 from ripple.adapters.screenplay_check import assess, verdict_warnings
+from ripple.tracing import ensure_configured
 
 logger = logging.getLogger(__name__)
 
@@ -67,12 +70,46 @@ def import_screenplay(data: bytes, source_name: str = "upload") -> ImportResult:
     returns an ImportResult with outcome REJECTED and a rejection_code the UI
     can map to an explanation.
     """
+    ensure_configured()
+    with ActionTrace.start(action="script.import", kind="import") as trace:
+        result = _import(data, source_name, trace)
+        trace.output(
+            {
+                "outcome": result.outcome.value,
+                "detected_format": result.detected_format.value,
+                "adapter": result.adapter_name,
+                "scene_count": result.scene_count,
+                "unit_count": result.unit_count,
+                "warning_codes": [warning.code for warning in result.warnings],
+                "rejection_code": result.rejection_code,
+            }
+        )
+        return result
+
+
+def _import(data: bytes, source_name: str, trace: ActionTrace) -> ImportResult:
+    """Run the import pipeline, recording each stage on the open trace.
+
+    Only counts, codes, hashes, and formats reach the trace. Screenplay text,
+    the filename, and the uploaded bytes never do; PRD section 12.
+    """
     try:
         payload = SourcePayload(data=data, suggested_name=source_name)
     except ImportRejected as rejection:
         return _rejected(rejection, source_name, "", DetectedFormat.UNKNOWN, "none")
 
+    # The extension is a hint, not content. Recording it cannot leak a path.
+    trace.input({"byte_length": len(data), "source_extension": payload.extension})
+    trace.set_meta("content_hash", payload.content_hash)
+
     detected, confidence = detect_format(payload)
+    trace.step(f"Detected {detected.value}")
+    trace.event(
+        kind="parse",
+        operation="detect",
+        target=detected.value,
+        data={"confidence": round(confidence, 2)},
+    )
     adapter = ADAPTERS.get(detected)
     if adapter is None:
         return _rejected(
@@ -88,7 +125,19 @@ def import_screenplay(data: bytes, source_name: str = "upload") -> ImportResult:
 
     try:
         scenes, warnings = adapter.parse(payload)
+        trace.step(f"Parsed {len(scenes)} scene(s)")
+        trace.event(
+            kind="parse",
+            operation="parse",
+            target=adapter.name,
+            data={
+                "scene_count": len(scenes),
+                "unit_count": sum(len(scene.units) for scene in scenes),
+                "warning_codes": [warning.code for warning in warnings],
+            },
+        )
     except ImportRejected as rejection:
+        trace.step(f"Rejected: {rejection.code}")
         return _rejected(
             rejection, source_name, payload.content_hash, detected, adapter.name
         )
@@ -121,6 +170,15 @@ def import_screenplay(data: bytes, source_name: str = "upload") -> ImportResult:
         )
 
     verdict = assess(scenes)
+    trace.event(
+        kind="validate",
+        operation="screenplay_check",
+        data={
+            "is_screenplay": verdict.is_screenplay,
+            "confidence": verdict.confidence,
+            "reason_count": len(verdict.reasons),
+        },
+    )
     if not verdict.is_screenplay:
         return _rejected(
             ImportRejected(

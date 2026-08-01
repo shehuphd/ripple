@@ -16,12 +16,15 @@ order, and the demo corpus is deliberately contiguous from 1.
 
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 import sys
 import textwrap
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+logger = logging.getLogger("ripple.render")
 
 REPO = Path(__file__).resolve().parent.parent
 SCREENPLAIN = REPO / "tools" / ".venv" / "bin" / "screenplain"
@@ -66,10 +69,12 @@ def scene_numbers(fountain: Path) -> list[str]:
 
 
 def run_screenplain(fountain: Path, out: Path, fmt: str) -> None:
+    """Invoke screenplain for one output format, raising on a non-zero exit."""
     result = subprocess.run(
         [str(SCREENPLAIN), "--format", fmt, str(fountain), str(out)],
         capture_output=True,
         text=True,
+        check=False,
     )
     if result.returncode != 0:
         raise RuntimeError(f"screenplain {fmt} failed: {result.stderr.strip()}")
@@ -80,9 +85,7 @@ def inject_scene_numbers(fdx: Path, numbers: list[str]) -> int:
     ET.register_namespace("", "")
     tree = ET.parse(fdx)
     headings = [
-        p
-        for p in tree.getroot().iter("Paragraph")
-        if p.get("Type") == "Scene Heading"
+        p for p in tree.getroot().iter("Paragraph") if p.get("Type") == "Scene Heading"
     ]
     if len(headings) != len(numbers):
         raise RuntimeError(
@@ -121,9 +124,11 @@ def fdx_to_text(fdx: Path, txt: Path) -> None:
             text = text.upper()
 
         # Blank line between blocks, except between a cue and what it says.
-        if lines and not (
-            previous == "Character" and kind in ("Dialogue", "Parenthetical")
-        ) and not (previous == "Parenthetical" and kind == "Dialogue"):
+        if (
+            lines
+            and not (previous == "Character" and kind in ("Dialogue", "Parenthetical"))
+            and not (previous == "Parenthetical" and kind == "Dialogue")
+        ):
             lines.append("")
 
         pad = " " * INDENT[kind]
@@ -135,6 +140,7 @@ def fdx_to_text(fdx: Path, txt: Path) -> None:
 
 
 def render(fountain: Path) -> None:
+    """Produce the .fdx, .pdf, and .txt siblings of one Fountain source."""
     stem = fountain.with_suffix("")
     fdx, pdf, txt = (
         stem.with_suffix(".fdx"),
@@ -148,19 +154,21 @@ def render(fountain: Path) -> None:
     run_screenplain(fountain, pdf, "pdf")
     fdx_to_text(fdx, txt)
 
-    print(f"{fountain.relative_to(REPO)}")
-    print(f"  {fdx.name}  {len(numbers)} scenes, {injected} numbered")
-    print(f"  {pdf.name}  {pdf.stat().st_size:,} bytes")
-    print(f"  {txt.name}  {txt.stat().st_size:,} bytes")
+    logger.info("%s", fountain.relative_to(REPO))
+    logger.info("  %s  %d scenes, %d numbered", fdx.name, len(numbers), injected)
+    logger.info("  %s  %s bytes", pdf.name, f"{pdf.stat().st_size:,}")
+    logger.info("  %s  %s bytes", txt.name, f"{txt.stat().st_size:,}")
 
 
 def main(argv: list[str]) -> int:
+    """Render the given Fountain files, or the whole corpus. Returns an exit code."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     if not SCREENPLAIN.exists():
-        print(
+        logger.error(
             "screenplain missing. Run:\n"
             "  python3 -m venv tools/.venv\n"
-            "  tools/.venv/bin/pip install -r tools/requirements.txt",
-            file=sys.stderr,
+            "  tools/.venv/bin/pip install -r tools/requirements.txt"
         )
         return 1
 
@@ -170,7 +178,7 @@ def main(argv: list[str]) -> int:
         else sorted(DEMO_SCRIPTS.glob("*/*.fountain"))
     )
     if not targets:
-        print("no .fountain files found", file=sys.stderr)
+        logger.error("no .fountain files found")
         return 1
 
     failed = 0
@@ -178,7 +186,7 @@ def main(argv: list[str]) -> int:
         try:
             render(target)
         except (RuntimeError, OSError) as error:
-            print(f"{target.name}: {error}", file=sys.stderr)
+            logger.error("%s: %s", target.name, error)
             failed += 1
     return 1 if failed else 0
 

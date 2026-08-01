@@ -134,3 +134,14 @@ def encrypted_pdf(night_freight_fountain: bytes) -> bytes:
     buffer = io.BytesIO()
     writer.write(buffer)
     return buffer.getvalue()
+
+
+@pytest.fixture(autouse=True)
+def _no_trace_files(tmp_path, monkeypatch):
+    """Route tracing to a temp directory so a test run writes nothing durable."""
+    monkeypatch.setenv("RIPPLE_TRACING", "off")
+    from ripple import tracing
+
+    monkeypatch.setattr(tracing, "DEFAULT_TRACE_DIR", tmp_path / "traces")
+    monkeypatch.setattr(tracing, "_configured", False)
+    yield

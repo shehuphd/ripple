@@ -169,7 +169,9 @@ class TestWrongExtension:
 
 class TestHostilePdf:
     def test_truncated_pdf_is_rejected(self):
-        result = import_screenplay(b"%PDF-1.7\n" + b"\xde\xad\xbe\xef" * 200, "torn.pdf")
+        result = import_screenplay(
+            b"%PDF-1.7\n" + b"\xde\xad\xbe\xef" * 200, "torn.pdf"
+        )
         assert result.outcome is ImportOutcome.REJECTED
         assert result.rejection_code in {"pdf_unreadable", "pdf_no_text", "no_scenes"}
 

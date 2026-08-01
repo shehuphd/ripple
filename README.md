@@ -51,13 +51,19 @@ Format detection reads the bytes. A file extension is a hint that can break a ti
 
 ## Demo corpus
 
-`demo-scripts/` holds original screenplays written for this project, each authored in Fountain and rendered to Final Draft XML, PDF, and plain text by one tool:
+`demo-scripts/` holds three original screenplays written for this project, each authored in Fountain and rendered to Final Draft XML, PDF, and plain text by one tool:
 
 ```bash
 tools/.venv/bin/python tools/render_screenplay.py
 ```
 
 Each script ships a `dependencies.md` recording the entities, assertions, and planted dependency chains a correct extraction must produce.
+
+## Tracing
+
+Meaningful actions are traced with [TraceAct](https://github.com/traceact/traceact) 0.12.0. Automatic argument capture is off and the `ai_prompts`, `api_keys`, `http`, `filesystem_paths`, and `env_vars` redaction presets are on, so screenplay text, filenames, and uploaded bytes are never recorded. Traces land in `data/traces/`.
+
+Set `RIPPLE_TRACING=off` to disable trace writing.
 
 ## Tests
 

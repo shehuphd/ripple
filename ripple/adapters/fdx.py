@@ -8,6 +8,7 @@ stdlib ElementTree is vulnerable to entity-expansion denial of service.
 from __future__ import annotations
 
 import logging
+from xml.etree.ElementTree import Element
 
 from defusedxml import ElementTree as DefusedET
 from defusedxml.common import DefusedXmlException
@@ -148,7 +149,7 @@ class FdxAdapter:
         return scenes, warnings
 
     @staticmethod
-    def _parse_xml(payload: SourcePayload):
+    def _parse_xml(payload: SourcePayload) -> Element:
         """Parse defensively, converting every XML failure into a rejection."""
         try:
             root = DefusedET.fromstring(payload.data)
@@ -171,12 +172,14 @@ class FdxAdapter:
         return root
 
     @staticmethod
-    def _paragraph_text(paragraph) -> str:
+    def _paragraph_text(paragraph: Element) -> str:
         """Join a paragraph's Text runs, dropping style-only splits."""
         return "".join(node.text or "" for node in paragraph.iter("Text")).strip()
 
     @staticmethod
-    def _start_scene(scenes: list[ParsedScene], paragraph, text: str) -> ParsedScene:
+    def _start_scene(
+        scenes: list[ParsedScene], paragraph: Element, text: str
+    ) -> ParsedScene:
         """Open a scene, preferring Final Draft's own scene number."""
         number = paragraph.get("Number")
         heading = SCENE_NUMBER.sub("", text).strip()

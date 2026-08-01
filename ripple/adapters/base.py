@@ -177,7 +177,9 @@ class SourcePayload:
 
     def __post_init__(self) -> None:
         if not isinstance(self.data, (bytes, bytearray)):
-            raise TypeError(f"payload data must be bytes, got {type(self.data).__name__}")
+            raise TypeError(
+                f"payload data must be bytes, got {type(self.data).__name__}"
+            )
         if len(self.data) > MAX_UPLOAD_BYTES:
             raise ImportRejected(
                 "payload_too_large",
@@ -287,9 +289,23 @@ CHARACTER_CUE = re.compile(
 # than being guessed, because a wrong time of day misleads scheduling.
 TIMES_OF_DAY = frozenset(
     {
-        "DAY", "NIGHT", "MORNING", "AFTERNOON", "EVENING", "DAWN", "DUSK",
-        "CONTINUOUS", "LATER", "MOMENTS LATER", "SAME", "SAME TIME",
-        "MAGIC HOUR", "PRE-DAWN", "MIDNIGHT", "SUNSET", "SUNRISE",
+        "DAY",
+        "NIGHT",
+        "MORNING",
+        "AFTERNOON",
+        "EVENING",
+        "DAWN",
+        "DUSK",
+        "CONTINUOUS",
+        "LATER",
+        "MOMENTS LATER",
+        "SAME",
+        "SAME TIME",
+        "MAGIC HOUR",
+        "PRE-DAWN",
+        "MIDNIGHT",
+        "SUNSET",
+        "SUNRISE",
     }
 )
 

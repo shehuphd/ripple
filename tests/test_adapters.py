@@ -9,8 +9,8 @@ from __future__ import annotations
 import pytest
 
 from ripple.adapters import DetectedFormat, ImportOutcome, UnitType, import_screenplay
-from ripple.adapters.detect import detect_format
 from ripple.adapters.base import SourcePayload
+from ripple.adapters.detect import detect_format
 
 
 def _units(result, unit_type: UnitType) -> list:
@@ -72,11 +72,11 @@ class TestFountain:
         result = import_screenplay(understudy_fountain, "x.fountain")
         assert any(w.code == "dual_dialogue" for w in result.warnings)
 
-    def test_character_extensions_do_not_change_the_speaker(self, night_freight_fountain):
+    def test_character_extensions_do_not_change_the_speaker(
+        self, night_freight_fountain
+    ):
         result = import_screenplay(night_freight_fountain, "x.fountain")
-        speakers = {
-            unit.speaker_name for unit in _units(result, UnitType.CHARACTER)
-        }
+        speakers = {unit.speaker_name for unit in _units(result, UnitType.CHARACTER)}
         # (O.S.), (V.O.) and (CONT'D) must not create separate speakers.
         assert "MARA" in speakers
         assert not any(name and "(" in name for name in speakers)
@@ -114,17 +114,17 @@ class TestFdx:
 
     def test_paragraph_types_map_to_unit_types(self, fdx_bytes):
         result = import_screenplay(fdx_bytes, "x.fdx")
-        present = {
-            unit.unit_type for scene in result.scenes for unit in scene.units
-        }
-        assert {UnitType.SCENE_HEADING, UnitType.ACTION, UnitType.CHARACTER,
-                UnitType.DIALOGUE} <= present
+        present = {unit.unit_type for scene in result.scenes for unit in scene.units}
+        assert {
+            UnitType.SCENE_HEADING,
+            UnitType.ACTION,
+            UnitType.CHARACTER,
+            UnitType.DIALOGUE,
+        } <= present
 
     def test_block_index_is_recorded_for_provenance(self, fdx_bytes):
         result = import_screenplay(fdx_bytes, "x.fdx")
-        anchors = [
-            unit.anchor for scene in result.scenes for unit in scene.units
-        ]
+        anchors = [unit.anchor for scene in result.scenes for unit in scene.units]
         assert all(anchor and anchor.block_index is not None for anchor in anchors)
 
 
@@ -132,11 +132,13 @@ class TestPlainText:
     def test_indented_text_parses_into_typed_units(self, text_bytes):
         result = import_screenplay(text_bytes, "x.txt")
         assert result.accepted
-        present = {
-            unit.unit_type for scene in result.scenes for unit in scene.units
-        }
-        assert {UnitType.SCENE_HEADING, UnitType.ACTION, UnitType.CHARACTER,
-                UnitType.DIALOGUE} <= present
+        present = {unit.unit_type for scene in result.scenes for unit in scene.units}
+        assert {
+            UnitType.SCENE_HEADING,
+            UnitType.ACTION,
+            UnitType.CHARACTER,
+            UnitType.DIALOGUE,
+        } <= present
 
     def test_flat_text_is_flagged_for_review(self, text_bytes):
         """Strip every indent: structure is now a guess and must be declared."""
@@ -211,9 +213,7 @@ class TestCrossFormat:
         fdx = import_screenplay(fdx_bytes, "x.fdx")
         assert fountain.scene_count == fdx.scene_count
 
-    def test_notes_exist_only_in_fountain(
-        self, understudy_fountain, understudy_fdx
-    ):
+    def test_notes_exist_only_in_fountain(self, understudy_fountain, understudy_fdx):
         """A documented divergence: screenplain strips notes from every render.
 
         Asserting parity here would be wrong. See the corpus dependencies.md.

@@ -34,14 +34,14 @@ FOUNTAIN_TITLE_KEY = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 FOUNTAIN_MARKERS = (
-    re.compile(r"^\s*\.[A-Za-z]", re.MULTILINE),      # forced scene heading
-    re.compile(r"^\s*@[A-Za-z]", re.MULTILINE),       # forced character cue
-    re.compile(r"^\s*!", re.MULTILINE),               # forced action
-    re.compile(r"^\s*>.+<\s*$", re.MULTILINE),        # centred text
-    re.compile(r"\[\[.+?\]\]", re.DOTALL),            # note
-    re.compile(r"^\s*={3,}\s*$", re.MULTILINE),       # page break
-    re.compile(r"#[\w.\-]+#\s*$", re.MULTILINE),      # scene number
-    re.compile(r"^\s*\S.*\^\s*$", re.MULTILINE),      # dual dialogue caret
+    re.compile(r"^\s*\.[A-Za-z]", re.MULTILINE),  # forced scene heading
+    re.compile(r"^\s*@[A-Za-z]", re.MULTILINE),  # forced character cue
+    re.compile(r"^\s*!", re.MULTILINE),  # forced action
+    re.compile(r"^\s*>.+<\s*$", re.MULTILINE),  # centred text
+    re.compile(r"\[\[.+?\]\]", re.DOTALL),  # note
+    re.compile(r"^\s*={3,}\s*$", re.MULTILINE),  # page break
+    re.compile(r"#[\w.\-]+#\s*$", re.MULTILINE),  # scene number
+    re.compile(r"^\s*\S.*\^\s*$", re.MULTILINE),  # dual dialogue caret
 )
 
 
