@@ -24,11 +24,10 @@
 - [x] Change-set service with atomic acceptance and latest-only undo
 - [x] Natural-language query grounded in accepted assertions
 - [x] Web application: library, reader, requirement pane, settings, extraction loop
-- [ ] Local graph drawn as a graph with edges, and the expanded graph view (renderer still undecided)
+- [x] Local graph and expanded graph view, hand-rolled 2D SVG with a deterministic layout
 
 ## Decisions still open
 
-- [ ] Graph renderer: 2D or 3D, per PRD section 17
 - [ ] Whether `pdftoppm` and `tesseract` can be installed on Replit Autoscale through Nix; if not, scanned PDFs stay rejected in production
 - [ ] Whether intercut sub-headings should collapse into their parent numbered scene rather than becoming separate scenes (see `demo-scripts/03-seven-minutes/dependencies.md`)
 

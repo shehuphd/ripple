@@ -56,6 +56,8 @@ from ripple.extraction.service import (
 )
 from ripple.graph.continuity import detect_orphaned_references, retrieve
 from ripple.graph.diff import Edge, EdgeRef, diff_edges, to_operations
+from ripple.graph.layout import DEPARTMENT_ORDER
+from ripple.graph.layout import layout as graph_layout
 from ripple.llm import ProviderError, get_provider
 from ripple.services import changeset
 from ripple.services.settings import SettingsService
@@ -694,54 +696,169 @@ def unit_requirements(unit_id: str, session: Session = Depends(get_session)):
 
 
 @app.get("/api/units/{unit_id}/graph")
-def unit_graph(unit_id: str, session: Session = Depends(get_session)):
-    """The local graph around one unit: its edges and their direct neighbours."""
+def unit_graph(
+    unit_id: str,
+    depth: int = 1,
+    min_confidence: float = 0.0,
+    include_removed: bool = False,
+    departments: str | None = None,
+    session: Session = Depends(get_session),
+):
+    """The graph around one unit, with deterministic positions.
+
+    `depth` 1 returns the unit's own scene and its edges; 2 adds one hop out
+    from every entity found, which is where a coordinator sees that a prop is
+    shared with three other scenes.
+    """
     unit = session.get(ScriptUnit, _uuid(unit_id))
     if unit is None:
         raise HTTPException(404, "No such unit")
     scene = session.get(Scene, unit.scene_id)
     labels = _labels(session, scene.script_id)
+    wanted = set(departments.split(",")) if departments else None
 
-    edges = list(
+    seed = list(
         session.scalars(
             select(Assertion).where(
-                Assertion.active.is_(True),
-                (
-                    (Assertion.source_unit_id == unit.id)
-                    | (Assertion.subject_scene_id == scene.id)
-                    | (Assertion.object_scene_id == scene.id)
-                ),
+                Assertion.script_id == scene.script_id,
+                Assertion.active.is_(True) if not include_removed else True,
+                (Assertion.source_unit_id == unit.id)
+                | (Assertion.subject_scene_id == scene.id)
+                | (Assertion.object_scene_id == scene.id),
             )
         )
     )
+    edges = list(seed)
+
+    if depth > 1:
+        entity_ids = {
+            endpoint
+            for assertion in seed
+            for endpoint in (assertion.subject_entity_id, assertion.object_entity_id)
+            if endpoint
+        }
+        if entity_ids:
+            edges.extend(
+                session.scalars(
+                    select(Assertion).where(
+                        Assertion.script_id == scene.script_id,
+                        Assertion.active.is_(True) if not include_removed else True,
+                        Assertion.id.notin_([a.id for a in seed]),
+                        Assertion.subject_entity_id.in_(entity_ids)
+                        | Assertion.object_entity_id.in_(entity_ids),
+                    )
+                )
+            )
+
+    below = 0
     nodes: dict[str, dict[str, Any]] = {}
-    links = []
+    links: list[dict[str, Any]] = []
     for assertion in edges:
+        if assertion.confidence < min_confidence:
+            below += 1
+            continue
         subject = assertion.subject_entity_id or assertion.subject_scene_id
         obj = assertion.object_entity_id or assertion.object_scene_id
-        for node_id, kind in (
-            (subject, assertion.subject_kind),
-            (obj, assertion.object_kind),
-        ):
-            key = str(node_id)
-            if key not in nodes:
-                nodes[key] = {
-                    "id": key,
+        ends = (
+            (subject, assertion.subject_kind, assertion.subject_entity_id),
+            (obj, assertion.object_kind, assertion.object_entity_id),
+        )
+        types = [
+            _entity_type(session, entity_id) if kind == "entity" else None
+            for _, kind, entity_id in ends
+        ]
+        if wanted and not any(t in wanted for t in types if t):
+            continue
+        for (node_id, kind, _), entity_type in zip(ends, types):
+            nodes.setdefault(
+                str(node_id),
+                {
+                    "id": str(node_id),
                     "label": labels.get(node_id, "?"),
                     "kind": kind,
-                    "entity_type": (
-                        _entity_type(session, node_id) if kind == "entity" else None
-                    ),
-                }
+                    "entity_type": entity_type,
+                },
+            )
         links.append(
             {
                 "source": str(subject),
                 "target": str(obj),
                 "predicate": assertion.predicate,
-                "confidence": assertion.confidence,
+                "confidence": round(assertion.confidence, 2),
+                "removed": not assertion.active,
             }
         )
-    return {"nodes": list(nodes.values()), "links": links}
+
+    # The unit's own scene anchors the view even when nothing cites it yet, so
+    # an empty graph still shows where the selection sits.
+    nodes.setdefault(
+        str(scene.id),
+        {
+            "id": str(scene.id),
+            "label": labels.get(scene.id, "Scene"),
+            "kind": "scene",
+            "entity_type": None,
+        },
+    )
+
+    placed = graph_layout(list(nodes.values()), focus_id=str(scene.id))
+    positions = {p.id: p for p in placed}
+    return {
+        "focus": str(scene.id),
+        "nodes": [
+            {
+                **nodes[p.id],
+                "x": round(p.x, 4),
+                "y": round(p.y, 4),
+                "ring": p.ring,
+            }
+            for p in placed
+        ],
+        "links": [
+            link
+            for link in links
+            if link["source"] in positions and link["target"] in positions
+        ],
+        "departments": sorted(
+            {n["entity_type"] for n in nodes.values() if n["entity_type"]}
+        ),
+        "hidden_below_threshold": below,
+    }
+
+
+@app.get("/graph/{unit_id}")
+def graph_page(request: Request, unit_id: str, session: Session = Depends(get_session)):
+    """The expanded graph view for one unit."""
+    unit = session.get(ScriptUnit, _uuid(unit_id))
+    if unit is None:
+        raise HTTPException(404, "No such unit")
+    scene = session.get(Scene, unit.scene_id)
+    script = session.get(Script, scene.script_id)
+
+    by_department = dict(
+        session.execute(
+            select(Entity.entity_type, func.count())
+            .where(Entity.script_id == script.id)
+            .group_by(Entity.entity_type)
+        ).all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "graph.html",
+        {
+            "script": script,
+            "scene": scene,
+            "unit": unit,
+            "departments": [
+                {"name": name, "count": by_department.get(name, 0)}
+                for name in DEPARTMENT_ORDER
+                if by_department.get(name)
+            ],
+            "total_departments": len(DEPARTMENT_ORDER),
+            "counts": sidebar_counts(session),
+            "lock": _graph_lock(session),
+        },
+    )
 
 
 # Extraction

@@ -57,11 +57,16 @@ document.querySelectorAll('.u').forEach((node) => {
 
     const local = await api(`/api/units/${state.unit}/graph`);
     graphMeta.textContent = `${local.nodes.length} nodes · ${local.links.length} edges`;
-    graph.innerHTML = local.nodes.length
-      ? `<div class="chips">${local.nodes
-          .map((n) => `<span class="tag ${n.entity_type || ''}">${n.label}</span>`)
-          .join('')}</div>`
-      : '<div class="empty">Nothing in the graph yet.</div>';
+    document.getElementById('expand').href = `/graph/${state.unit}`;
+    if (local.links.length) {
+      graph.innerHTML = '<div class="gcanvas mini"></div>';
+      // Draw after layout so the canvas has measurable dimensions.
+      requestAnimationFrame(() =>
+        draw(graph.querySelector('.gcanvas'), local, () => {}));
+    } else {
+      graph.innerHTML =
+        '<div class="empty">Nothing in the graph yet. Build it to see edges.</div>';
+    }
   });
 });
 

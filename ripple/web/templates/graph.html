@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Local graph — {{ script.title }}{% endblock %}
+{% block content_class %}panes{% endblock %}
+
+{% block sidebar %}
+<div class="side-scroll">
+  <a class="srow" href="/scripts/{{ script.id }}">
+    <span class="ic">‹</span><span class="lb">Back to scene
+      {{ scene.display_scene_number or scene.sequence_index + 1 }}</span></a>
+
+  <div class="sgroup">Departments
+    <span style="float:right">{{ departments|length }} of {{ total_departments }}</span>
+  </div>
+  {% for department in departments %}
+  <label class="srow">
+    <input type="checkbox" class="dept" value="{{ department.name }}" checked
+           style="accent-color:var(--ac)">
+    <span class="lb {{ department.name }}">{{ department.name.replace('_',' ') }}</span>
+    <span class="ct num">{{ department.count }}</span>
+  </label>
+  {% endfor %}
+
+  <div class="sgroup">Scope</div>
+  <div style="padding:4px 9px 10px">
+    <div class="row" style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+      <span style="flex:1">Depth</span>
+      <button class="btn sm" id="depth-down">−</button>
+      <span class="num" id="depth">1</span>
+      <button class="btn sm" id="depth-up">+</button>
+    </div>
+    <label style="display:block;margin-bottom:5px">Min confidence
+      <span class="num" id="conf-value" style="float:right">0.00</span></label>
+    <input type="range" id="conf" min="0" max="0.95" step="0.05" value="0"
+           style="width:100%;accent-color:var(--ac)">
+    <label class="srow" style="padding-left:0;margin-top:8px">
+      <input type="checkbox" id="removed" style="accent-color:var(--ac)">
+      <span class="lb">Include removed edges</span></label>
+  </div>
+</div>
+{% endblock %}
+
+{% block toolbar %}
+<h1>Local graph</h1>
+<span class="sub">unit {{ unit.id.hex[:8] }} · scene
+  {{ scene.display_scene_number or scene.sequence_index + 1 }} ·
+  base v{{ script.current_version }}</span>
+<div class="right">
+  <span class="chip" id="fit-info">—</span>
+  <a class="btn" href="/scripts/{{ script.id }}">Close</a>
+</div>
+{% endblock %}
+
+{% block content %}
+{% if lock %}
+<div class="lock"><span class="ic">◎</span><span>{{ lock.message }}</span>
+  <a href="{{ lock.href }}">{{ lock.action }}</a></div>
+{% endif %}
+<div class="gsplit">
+  <div class="gcanvas" id="canvas" data-unit="{{ unit.id }}">
+    <div class="gcount" id="gcount"></div>
+    <div class="glegend">
+      <span><i style="background:var(--ac)"></i>selected</span>
+      <span><i style="background:var(--red)"></i>removed by proposal</span>
+    </div>
+  </div>
+  <aside class="gdetail" id="detail">
+    <div class="empty">Select a node to see its edges.</div>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}<script src="/static/js/graph.js"></script>{% endblock %}

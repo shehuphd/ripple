@@ -6,6 +6,14 @@ All notable changes to Ripple are documented here.
 
 ### Added
 
+- **Graph rendering, 2D.** A deterministic server-side layout in `ripple/graph/layout.py` places the focus at the centre, scenes on a horizontal spine in script order, and entities in fixed angular wedges by department, so a department occupies the same region in every view. Drawn as hand-rolled SVG: no graph library, no WebGL. Parallel edges fan apart and stagger their labels along the edge by an amount computed from the label width and the edge length. PRD section 17's renderer question is resolved.
+- **Expanded graph view** at `/graph/{unit}` with department filters, depth 1 to 3, a minimum-confidence threshold, a removed-edge overlay, and a detail pane listing a selected node's edges.
+- **`tools/seed_graph.py`**, a developer command that writes the graph a correct extraction should produce for scene 14 of the first demo script, taken from that script's `dependencies.md`. Rows carry `provenance="system"` so they are distinguishable from a model's output. Nothing calls it automatically.
+
+### Fixed
+
+- **Text selection was unreadable.** The browser default left grey secondary text on a pale blue block.
+
 - **Analysis and Graph pages**: Ripple reports, Continuity findings, Entities, and Assertions. These were linked in the sidebar before they existed, so every one of them 404'd.
 - **Recently opened** is a real filter. `Script.last_opened_at` is set when the reader displays a script, distinct from `updated_at`, which moves on any write: a script changed by an accepted edit was not thereby opened.
 - **Locked features look locked.** A control that cannot work is disabled, greyed, and accompanied by a banner naming the missing prerequisite with a link to it. Applied to Ask the graph and the Entities and Assertions pages when no graph exists, to Build graph when no model is selected, and to Validate and Save in Settings until a key is typed.
