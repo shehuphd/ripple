@@ -147,6 +147,9 @@ class ImportResult:
     content_hash: str
     scenes: list[ParsedScene] = field(default_factory=list)
     warnings: list[ImportWarning] = field(default_factory=list)
+    # From the document's own title page where the format has one. None for
+    # PDF and plain text, where the repository falls back to the filename.
+    title: str | None = None
     rejection_code: str | None = None
     rejection_message: str | None = None
 

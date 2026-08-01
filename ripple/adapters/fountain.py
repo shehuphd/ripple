@@ -77,6 +77,18 @@ class FountainAdapter:
         detected, confidence = detect_format(payload)
         return confidence if detected is DetectedFormat.FOUNTAIN else 0.0
 
+    @staticmethod
+    def title(payload: SourcePayload) -> str | None:
+        """The Title: value from the Fountain title page, if there is one."""
+        for line in payload.text().splitlines():
+            stripped = line.strip()
+            if not stripped:
+                break
+            match = TITLE_KEY.match(stripped)
+            if match and match.group("key").strip().lower() == "title":
+                return match.group("value").strip() or None
+        return None
+
     def parse(
         self, payload: SourcePayload
     ) -> tuple[list[ParsedScene], list[ImportWarning]]:

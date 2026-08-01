@@ -2,6 +2,18 @@
 
 All notable changes to Ripple are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **SQLAlchemy models for all 18 tables**, implementing the ERD with the kinded assertion endpoints Schema Lock v1 requires, so a scene can be a graph node. Enumerated values are CHECK constraints rather than native enums, keeping the schema portable between PostgreSQL and SQLite.
+- **Persistence layer.** `persist_import` writes a parsed screenplay and its provenance; `delete_script`, `delete_all_scripts`, and `clear_all_graphs` implement ERD section 10 with counts returned before anything is removed.
+- **Foreign keys enforced on SQLite** through a per-connection pragma, so local tests prove referential integrity rather than appearing to.
+- **LLM provider adapters** for Google Gemini, OpenAI, Anthropic, and DeepSeek behind one contract. Model lists are read from each provider's own endpoint, never hardcoded, and filtered to text generation. Only Gemini ships; the other three are development aids listed for removal in TODO.md.
+- **Title extraction** from the Fountain title page and the Final Draft `TitlePage` element.
+- **`script_units.speaker_name`**, so a reload between import and extraction does not lose who was speaking.
+- **Third demo screenplay**, SEVEN MINUTES, targeting graph behaviour: accented names, an omitted scene, an intercut, an entity that changes state, and an identity that resolves only in the final act.
+
 ## [0.1.0] — 2026-08-01
 
 ### Added

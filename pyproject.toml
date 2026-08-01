@@ -7,9 +7,14 @@ dependencies = [
     "defusedxml>=0.7.1",
     "pdf-inspector>=0.2.6",
     "traceact==0.12.0",
+    "sqlalchemy>=2.0",
+    "google-genai>=2.0",
 ]
 
 [project.optional-dependencies]
+# Development only. Both extras are removed before submission; see TODO.md.
+openai = ["openai>=2.0"]
+anthropic = ["anthropic>=0.60"]
 dev = [
     "pytest",
     "pytest-randomly",

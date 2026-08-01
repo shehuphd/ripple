@@ -148,6 +148,22 @@ class FdxAdapter:
             )
         return scenes, warnings
 
+    def title(self, payload: SourcePayload) -> str | None:
+        """The first non-empty TitlePage paragraph, which Final Draft uses
+        for the script title."""
+        try:
+            root = self._parse_xml(payload)
+        except ImportRejected:
+            return None
+        page = root.find("TitlePage")
+        if page is None:
+            return None
+        for paragraph in page.iter("Paragraph"):
+            text = self._paragraph_text(paragraph)
+            if text:
+                return text
+        return None
+
     @staticmethod
     def _parse_xml(payload: SourcePayload) -> Element:
         """Parse defensively, converting every XML failure into a rejection."""

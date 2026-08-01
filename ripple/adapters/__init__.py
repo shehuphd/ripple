@@ -193,6 +193,9 @@ def _import(data: bytes, source_name: str, trace: ActionTrace) -> ImportResult:
         )
     warnings.extend(verdict_warnings(verdict))
 
+    title_reader = getattr(adapter, "title", None)
+    title = title_reader(payload) if callable(title_reader) else None
+
     return ImportResult(
         outcome=_outcome(warnings, verdict.needs_review),
         detected_format=detected,
@@ -201,6 +204,7 @@ def _import(data: bytes, source_name: str, trace: ActionTrace) -> ImportResult:
         content_hash=payload.content_hash,
         scenes=scenes,
         warnings=warnings,
+        title=title,
     )
 
 
