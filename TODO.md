@@ -20,11 +20,11 @@
 - [x] Settings: per-provider credential entry, validation, and model selection
 - [x] Deterministic diff engine
 - [x] Continuity retrieval and the deterministic orphaned-reference finding
-- [ ] Synthesizer wired onto the preview, so the ripple carries a written explanation
-- [ ] Change-set service with atomic acceptance and latest-only undo
-- [ ] Natural-language query grounded in accepted assertions
+- [x] Synthesizer wired onto the preview, with a deterministic fallback
+- [x] Change-set service with atomic acceptance and latest-only undo
+- [x] Natural-language query grounded in accepted assertions
 - [x] Web application: library, reader, requirement pane, settings, extraction loop
-- [ ] Local graph rendered as a graph rather than a node list (renderer still undecided)
+- [ ] Local graph drawn as a graph with edges, and the expanded graph view (renderer still undecided)
 
 ## Decisions still open
 

@@ -1,0 +1,37 @@
+{% macro sidebar(counts, active, script_id=None) %}
+<div class="side-scroll">
+  <a class="srow {{ 'on' if active == 'all' }}" href="/">
+    <span class="ic">▤</span><span class="lb">All scripts</span>
+    <span class="ct num">{{ counts.scripts }}</span></a>
+  <a class="srow {{ 'on' if active == 'recent' }}" href="/?filter=recent">
+    <span class="ic">◷</span><span class="lb">Recently opened</span>
+    <span class="ct num">{{ counts.recent }}</span></a>
+  <a class="srow {{ 'on' if active == 'review' }}" href="/?filter=review">
+    <span class="ic">◎</span><span class="lb">Needs review</span>
+    <span class="ct num">{{ counts.needs_review }}</span></a>
+
+  <div class="sgroup">Analysis</div>
+  <a class="srow {{ 'on' if active == 'reports' }}" href="/reports">
+    <span class="ic">≋</span><span class="lb">Ripple reports</span>
+    <span class="ct num">{{ counts.reports }}</span></a>
+  <a class="srow {{ 'on' if active == 'findings' }}" href="/findings">
+    <span class="ic">⚠</span><span class="lb">Continuity findings</span>
+    <span class="ct num">{{ counts.findings }}</span></a>
+  <a class="srow {{ 'on' if active == 'ask' }}"
+     href="/ask{% if script_id %}?script={{ script_id }}{% endif %}">
+    <span class="ic">⌕</span><span class="lb">Ask the graph</span>
+    <span class="ct num">{{ counts.queries }}</span></a>
+
+  <div class="sgroup">Graph</div>
+  <a class="srow {{ 'on' if active == 'entities' }}" href="/entities">
+    <span class="ic">⁙</span><span class="lb">Entities</span>
+    <span class="ct num">{{ counts.entities }}</span></a>
+  <a class="srow {{ 'on' if active == 'assertions' }}" href="/entities#assertions">
+    <span class="ic">☰</span><span class="lb">Assertions</span>
+    <span class="ct num">{{ counts.assertions }}</span></a>
+
+  <div class="sgroup">Configuration</div>
+  <a class="srow {{ 'on' if active == 'settings' }}" href="/settings">
+    <span class="ic">⚙</span><span class="lb">Settings</span></a>
+</div>
+{% endmacro %}

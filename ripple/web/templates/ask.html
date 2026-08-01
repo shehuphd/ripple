@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_nav.html" import sidebar %}
+{% block title %}Ask the graph — Ripple{% endblock %}
+{% block sidebar %}{{ sidebar(counts, 'ask', script.id if script else None) }}{% endblock %}
+
+{% block toolbar %}
+<h1>Ask the graph</h1>
+<span class="sub">
+  {% if script %}{{ script.title }} · <span class="num">{{ assertions }}</span>
+    accepted assertions · <span class="num">{{ entities }}</span> entities
+  {% else %}Choose a script from the library first{% endif %}</span>
+{% endblock %}
+
+{% block content %}
+{% if script %}
+<div class="askbox">
+  <input id="q" placeholder="Which scenes include the blue car?" autocomplete="off">
+  <button class="btn pri" id="ask">Ask</button>
+</div>
+<div id="out"><div class="empty">
+  Answers come from accepted assertions only. Nothing is generated from the
+  screenplay text.</div></div>
+{% else %}
+<div class="empty">Open a script, then use Ask the graph.</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}<script src="/static/js/ask.js"></script>{% endblock %}

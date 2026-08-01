@@ -1,57 +1,65 @@
 {% extends "base.html" %}
-{% block nav_library %}on{% endblock %}
+{% from "_nav.html" import sidebar %}
+{% block sidebar %}{{ sidebar(counts, active) }}{% endblock %}
+
+{% block toolbar %}
+<h1>{{ heading }}</h1>
+<span class="sub">{{ rows|length }} screenplay{{ '' if rows|length == 1 else 's' }}
+  · Fountain, Final Draft XML, PDF, plain text</span>
+<div class="right">
+  <div class="search"><span class="ic">⌕</span>
+    <input id="search" placeholder="Search" autocomplete="off"></div>
+  {% if model %}<span class="chip">◎ {{ model }}</span>
+  {% else %}<a class="chip" href="/settings">◎ no model selected</a>{% endif %}
+  <button class="btn pri" id="pick">+ Import script</button>
+  <input type="file" id="file" class="hide"
+         accept=".fountain,.fdx,.pdf,.txt,.xml,.text">
+</div>
+{% endblock %}
+
 {% block content %}
-<h1>Script library</h1>
-<p class="sub">Select a screenplay to read, or import Fountain, Final Draft XML, PDF, or plain text.</p>
-
-<div class="card" style="margin-bottom:18px">
-  <div class="row spread">
-    <div>
-      <h2>Import a screenplay</h2>
-      <p class="tiny muted" style="margin:0">
-        Format is detected from content. Up to {{ '%.0f'|format(max_bytes / 1048576) }} MB.
-      </p>
-    </div>
-    <form id="upload" class="row">
-      <input type="file" name="file" id="file" class="field" style="width:280px"
-             accept=".fountain,.fdx,.pdf,.txt,.xml,.text">
-      <button class="btn pri" type="submit">Import</button>
-    </form>
-  </div>
-  <div id="upload-result" style="margin-top:12px"></div>
-</div>
-
-{% if rows %}
-<div class="grid">
+<table class="scripts">
+  <thead><tr>
+    <th>Title</th><th>Format</th><th>Pages</th><th>Scenes</th>
+    <th>Runtime</th><th>Import outcome</th><th></th>
+  </tr></thead>
+  <tbody id="rows">
   {% for row in rows %}
-  <div class="card">
-    <div class="row spread" style="margin-bottom:8px">
-      <a href="/scripts/{{ row.script.id }}" style="font-weight:600;font-size:15px">
-        {{ row.script.title }}</a>
-      <span class="tag {{ 'ok' if row.script.import_status == 'accepted' else 'warn' }}">
-        {{ row.script.import_status.replace('_',' ') }}</span>
-    </div>
-    <div class="row tiny muted" style="gap:14px">
-      <span class="num">{{ row.scenes }} scenes</span>
-      <span class="num">{{ row.entities }} entities</span>
-      <span class="num">{{ row.assertions }} assertions</span>
-    </div>
-    <div class="row spread" style="margin-top:11px">
-      <span class="tag {{ 'ac' if row.script.graph_status == 'ready' else '' }}">
-        graph: {{ row.script.graph_status.replace('_',' ') }}</span>
-      <button class="btn sm danger" data-delete="{{ row.script.id }}"
-              data-title="{{ row.script.title }}">Delete</button>
-    </div>
-  </div>
+    <tr data-id="{{ row.id }}" data-title="{{ row.title }}">
+      <td><span class="title"><span class="ic">▤</span>{{ row.title }}</span></td>
+      <td>{{ row.format }}</td>
+      <td class="num">{{ row.pages }}</td>
+      <td class="num">{{ row.scenes }}</td>
+      <td class="num">{{ row.runtime }}</td>
+      <td><span class="status"><span class="dot {{ row.outcome }}"></span>
+        {{ row.outcome_label }}</span></td>
+      <td style="text-align:right">
+        <button class="btn sm danger" data-delete="{{ row.id }}">Delete</button></td>
+    </tr>
   {% endfor %}
+  </tbody>
+</table>
+{% if not rows %}<div class="empty" style="padding:18px">No scripts yet.</div>{% endif %}
+
+<div class="cards two" style="margin-top:16px">
+  <div class="card progress" id="progress-card" style="display:none">
+    <div><span class="n" id="p-done">0</span>
+      <span class="muted">of <span id="p-total">0</span> scenes extracted ·
+      <span id="p-title"></span></span></div>
+    <div class="track"><i id="p-bar" style="width:0"></i></div>
+    <div class="tiny muted" style="display:flex">
+      <span id="p-label">Waiting</span><span id="p-rate" style="margin-left:auto"></span></div>
+  </div>
+  <div class="card">
+    <div class="tiny muted" style="margin-bottom:11px">Drop a screenplay to import</div>
+    <div class="drop" id="drop">
+      <div class="big">▤</div>
+      .fountain, .fdx, .pdf with a text layer, .txt<br>
+      <span class="tiny">Scanned PDFs are rejected when OCR is unavailable</span>
+    </div>
+    <div id="upload-result" class="tiny" style="margin-top:11px"></div>
+  </div>
 </div>
-<div class="row" style="margin-top:18px">
-  <button class="btn sm danger" id="clear-graphs">Clear all graphs</button>
-  <span class="tiny muted">Removes extracted graph data. Scripts and parsed units stay.</span>
-</div>
-{% else %}
-<div class="card"><p class="muted" style="margin:0">No scripts yet. Import one above.</p></div>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}<script src="/static/js/library.js"></script>{% endblock %}

@@ -30,9 +30,10 @@ def client(tmp_path, monkeypatch):
 
 
 def _first_script(client) -> str:
+    """The first script in the library. Rows carry their id as a data attribute."""
     import re
 
-    match = re.search(r"/scripts/([0-9a-f-]{36})", client.get("/").text)
+    match = re.search(r'data-id="([0-9a-f-]{36})"', client.get("/").text)
     assert match, "the library did not seed"
     return match.group(1)
 
@@ -118,7 +119,7 @@ class TestPages:
     def test_the_reader_renders_units_as_selectable_lines(self, client):
         script_id = _first_script(client)
         body = client.get(f"/scripts/{script_id}").text
-        assert 'class="unit' in body
+        assert 'class="u ' in body
         assert (
             "the blue sedan idles by the gate" in body
             or len(_units(client, script_id)) > 20
@@ -153,13 +154,15 @@ class TestUnitEndpoints:
         )
         assert response.status_code == 200
         body = response.json()
-        assert body["synthesizer"] == "not_wired"
+        assert body["summary_source"] == "deterministic"
+        assert body["change_set_id"]
         assert set(body["diff"]["summary"]) == {
             "added",
             "removed",
             "changed",
             "unchanged",
         }
+        assert body["pipeline"][0]["name"] == "Parse unit"
 
 
 class TestDeletion:
@@ -171,13 +174,106 @@ class TestDeletion:
         assert client.get(f"/scripts/{script_id}").status_code == 200
 
     def test_deleting_one_script_leaves_the_others(self, client):
+        import re
+
         script_id = _first_script(client)
-        before = client.get("/").text.count("/scripts/")
+        before = len(re.findall(r'data-id="', client.get("/").text))
         assert client.delete(f"/api/scripts/{script_id}").status_code == 200
-        after = client.get("/").text.count("/scripts/")
-        assert after < before
+        after = len(re.findall(r'data-id="', client.get("/").text))
+        assert after == before - 1
         assert client.get(f"/scripts/{script_id}").status_code == 404
 
     def test_clearing_graphs_keeps_the_scripts(self, client):
         client.post("/api/graphs/clear")
         assert "NIGHT FREIGHT" in client.get("/").text
+
+
+class TestDecisionFlow:
+    """Preview, then accept or reject, through the HTTP layer."""
+
+    def _preview(self, client, text="A bicycle leans against the gate."):
+        script_id = _first_script(client)
+        unit_id = _units(client, script_id)[0]
+        body = client.post(
+            f"/api/units/{unit_id}/preview", data={"proposed_text": text}
+        ).json()
+        return unit_id, body
+
+    def test_a_preview_applies_nothing(self, client):
+        unit_id, _ = self._preview(client)
+        before = client.get(f"/api/units/{unit_id}/requirements").json()
+        assert before["unit"]["text"] != "A bicycle leans against the gate."
+
+    def test_accepting_applies_the_text(self, client):
+        unit_id, preview = self._preview(client)
+        response = client.post(f"/api/changes/{preview['change_set_id']}/accept")
+        assert response.status_code == 200
+        after = client.get(f"/api/units/{unit_id}/requirements").json()
+        assert after["unit"]["text"] == "A bicycle leans against the gate."
+
+    def test_rejecting_applies_nothing(self, client):
+        unit_id, preview = self._preview(client)
+        assert (
+            client.post(
+                f"/api/changes/{preview['change_set_id']}/reject", data={}
+            ).status_code
+            == 200
+        )
+        after = client.get(f"/api/units/{unit_id}/requirements").json()
+        assert after["unit"]["text"] != "A bicycle leans against the gate."
+
+    def test_accepting_twice_is_refused(self, client):
+        _, preview = self._preview(client)
+        client.post(f"/api/changes/{preview['change_set_id']}/accept")
+        second = client.post(f"/api/changes/{preview['change_set_id']}/accept")
+        assert second.status_code == 400
+        assert second.json()["code"] == "invalid_operation"
+
+    def test_a_stale_proposal_is_a_409(self, client):
+        """Two previews, accept the second, then the first is stale."""
+        script_id = _first_script(client)
+        unit_id = _units(client, script_id)[0]
+        first = client.post(
+            f"/api/units/{unit_id}/preview", data={"proposed_text": "One."}
+        ).json()
+        second = client.post(
+            f"/api/units/{unit_id}/preview", data={"proposed_text": "Two."}
+        ).json()
+        assert (
+            client.post(f"/api/changes/{second['change_set_id']}/accept").status_code
+            == 200
+        )
+        stale = client.post(f"/api/changes/{first['change_set_id']}/accept")
+        assert stale.status_code == 409
+        assert stale.json()["code"] == "stale_proposal"
+
+    def test_undo_restores_the_original_text(self, client):
+        unit_id, preview = self._preview(client)
+        original = client.get(f"/api/units/{unit_id}/requirements").json()["unit"][
+            "text"
+        ]
+        client.post(f"/api/changes/{preview['change_set_id']}/accept")
+        assert client.post(f"/api/units/{unit_id}/undo").status_code == 200
+        after = client.get(f"/api/units/{unit_id}/requirements").json()
+        assert after["unit"]["text"] == original
+
+    def test_undo_with_nothing_accepted_is_refused(self, client):
+        script_id = _first_script(client)
+        unit_id = _units(client, script_id)[0]
+        assert client.post(f"/api/units/{unit_id}/undo").status_code == 400
+
+
+class TestAskTheGraph:
+    def test_asking_an_empty_graph_says_so(self, client):
+        script_id = _first_script(client)
+        body = client.post(
+            f"/api/scripts/{script_id}/ask",
+            data={"question": "Which scenes have a car?"},
+        ).json()
+        assert body["grounded_in"] == 0
+        assert "accepted graph" in body["answer"]
+
+    def test_the_question_is_logged_for_audit(self, client):
+        script_id = _first_script(client)
+        client.post(f"/api/scripts/{script_id}/ask", data={"question": "Anything?"})
+        assert client.get("/ask").status_code == 200

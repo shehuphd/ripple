@@ -1,64 +1,140 @@
 {% extends "base.html" %}
 {% block title %}{{ script.title }} — Ripple{% endblock %}
-{% block content %}
-<div class="row spread" style="margin-bottom:4px">
-  <h1>{{ script.title }}</h1>
-  <div class="row">
-    {% if selected_model[1] %}
-      <span class="tag ac">{{ selected_model[1] }}</span>
-      <button class="btn pri" id="extract">Build graph</button>
-    {% else %}
-      <a class="btn" href="/settings">Choose a model to build the graph</a>
-    {% endif %}
-  </div>
-</div>
-<p class="sub">
-  <span class="num">{{ scenes|length }} scenes</span> ·
-  graph {{ script.graph_status.replace('_',' ') }} ·
-  select any line to see its production requirements
-</p>
 
-<div id="run" class="card" style="display:none;margin-bottom:14px">
-  <div class="row spread" style="margin-bottom:8px">
-    <strong id="run-label">Extracting</strong>
-    <span class="tiny muted num" id="run-count"></span>
+{% block sidebar %}
+<div class="side-hd"><span>Scene</span><span>Pages</span></div>
+<div class="side-scroll" style="padding:0">
+  {% for scene in scenes %}
+  <div class="scene-row" data-scene="{{ scene.id }}">
+    <div class="hd">
+      <span class="no">{{ scene.number }}</span>
+      <span class="tx">{{ scene.heading }}</span>
+    </div>
+    <div class="me num">p. {{ scene.page }} · {{ scene.eighths }} ·
+      {{ scene.entities }} entities</div>
   </div>
-  <div class="bar"><i id="run-bar" style="width:0"></i></div>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block toolbar %}
+<h1>{{ script.title }}</h1>
+<span class="sub" id="crumb">base v{{ script.current_version }}</span>
+<div class="right">
+  {% if findings %}
+  <span class="chip"><i class="dot medium"></i>{{ findings }} continuity findings</span>
+  {% endif %}
+  {% if model %}<span class="chip">◎ {{ model }}</span>
+    <button class="btn" id="extract">Build graph</button>
+  {% else %}<a class="chip" href="/settings">◎ choose a model</a>{% endif %}
+  <button class="btn pri" id="see-ripple" disabled>≋ See ripple</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="run" class="card" style="display:none;margin-bottom:14px">
+  <div style="display:flex"><strong id="run-label">Extracting</strong>
+    <span class="tiny muted num" id="run-count" style="margin-left:auto"></span></div>
+  <div class="track"><i id="run-bar" style="width:0"></i></div>
 </div>
 
 <div class="reader">
-  <div class="card">
+  <div class="page" id="page">
+    <div class="phd"><span>{{ script.title }}</span>
+      <span class="pno">{{ pages }} pages</span></div>
     {% for scene in scenes %}
-    <section class="scene" data-scene="{{ scene.id }}">
-      <h3><span class="n num">{{ scene.display_scene_number or loop.index }}</span>{{ scene.heading }}</h3>
+    <section data-scene-body="{{ scene.id }}">
+      <div class="sh"><span class="no num">{{ scene.number }}</span>
+        <span>{{ scene.heading }}</span></div>
       {% for unit in scene.units %}
-        {% if unit.unit_type != 'scene_heading' %}
-        <div class="unit {{ unit.unit_type }}" data-unit="{{ unit.id }}">{{ unit.current_text }}</div>
-        {% endif %}
+      <div class="u {{ unit.type }}" data-unit="{{ unit.id }}"
+           data-scene-no="{{ scene.number }}">{{ unit.text }}</div>
       {% endfor %}
     </section>
     {% endfor %}
   </div>
 
-  <aside class="pane stack">
+  <aside class="pane">
     <div class="card">
-      <div class="hd">Requirements</div>
-      <div id="requirements"><p class="muted tiny" style="margin:0">Select a line.</p></div>
+      <div class="hd"><h2>Requirements</h2><span class="meta" id="req-meta"></span></div>
+      <div id="req-chips" class="chips"></div>
+      <div id="requirements"><div class="empty">Select a line in the script.</div></div>
     </div>
     <div class="card">
-      <div class="hd">Local graph</div>
-      <div id="graph"><p class="muted tiny" style="margin:0">Select a line.</p></div>
-    </div>
-    <div class="card">
-      <div class="hd">Edit and see the ripple</div>
-      <textarea class="field" id="proposed" placeholder="Select a line, then edit it here."></textarea>
-      <div class="row" style="margin-top:9px">
-        <button class="btn pri" id="see-ripple" disabled>See ripple</button>
-        <span class="tiny muted">Nothing is applied until you accept.</span>
-      </div>
-      <div id="ripple" style="margin-top:12px"></div>
+      <div class="hd"><h2>Local graph</h2>
+        <span class="meta" id="graph-meta"></span>
+        <a class="btn sm" id="expand" href="#">Expand</a></div>
+      <div id="graph"><div class="empty">Select a line in the script.</div></div>
     </div>
   </aside>
+</div>
+{% endblock %}
+
+{% block overlay %}
+<div class="overlay hide" id="preview">
+  <div class="obar">
+    <h1>Ripple preview</h1>
+    <span class="sub" id="pv-crumb">nothing is applied until you accept</span>
+    <div class="right">
+      <span class="chip" id="pv-sev"><i class="dot"></i><span>severity</span></span>
+      {% if model %}<span class="chip">◎ {{ model }}</span>{% endif %}
+      <button class="btn icon" id="pv-close" title="Close">↩</button>
+    </div>
+  </div>
+
+  <div class="obody">
+    <div class="cards">
+      <div class="textpair">
+        <div class="textbox">
+          <div class="lb">Accepted · base v{{ script.current_version }}</div>
+          <div class="tx" id="pv-accepted"></div>
+        </div>
+        <div class="textbox prop">
+          <div class="lb">Proposed · <b>not applied</b></div>
+          <textarea id="pv-proposed"></textarea>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hd"><h2>What changes</h2><span class="meta" id="pv-meta"></span></div>
+        <div id="pv-summary" class="empty">Computing…</div>
+      </div>
+
+      <div class="card">
+        <div class="hd"><h2>Graph diff</h2><span class="meta" id="pv-diffmeta"></span></div>
+        <div id="pv-diff"></div>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="hd"><h2>Continuity</h2>
+          <span class="meta">warnings do not block</span></div>
+        <div id="pv-findings"><div class="empty">None.</div></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h2>Pipeline</h2><span class="meta" id="pv-pipemeta"></span></div>
+        <div id="pv-pipeline"></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h2>Where this came from</h2></div>
+        <div class="origin" id="pv-origin"></div>
+        <div class="tiny muted" id="pv-prov" style="margin-top:9px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ofoot">
+    <div>
+      <div style="font-weight:600">Ready for your decision</div>
+      <div class="tiny muted" id="pv-foot"></div>
+    </div>
+    <div class="btns">
+      <button class="btn" id="pv-reject">Reject</button>
+      <button class="btn" id="pv-keep">Keep editing</button>
+      <button class="btn pri" id="pv-accept">✓ Accept ripple</button>
+    </div>
+  </div>
 </div>
 {% endblock %}
 

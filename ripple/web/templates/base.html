@@ -9,14 +9,27 @@
 <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
-<header>
-  <a class="brand" href="/"><span class="mark"></span>Ripple</a>
-  <nav>
-    <a href="/" class="{% block nav_library %}{% endblock %}">Library</a>
-    <a href="/settings" class="{% block nav_settings %}{% endblock %}">Settings</a>
-  </nav>
-</header>
-<main><div class="wrap">{% block content %}{% endblock %}</div></main>
+<div class="win">
+  <aside class="side">
+    <div class="side-top">
+      <div class="lights"><i class="l1"></i><i class="l2"></i><i class="l3"></i></div>
+      <a href="/" class="mark" title="Ripple"></a>
+    </div>
+    {% block sidebar %}{% endblock %}
+  </aside>
+
+  <div class="main">
+    <div class="bar">
+      <div class="nav">
+        <a href="javascript:history.back()" title="Back">‹</a>
+        <a href="javascript:history.forward()" title="Forward">›</a>
+      </div>
+      {% block toolbar %}{% endblock %}
+    </div>
+    <div class="content">{% block content %}{% endblock %}</div>
+  </div>
+</div>
+{% block overlay %}{% endblock %}
 <script src="/static/js/app.js"></script>
 {% block scripts %}{% endblock %}
 </body>
