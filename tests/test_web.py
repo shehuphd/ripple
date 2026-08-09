@@ -18,13 +18,7 @@ def client(tmp_path, monkeypatch):
     """A client over a throwaway database, seeded with the demo corpus."""
     monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{tmp_path/'t.db'}")
     monkeypatch.setenv("RIPPLE_TRACING", "off")
-    for variable in (
-        "GOOGLE_API_KEY",
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "DEEPSEEK_API_KEY",
-    ):
-        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     with TestClient(web.app) as instance:
         yield instance
 
@@ -90,13 +84,13 @@ class TestBadInput:
 
 class TestNoCredentialLeaks:
     def test_the_settings_page_shows_no_key(self, client, monkeypatch):
-        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-must-not-appear-in-html")
+        monkeypatch.setenv("GOOGLE_API_KEY", "sk-must-not-appear-in-html")
         body = client.get("/settings").text
         assert "sk-must-not-appear-in-html" not in body
-        assert "DEEPSEEK_API_KEY" in body  # the variable name is fine to show
+        assert "GOOGLE_API_KEY" in body  # the variable name is fine to show
 
     def test_the_provider_api_returns_no_key(self, client, monkeypatch):
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-must-not-appear-in-json")
+        monkeypatch.setenv("GOOGLE_API_KEY", "sk-must-not-appear-in-json")
         body = client.get("/api/settings/providers").text
         assert "sk-must-not-appear-in-json" not in body
         assert "configured" in body
@@ -104,7 +98,7 @@ class TestNoCredentialLeaks:
     def test_validating_a_bad_key_does_not_echo_it(self, client):
         response = client.post(
             "/api/settings/validate",
-            data={"provider": "openai", "api_key": "sk-echo-me-please"},
+            data={"provider": "google", "api_key": "sk-echo-me-please"},
         )
         assert "sk-echo-me-please" not in response.text
 
@@ -125,15 +119,13 @@ class TestPages:
             or len(_units(client, script_id)) > 20
         )
 
-    def test_settings_lists_every_provider(self, client):
+    def test_settings_lists_the_provider(self, client):
         body = client.get("/settings").text
-        for provider in ("google", "openai", "anthropic", "deepseek"):
-            assert provider in body
+        assert "google" in body
 
-    def test_settings_marks_which_provider_ships(self, client):
+    def test_settings_marks_the_provider_as_shipping(self, client):
         body = client.get("/settings").text
         assert "ships with the submission" in body
-        assert "development only" in body
 
 
 class TestUnitEndpoints:

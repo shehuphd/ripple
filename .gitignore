@@ -1,5 +1,6 @@
-internal/
-.internal/
+project/
+.project/
+TODO.md
 tools/.venv/
 __pycache__/
 *.pyc

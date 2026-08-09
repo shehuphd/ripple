@@ -65,7 +65,7 @@ Each script ships a `dependencies.md` recording the entities, assertions, and pl
 
 ## Tracing
 
-Meaningful actions are traced with [TraceAct](https://github.com/traceact/traceact) 0.12.0. Automatic argument capture is off and the `ai_prompts`, `api_keys`, `http`, `filesystem_paths`, and `env_vars` redaction presets are on, so screenplay text, filenames, and uploaded bytes are never recorded. Traces land in `data/traces/`.
+Meaningful actions are traced with [TraceAct](https://github.com/traceact/traceact) 0.14.0. Automatic argument capture is off and the `ai_prompts`, `api_keys`, `http`, `filesystem_paths`, and `env_vars` redaction presets are on, so screenplay text, filenames, and uploaded bytes are never recorded. Traces land in `data/traces/`.
 
 Set `RIPPLE_TRACING=off` to disable trace writing.
 

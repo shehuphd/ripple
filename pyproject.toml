@@ -6,9 +6,9 @@ requires-python = ">=3.11"
 dependencies = [
     "defusedxml>=0.7.1",
     "pdf-inspector>=0.2.6",
-    "traceact==0.12.0",
+    "traceact==0.14.0",
+    "keycall[traceact]==0.8.0",
     "sqlalchemy>=2.0",
-    "google-genai>=2.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "jinja2>=3.1",
@@ -16,9 +16,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Development only. Both extras are removed before submission; see TODO.md.
-openai = ["openai>=2.0"]
-anthropic = ["anthropic>=0.60"]
 dev = [
     "pytest",
     "pytest-randomly",
@@ -34,7 +31,7 @@ dev = [
 Changelog = "https://github.com/shehuphd/ripple/blob/main/CHANGELOG.md"
 
 # Without this, setuptools' flat-layout discovery treats every top-level
-# directory as a package and fails on data/, internal/, tests/, and tools/.
+# directory as a package and fails on data/, project/, tests/, and tools/.
 [tool.setuptools.packages.find]
 include = ["ripple*"]
 

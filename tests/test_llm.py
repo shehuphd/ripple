@@ -21,7 +21,6 @@ from ripple.llm.base import (
     Tier,
     infer_tier,
     is_text_model,
-    strip_code_fence,
 )
 
 
@@ -85,9 +84,17 @@ class TestRegistry:
         assert SUBMISSION_PROVIDER == "google"
         assert SUBMISSION_PROVIDER in PROVIDERS
 
+    def test_gemini_is_the_only_provider(self):
+        """PRD section 14 bars non-Google models at runtime.
+
+        Ripple builds and tests against Gemini only now, rather than carrying
+        OpenAI/Anthropic/DeepSeek dev-only adapters to strip out later.
+        """
+        assert set(PROVIDERS) == {"google"}
+
     def test_every_provider_satisfies_the_contract(self):
         for name, provider in PROVIDERS.items():
-            assert provider.name == name or name == "google"
+            assert provider.name == name
             assert callable(provider.is_configured)
             assert callable(provider.list_models)
             assert callable(provider.generate)
@@ -111,13 +118,13 @@ class TestCredentialHandling:
             assert provider.credential_variable in caught.value.message
 
     def test_a_blank_credential_counts_as_absent(self, monkeypatch):
-        provider = get_provider("deepseek")
+        provider = get_provider("google")
         monkeypatch.setenv(provider.credential_variable, "   ")
         assert not provider.is_configured()
 
     def test_no_credential_value_reaches_an_error_message(self, monkeypatch):
         secret = "sk-do-not-leak-this-value"
-        provider = get_provider("openai")
+        provider = get_provider("google")
         monkeypatch.setenv(provider.credential_variable, secret)
         assert provider.is_configured()
         with pytest.raises(ProviderError) as caught:
@@ -128,50 +135,22 @@ class TestCredentialHandling:
     def test_configured_providers_reports_names_only(self, monkeypatch):
         for provider in PROVIDERS.values():
             monkeypatch.delenv(provider.credential_variable, raising=False)
-        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-secret")
+        monkeypatch.setenv("GOOGLE_API_KEY", "sk-secret")
         listed = configured_providers()
-        assert listed == ["deepseek"]
+        assert listed == ["google"]
         assert all("sk-" not in name for name in listed)
 
 
-class TestJsonHandling:
-    @pytest.mark.parametrize(
-        "raw, expected",
-        [
-            ('```json\n{"a": 1}\n```', '{"a": 1}'),
-            ('```\n{"a": 1}\n```', '{"a": 1}'),
-            ('{"a": 1}', '{"a": 1}'),
-            ('  {"a": 1}  ', '{"a": 1}'),
-        ],
-    )
-    def test_a_fenced_json_reply_is_unwrapped(self, raw, expected):
-        assert strip_code_fence(raw) == expected
-
-
 class TestActionableErrors:
-    """A pasted 401 tells the user their key failed, which they knew."""
+    """A pasted 401 tells the user their key failed, which they knew.
 
-    @pytest.mark.parametrize(
-        "detail, expected",
-        [
-            ("401 UNAUTHENTICATED ... ACCESS_TOKEN_TYPE_UNSUPPORTED", "aistudio"),
-            ("API key not valid. Please pass a valid API key.", "Generative Language"),
-            ("Error 401 Authentication Fails, Your api key is invalid", "revoked"),
-            ("429 insufficient_quota", "quota or billing"),
-            ("403 PERMISSION_DENIED on this resource", "restricted"),
-        ],
-    )
-    def test_a_failure_names_a_cause_and_a_fix(self, detail, expected):
-        from ripple.llm.base import explain_auth_failure
-
-        message = explain_auth_failure("Google", detail)
-        assert expected in message
-        assert len(message) > 40
-
-    def test_an_unrecognised_failure_still_says_something(self):
-        from ripple.llm.base import explain_auth_failure
-
-        assert "could not be reached" in explain_auth_failure("openai", "socket closed")
+    KeyCall's own typed errors (`error.code`, `error.message`) already name
+    the cause and stay actionable; there is nothing left for Ripple to
+    reinterpret. What this class still checks is Ripple's side of the
+    contract: the local format-blind gate lets every real-looking key
+    through to the provider, and the provider's own rejection surfaces as a
+    `ProviderError`, not a crash.
+    """
 
     def _validate_google(self, monkeypatch, tmp_path, key):
         from ripple.config.secrets import SecretStore

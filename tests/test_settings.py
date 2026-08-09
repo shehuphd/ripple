@@ -22,13 +22,7 @@ SECRET = "sk-this-value-must-never-escape"
 
 @pytest.fixture
 def store(tmp_path, monkeypatch):
-    for variable in (
-        "GOOGLE_API_KEY",
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "DEEPSEEK_API_KEY",
-    ):
-        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.delenv("REPL_ID", raising=False)
     monkeypatch.delenv("REPLIT_DEPLOYMENT", raising=False)
     return SecretStore(tmp_path / "secrets.env")
@@ -50,8 +44,8 @@ def session():
 
 class TestCredentialsNeverLeak:
     def test_status_holds_no_fragment_of_the_value(self, store):
-        store.save("OPENAI_API_KEY", SECRET)
-        status = store.status("openai", "OPENAI_API_KEY")
+        store.save("GOOGLE_API_KEY", SECRET)
+        status = store.status("google", "GOOGLE_API_KEY")
         rendered = repr(status)
         assert status.configured
         assert SECRET not in rendered
@@ -61,13 +55,13 @@ class TestCredentialsNeverLeak:
         assert SECRET[-6:] not in rendered
 
     def test_provider_statuses_carry_no_key_material(self, service, store):
-        store.save("DEEPSEEK_API_KEY", SECRET)
+        store.save("GOOGLE_API_KEY", SECRET)
         rendered = repr(service.provider_statuses())
         assert SECRET not in rendered
         assert "sk-" not in rendered
 
     def test_a_validation_failure_does_not_echo_the_key(self, service):
-        result = service.validate("openai", SECRET)
+        result = service.validate("google", SECRET)
         assert not result.valid
         assert SECRET not in repr(result)
 
@@ -85,59 +79,65 @@ class TestCredentialsNeverLeak:
 
 class TestStorage:
     def test_the_file_is_owner_only(self, store):
-        store.save("OPENAI_API_KEY", SECRET)
+        store.save("GOOGLE_API_KEY", SECRET)
         mode = stat.S_IMODE(os.stat(store.path).st_mode)
         assert mode == 0o600, f"secrets file is {oct(mode)}"
 
     def test_a_blank_credential_is_refused(self, store):
         with pytest.raises(SecretsError) as caught:
-            store.save("OPENAI_API_KEY", "   ")
+            store.save("GOOGLE_API_KEY", "   ")
         assert caught.value.code == "empty_value"
 
     def test_saving_on_replit_is_refused_with_a_reason(self, store, monkeypatch):
         """A file written into a deployment container is lost on redeploy."""
         monkeypatch.setenv("REPL_ID", "some-repl")
         with pytest.raises(SecretsError) as caught:
-            store.save("OPENAI_API_KEY", SECRET)
+            store.save("GOOGLE_API_KEY", SECRET)
         assert caught.value.code == "use_replit_secrets"
         assert "Replit Secrets" in caught.value.message
 
     def test_an_existing_environment_value_wins_over_the_file(self, store, monkeypatch):
-        store.save("OPENAI_API_KEY", "from-file")
-        monkeypatch.setenv("OPENAI_API_KEY", "from-environment")
+        store.save("GOOGLE_API_KEY", "from-file")
+        monkeypatch.setenv("GOOGLE_API_KEY", "from-environment")
         store.load()
-        assert os.environ["OPENAI_API_KEY"] == "from-environment"
+        assert os.environ["GOOGLE_API_KEY"] == "from-environment"
 
     def test_forget_clears_both_the_file_and_the_environment(self, store):
-        store.save("OPENAI_API_KEY", SECRET)
-        assert store.forget("OPENAI_API_KEY")
-        assert not store.status("openai", "OPENAI_API_KEY").configured
+        store.save("GOOGLE_API_KEY", SECRET)
+        assert store.forget("GOOGLE_API_KEY")
+        assert not store.status("google", "GOOGLE_API_KEY").configured
         assert SECRET not in store.path.read_text()
 
     def test_saving_one_key_does_not_drop_another(self, store):
-        store.save("OPENAI_API_KEY", "first-value")
-        store.save("ANTHROPIC_API_KEY", "second-value")
-        assert store.status("openai", "OPENAI_API_KEY").configured
-        assert store.status("anthropic", "ANTHROPIC_API_KEY").configured
+        """The store holds any variable name, not just a registered provider's.
+
+        Exercised with a second, non-provider variable name to prove the
+        storage mechanics stay generic even though Ripple registers Gemini
+        alone.
+        """
+        store.save("GOOGLE_API_KEY", "first-value")
+        store.save("SOME_OTHER_KEY", "second-value")
+        assert store.status("google", "GOOGLE_API_KEY").configured
+        assert store.status("other", "SOME_OTHER_KEY").configured
 
 
 class TestValidation:
     def test_an_invalid_key_is_not_stored(self, service, store):
         """A stored bad key produces a screen that claims to work and does not."""
-        result = service.save_credential("openai", "obviously-not-a-key")
+        result = service.save_credential("google", "obviously-not-a-key")
         assert not result.valid
-        assert not store.status("openai", "OPENAI_API_KEY").configured
+        assert not store.status("google", "GOOGLE_API_KEY").configured
 
     def test_validating_does_not_leave_the_key_in_the_environment(self, service):
-        service.validate("openai", SECRET)
-        assert not os.environ.get("OPENAI_API_KEY")
+        service.validate("google", SECRET)
+        assert not os.environ.get("GOOGLE_API_KEY")
 
     def test_validating_restores_a_previous_environment_value(
         self, service, monkeypatch
     ):
-        monkeypatch.setenv("OPENAI_API_KEY", "the-original")
-        service.validate("openai", "a-temporary-key")
-        assert os.environ["OPENAI_API_KEY"] == "the-original"
+        monkeypatch.setenv("GOOGLE_API_KEY", "the-original")
+        service.validate("google", "a-temporary-key")
+        assert os.environ["GOOGLE_API_KEY"] == "the-original"
 
     def test_an_unconfigured_provider_reports_rather_than_raises(self, service):
         result = service.validate("google")
@@ -153,9 +153,9 @@ class TestModelSelection:
     def test_selecting_a_model_the_provider_does_not_offer_is_refused(
         self, session, service, monkeypatch
     ):
-        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+        monkeypatch.setenv("GOOGLE_API_KEY", "sk-test")
         with pytest.raises(ProviderError):
-            service.select_model(session, "deepseek", "a-model-that-does-not-exist")
+            service.select_model(session, "google", "a-model-that-does-not-exist")
 
     def test_an_unknown_provider_is_refused(self, session, service):
         with pytest.raises(ProviderError) as caught:

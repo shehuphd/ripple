@@ -1,17 +1,15 @@
 """Provider registry.
 
-Gemini is the provider Ripple ships with. OpenAI, Anthropic, and DeepSeek are
-present for development only: DeepSeek in particular is cheap enough to iterate
-against without spending the hackathon's Google Cloud credit. All three are
-listed for removal in TODO.md before submission, because PRD section 14 bars
-non-Google models at runtime.
+Gemini is the only provider Ripple builds and tests against, per PRD section
+14. It is a KeycallProvider (`ripple/llm/keycall_provider.py`): KeyCall
+(https://github.com/shehuphd/keycall) is what talks to the provider's API, so
+there is nothing provider-specific left to hand-write here.
 """
 
 from __future__ import annotations
 
 import logging
 
-from ripple.llm.anthropic_provider import AnthropicProvider
 from ripple.llm.base import (
     GenerationResult,
     LLMProvider,
@@ -20,19 +18,14 @@ from ripple.llm.base import (
     ProviderNotConfigured,
     Tier,
 )
-from ripple.llm.gemini import GeminiProvider
-from ripple.llm.openai_compatible import deepseek_provider, openai_provider
+from ripple.llm.keycall_provider import KeycallProvider
 
 logger = logging.getLogger(__name__)
 
 SUBMISSION_PROVIDER = "google"
 
 PROVIDERS: dict[str, LLMProvider] = {
-    "google": GeminiProvider(),
-    # Development only. See TODO.md.
-    "openai": openai_provider(),
-    "anthropic": AnthropicProvider(),
-    "deepseek": deepseek_provider(),
+    "google": KeycallProvider("google", "GOOGLE_API_KEY"),
 }
 
 __all__ = [

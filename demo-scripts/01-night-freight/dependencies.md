@@ -85,7 +85,7 @@ Expected continuity findings:
 1. **High.** Removing the sole `establishes` edge for Blue sedan while `appears_in` edges survive in scenes 22, 31, and 44. Cites three units.
 2. **Medium.** Transport loses its only picture vehicle at the dock, so scene 14 drops off the transport schedule.
 
-This reproduces the ripple preview mockup at `internal/design/screenshots/03-ripple-preview.png`. Keep the two in sync: if the script changes, the screenshot is stale.
+This reproduces the ripple preview mockup at `project/design/screenshots/03-ripple-preview.png`. Keep the two in sync: if the script changes, the screenshot is stale.
 
 ## 5. Adversarial value
 
