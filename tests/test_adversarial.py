@@ -185,7 +185,14 @@ class TestHostilePdf:
     ):
         result = import_screenplay(image_only_pdf, "scan.pdf")
         if result.outcome is ImportOutcome.REJECTED:
-            assert result.rejection_code in {"ocr_unavailable", "pdf_no_text"}
+            # ocr_failed is the honest outcome on a machine WITH the OCR
+            # toolchain: this fixture's image holds no readable text, so
+            # tesseract runs and reports failure rather than inventing words.
+            assert result.rejection_code in {
+                "ocr_unavailable",
+                "ocr_failed",
+                "pdf_no_text",
+            }
             assert "OCR" in (result.rejection_message or "")
         else:
             # OCR present: the import must be flagged, never silently accepted.

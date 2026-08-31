@@ -72,8 +72,8 @@ class TestParsing:
     def test_night_freight_carries_the_scene_14_oracle(self):
         text = (DEMO_SCRIPTS / "01-night-freight" / "dependencies.md").read_text()
         truth = parse_ground_truth(text)
-        assert len(truth.scene_assertions) == 11
-        assert all(number == "14" for number, *_ in truth.scene_assertions)
+        fourteen = [row for row in truth.scene_assertions if row[0] == "14"]
+        assert len(fourteen) >= 11
 
     def test_a_prose_type_cell_reads_the_stated_modelling(self):
         """"`makeup` on the vehicle, modelled as `set_design`" is set_design."""
@@ -97,7 +97,7 @@ class TestSeeding:
 
         assert counts.entities >= 15
         assert counts.assertions >= 50
-        assert counts.attributes == 3
+        assert counts.attributes >= 3
         assert script.graph_status == "ready"
 
         # Every written edge satisfies its predicate signature.

@@ -546,7 +546,7 @@ class TestPrompt:
 
 
 class TestAttributes:
-    """extract.v2: entities carry evidence-backed attributes."""
+    """extract.v4: entities carry evidence-backed attributes."""
 
     def _reply_with_attributes(self, session, scene, attributes) -> str:
         units = _units_of(session, scene.id)
@@ -697,10 +697,10 @@ class TestAttributes:
         assert len(rows) == 1
         assert rows[0].value == "blue"
 
-    def test_the_schema_and_prompt_version_advertise_v2(self):
+    def test_the_schema_and_prompt_version_advertise_v4(self):
         from ripple.extraction.prompt import OUTPUT_SCHEMA
 
-        assert PROMPT_VERSION == "extract.v2"
+        assert PROMPT_VERSION == "extract.v4"
         entity_schema = OUTPUT_SCHEMA["properties"]["entities"]["items"]
         assert "attributes" in entity_schema["properties"]
 

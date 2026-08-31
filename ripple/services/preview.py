@@ -287,9 +287,11 @@ def _preview(
     labels = _labels(session, script.id)
 
     used_models: set[str] = set()
+    listed_total = 0
     for scene_id, scene_edits in sorted(by_scene.items(), key=lambda kv: str(kv[0])):
         scene = session.get(Scene, scene_id)
         listed_assertions, listed_attributes = _listed(session, scene_edits)
+        listed_total += len(listed_assertions) + len(listed_attributes)
         judgement, model_used = _judge_scene(
             session,
             script,
@@ -377,6 +379,27 @@ def _preview(
         # never a non-event even when no edge moved.
         severity = "medium"
     summary = deterministic_summary(diff, orphans)
+    # An attribute change IS the graph change; "No graph change." beside it
+    # reads as a contradiction.
+    if attribute_changes and summary.startswith("No graph change."):
+        summary = summary.removeprefix("No graph change.").strip()
+    # "No graph change." alone reads as "this edit has no impact", which is a
+    # wider claim than the engine makes. Say what was judged; and when the
+    # edited lines support nothing stored, say that, because an absence in
+    # the graph is not an absence of impact.
+    if not diff.operation_count and not orphans and not attribute_changes:
+        if listed_total:
+            summary = (
+                f"All {listed_total} stored fact(s) the edited lines support "
+                "still hold. No graph change."
+            )
+        else:
+            summary = (
+                "The graph holds nothing extracted from the edited lines, so "
+                "there was nothing to judge this edit against. If the line "
+                "names things the graph should track, the graph is "
+                "incomplete, not the edit unimportant."
+            )
     if attribute_changes:
         changed_bits = ", ".join(
             f"{change.entity_label} {change.key}: "
@@ -787,6 +810,7 @@ def _judge_scene(
         list(listed_attributes.values()),
     )
     proposed_texts = {str(unit.id): proposed for unit, proposed in scene_edits}
+    current_texts = {str(unit.id): unit.current_text for unit, _ in scene_edits}
 
     try:
         call, result = _generate_verdicts(
@@ -818,7 +842,11 @@ def _judge_scene(
 
     try:
         judgement = validate_judgement(
-            result.text, listed_assertions, listed_attributes, proposed_texts
+            result.text,
+            listed_assertions,
+            listed_attributes,
+            proposed_texts,
+            current_texts,
         )
     except MalformedResponse as error:
         call.outcome = "malformed"

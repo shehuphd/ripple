@@ -13,6 +13,7 @@ edge never reaches an operation.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,7 +27,7 @@ from ripple.extraction.validate import (
 )
 
 # Bumped with any wording change: the audit rows record which prompt spoke.
-JUDGE_PROMPT_VERSION = "judge.v2"
+JUDGE_PROMPT_VERSION = "judge.v3"
 
 VERDICTS = ("holds", "changed", "removed")
 
@@ -153,6 +154,10 @@ involved. Judge each listed item against the proposed text:
 A swapped descriptor is a change, not a removal: an emerald gown becoming a
 crimson gown is the color attribute `changed` with new_value "crimson".
 Reserve `removed` for facts the proposed text drops with no replacement.
+An entity the proposed text still names keeps its presence and establishes
+edges; a changed count, colour, or descriptor on a still-present object is an
+attribute change, never a removal. A fact whose stated support lives on a
+line this edit does not touch holds: it is out of this edit's reach.
 
 Then report anything the proposed text newly supports, under the same rules
 as extraction. Judge only what you were given plus what the proposed text
@@ -251,14 +256,16 @@ def validate_judgement(
     listed_assertions: dict[str, dict[str, Any]],
     listed_attributes: dict[str, dict[str, Any]],
     edited_units: dict[str, str],
+    current_units: dict[str, str] | None = None,
 ) -> JudgementReport:
     """Verify a judgement reply. The verification rules, in order.
 
     `listed_assertions` and `listed_attributes` map id -> the item as sent
     (with its evidence text under "evidence"). `edited_units` maps unit id ->
-    proposed text, for the vanished-evidence check. Raises MalformedResponse
-    only for a reply that is not a JSON object; one bad verdict never
-    discards the rest.
+    proposed text, for the vanished-evidence check; `current_units` maps the
+    same ids to the accepted text, for the visibility checks that ask what
+    this edit could have removed. Raises MalformedResponse only for a reply
+    that is not a JSON object; one bad verdict never discards the rest.
     """
     try:
         reply = json.loads(raw_text)
@@ -266,6 +273,13 @@ def validate_judgement(
         raise MalformedResponse(f"reply was not JSON: {error}") from error
     if not isinstance(reply, dict):
         raise MalformedResponse("reply was not a JSON object")
+
+    proposed_all = " ".join(edited_units.values()).casefold()
+    current_all = (
+        " ".join(current_units.values()).casefold()
+        if current_units is not None
+        else None
+    )
 
     report = JudgementReport()
     seen_assertions: set[str] = set()
@@ -296,6 +310,21 @@ def validate_judgement(
                 (verdict_id, "holds on vanished evidence, downgraded to removed")
             )
             verdict = "removed"
+        # The symmetric guard: a removal must be visible in the edit. A fact
+        # whose endpoints the proposed text still names, or that the current
+        # text never named, was not removed by these lines; a changed count
+        # or descriptor on a still-present object is an attribute change.
+        if verdict == "removed" and not _removal_is_visible(
+            listed_assertions[verdict_id], current_all, proposed_all
+        ):
+            report.rejected.append(
+                (
+                    verdict_id,
+                    "removal not visible in the edited lines, "
+                    "downgraded to holds",
+                )
+            )
+            verdict = "holds"
         report.assertion_verdicts.append(
             AssertionVerdict(
                 assertion_id=verdict_id,
@@ -330,6 +359,22 @@ def validate_judgement(
             )
             verdict = "holds"
             new_value = None
+        # An attribute can only be changed or removed by a line that visibly
+        # carries its value. Attributes are listed for every touched entity,
+        # including facts stated in lines this edit never touched; those are
+        # out of this judgement's reach.
+        if verdict in ("changed", "removed") and current_all is not None:
+            stated = str(listed_attributes[verdict_id].get("value") or "")
+            if stated and stated.casefold() not in current_all:
+                report.rejected.append(
+                    (
+                        verdict_id,
+                        "value not stated in the edited lines, "
+                        "treated as holds",
+                    )
+                )
+                verdict = "holds"
+                new_value = None
         report.attribute_verdicts.append(
             AttributeVerdict(
                 attribute_id=verdict_id,
@@ -429,6 +474,41 @@ def _evidence_survives(
     if not evidence:
         return True
     return evidence.casefold() in edited_units[unit_id].casefold()
+
+
+_LABEL_WORD = re.compile(r"[^\W\d_]{4,}")
+
+
+def _significant_words(label: str) -> set[str]:
+    return {word.casefold() for word in _LABEL_WORD.findall(label or "")}
+
+
+def _removal_is_visible(
+    listed: dict[str, Any], current_all: str | None, proposed_all: str
+) -> bool:
+    """Whether this edit could have removed the assertion.
+
+    True when some entity endpoint was named in the current text and is no
+    longer named in the proposed text. Names are compared as significant
+    words (four letters and up, case-insensitive), so "the sedan" still
+    counts as naming the Blue sedan. Scene endpoints ("Sc 14") carry no
+    significant words and are skipped. With no current text available, only
+    the proposed half is checked: an endpoint the proposed text still names
+    was not removed.
+    """
+    for label in (listed.get("subject", ""), listed.get("object", "")):
+        words = _significant_words(label)
+        if not words:
+            continue
+        named_before = (
+            True
+            if current_all is None
+            else any(word in current_all for word in words)
+        )
+        named_after = any(word in proposed_all for word in words)
+        if named_before and not named_after:
+            return True
+    return False
 
 
 def _int_or_none(value: Any) -> int | None:

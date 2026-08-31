@@ -16,7 +16,7 @@ from typing import Any
 from ripple.db.models import ENTITY_TYPES, PREDICATES
 from ripple.graph.predicates import SIGNATURES
 
-PROMPT_VERSION = "extract.v2"
+PROMPT_VERSION = "extract.v4"
 
 # Below this the extractor has failed rather than
 # hedged, so the value is stated in the prompt as a floor.
@@ -30,7 +30,13 @@ OUTPUT_SCHEMA: dict[str, Any] = {
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["local_id", "entity_type", "canonical_name", "confidence"],
+                "required": [
+                    "local_id",
+                    "entity_type",
+                    "canonical_name",
+                    "confidence",
+                    "attributes",
+                ],
                 "properties": {
                     "local_id": {"type": "string"},
                     "entity_type": {"type": "string", "enum": list(ENTITY_TYPES)},
@@ -100,9 +106,10 @@ OUTPUT_SCHEMA: dict[str, Any] = {
 SYSTEM_PROMPT = """You extract production requirements from one screenplay scene.
 
 You are reading for a production coordinator. Report what a department has to
-supply, cast, dress, build, or capture. Do not summarise the story, do not
-infer what happens off screen, and do not invent anything the text does not
-state.
+supply, cast, dress, build, or capture. Every object the text names is a
+deliverable someone has to source; record all of them. Do not summarise the
+story, do not infer what happens off screen, and do not invent anything the
+text does not state.
 
 Return one JSON object and nothing else. No prose, no code fence.
 """
@@ -139,6 +146,23 @@ Boundary rules:
 Predicates, and nothing else. Each line gives the permitted subject and object:
 {_signature_lines()}
 
+Completeness:
+- Record every object a department would have to supply for this scene: every
+  prop handled or named, every staged set dressing item (monitors, lamps,
+  furniture, signage, machinery), every wardrobe piece, every vehicle, every
+  visible makeup element (wounds, scars, blood, dirt), every specifically
+  called-out sound, every VFX or stunt beat. Background dressing the text
+  names is a set_design entity: six monitors on a wall are a deliverable.
+- Record every stated detail about an entity as an attribute: counts and
+  quantities ("Six monitors" is quantity "six"), stated conditions ("four of
+  them dead" is condition "four dead"), colors, materials, printed text and
+  numbers (a seal number, a time written on a lid), damage, markings, and
+  stated ages.
+- Include the phrasings the text uses for an entity as its aliases, so a
+  later mention resolves to the same entity.
+- Completeness and fabrication are different failures. List everything the
+  text states, and nothing it does not.
+
 Rules for assertions:
 - Every assertion cites the source_unit_id of the unit that supports it.
 - evidence_start and evidence_end are character offsets into that unit's text.
@@ -147,12 +171,17 @@ Rules for assertions:
   when this scene introduces the entity.
 - Confidence is between {MINIMUM_CONFIDENCE} and 1. If you would go lower,
   omit the assertion instead.
-- Omit anything you cannot support with text in this scene. A short, correct
-  answer beats a long, speculative one.
+- Omit anything you cannot support with text in this scene. Cut speculation,
+  never coverage: a complete answer names every stated object.
 
 Rules for attributes:
 - An entity's stated descriptors are attributes: "the emerald gown" is a gown
   with color "emerald", "a dead forklift" is a forklift with condition "dead".
+- Every entity's attributes array is required. Fill it from the text before
+  moving on: "Six monitors, four of them dead" REQUIRES the monitors entity
+  to carry quantity "six" and condition "four dead". An entity with a stated
+  descriptor and an empty attributes array is a wrong answer; an entity whose
+  text states no details carries an empty array.
 - Prefer these keys when one fits: color, material, state, condition,
   quantity, size, age, style. Invent a key only when none of them fits.
 - Every attribute cites the source_unit_id of the unit that states it, with

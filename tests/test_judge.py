@@ -77,7 +77,7 @@ class TestMalformedReplies:
             ),
             listed,
             {},
-            {UNIT: "The gown is gone."},
+            {UNIT: "The rail is bare."},
         )
         by_id = {v.assertion_id: v.verdict for v in report.assertion_verdicts}
         assert by_id[A2] == "removed"
@@ -114,7 +114,7 @@ class TestVerdictRules:
             ),
             listed_assertion(),
             {},
-            {UNIT: "The gown is gone."},
+            {UNIT: "The rail is bare."},
         )
         verdicts = [v for v in report.assertion_verdicts if v.assertion_id == A1]
         assert len(verdicts) == 1
@@ -301,3 +301,135 @@ class TestConfidenceRange:
             {UNIT: "The emerald gown hangs ready."},
         )
         assert report.assertion_verdicts[0].confidence == 0.7
+
+
+class TestRemovalVisibility:
+    """A removal must be visible in the edit itself."""
+
+    def _listed(self):
+        return {
+            "a1": {
+                "id": "a1",
+                "subject": "Sc 3",
+                "predicate": "establishes",
+                "object": "Dispatch monitors",
+                "source_unit_id": "u1",
+                "evidence": "Six monitors",
+                "confidence": 0.9,
+            }
+        }
+
+    def test_a_removal_of_a_still_named_entity_downgrades_to_holds(self):
+        report = validate_judgement(
+            json.dumps(
+                {
+                    "assertion_verdicts": [
+                        {"assertion_id": "a1", "verdict": "removed"}
+                    ],
+                    "attribute_verdicts": [],
+                }
+            ),
+            self._listed(),
+            {},
+            {"u1": "Twelve monitors, four of them dead."},
+            {"u1": "Six monitors, four of them dead."},
+        )
+        assert report.assertion_verdicts[0].verdict == "holds"
+        assert any("not visible" in reason for _, reason in report.rejected)
+
+    def test_a_removal_of_a_never_named_fact_downgrades_to_holds(self):
+        listed = self._listed()
+        listed["a1"]["object"] = "Desk radio"
+        report = validate_judgement(
+            json.dumps(
+                {
+                    "assertion_verdicts": [
+                        {"assertion_id": "a1", "verdict": "removed"}
+                    ],
+                    "attribute_verdicts": [],
+                }
+            ),
+            listed,
+            {},
+            {"u1": "Twelve monitors, four of them dead."},
+            {"u1": "Six monitors, four of them dead."},
+        )
+        assert report.assertion_verdicts[0].verdict == "holds"
+
+    def test_a_visible_removal_stands(self):
+        listed = self._listed()
+        listed["a1"]["object"] = "Blue sedan"
+        report = validate_judgement(
+            json.dumps(
+                {
+                    "assertion_verdicts": [
+                        {"assertion_id": "a1", "verdict": "removed"}
+                    ],
+                    "attribute_verdicts": [],
+                }
+            ),
+            listed,
+            {},
+            {"u1": "A bicycle leans against the gate."},
+            {"u1": "The blue sedan idles by the gate."},
+        )
+        assert report.assertion_verdicts[0].verdict == "removed"
+
+
+class TestAttributeReach:
+    """An attribute can only move through a line that carries its value."""
+
+    def _listed(self):
+        return {
+            "at1": {
+                "id": "at1",
+                "entity": "Grey parka",
+                "key": "condition",
+                "value": "soaked at the shoulders",
+                "source_unit_id": "u1",
+                "evidence": "",
+                "confidence": 0.9,
+            }
+        }
+
+    def test_a_value_the_edit_never_stated_cannot_be_removed(self):
+        report = validate_judgement(
+            json.dumps(
+                {
+                    "assertion_verdicts": [],
+                    "attribute_verdicts": [
+                        {"attribute_id": "at1", "verdict": "removed"}
+                    ],
+                }
+            ),
+            {},
+            self._listed(),
+            {"u1": "Twelve monitors. MARA in a grey parka."},
+            {"u1": "Six monitors. MARA in a grey parka."},
+        )
+        assert report.attribute_verdicts[0].verdict == "holds"
+        assert any("not stated" in reason for _, reason in report.rejected)
+
+    def test_a_stated_value_can_still_change(self):
+        listed = self._listed()
+        listed["at1"]["value"] = "emerald"
+        report = validate_judgement(
+            json.dumps(
+                {
+                    "assertion_verdicts": [],
+                    "attribute_verdicts": [
+                        {
+                            "attribute_id": "at1",
+                            "verdict": "changed",
+                            "new_value": "crimson",
+                        }
+                    ],
+                }
+            ),
+            {},
+            listed,
+            {"u1": "The crimson gown hangs ready."},
+            {"u1": "The emerald gown hangs ready."},
+        )
+        assert report.attribute_verdicts[0].verdict == "changed"
+        assert report.attribute_verdicts[0].new_value == "crimson"

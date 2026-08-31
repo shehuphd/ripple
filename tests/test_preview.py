@@ -802,3 +802,37 @@ class TestContinuityJudge:
         ]
         assert len(conflicts) == 1
         assert conflicts[0].later_unit_ids == [str(world["unit"].id)]
+
+
+class TestHonestSummary:
+    """The summary states what was judged, never a bare "no change"."""
+
+    def test_all_holding_names_the_judged_count(self, session):
+        world = build_world(session)
+        result = preview_changes(
+            session,
+            edit_for(world, "The emerald gown hangs ready on the rail again."),
+            FakeJudge(),
+            "fake-judge",
+        )
+        assert "All 2 stored fact(s)" in result.summary
+        assert result.attribute_changes == []
+
+    def test_an_untracked_line_says_the_graph_is_incomplete(self, session):
+        world = build_world(session)
+        bare = ScriptUnit(
+            scene_id=world["scene"].id,
+            unit_type="action",
+            sequence_index=1,
+            current_text="Six monitors, four of them dead.",
+            parser_method="fountain",
+        )
+        session.add(bare)
+        session.flush()
+        result = preview_changes(
+            session,
+            [UnitEdit(unit_id=str(bare.id), proposed_text="Twelve monitors.")],
+            FakeJudge(),
+            "fake-judge",
+        )
+        assert "holds nothing extracted" in result.summary

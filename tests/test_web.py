@@ -181,9 +181,19 @@ class TestPages:
 
 
 class TestUnitEndpoints:
-    def test_requirements_are_empty_before_extraction(self, client):
-        script_id = _first_script(client)
-        unit_id = _units(client, script_id)[0]
+    def test_requirements_are_empty_before_extraction(
+        self, client, night_freight_fountain
+    ):
+        """A unit with no extracted facts answers an empty list, not an error.
+
+        The demo corpus seeds full ground-truth graphs at startup, so this
+        needs a copy uploaded after startup, which stays graphless.
+        """
+        uploaded = client.post(
+            "/api/scripts",
+            files={"file": ("fresh-upload.fountain", night_freight_fountain)},
+        ).json()
+        unit_id = _units(client, uploaded["id"])[0]
         payload = client.get(f"/api/units/{unit_id}/requirements").json()
         assert payload["assertions"] == []
         assert payload["unit"]["text"]
@@ -519,8 +529,11 @@ class TestTracesAndBudget:
             data={"proposed_text": "A bicycle leans against the gate."},
         )
         ledger = client.get("/api/settings/budget").json()
-        assert ledger["calls"] == 1
+        # One judge call plus one continuity call: the seeded graph gives the
+        # edited unit stored facts, so the evidence packet is never empty.
+        assert ledger["calls"] == 2
         assert ledger["by_purpose"].get("judge", 0) > 0
+        assert ledger["by_purpose"].get("continuity", 0) > 0
 
     def test_a_spent_budget_refuses_the_preview_with_a_next_step(
         self, client, judged
