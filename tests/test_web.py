@@ -1234,3 +1234,15 @@ class TestDraftLinking:
             json={"predecessor_script_id": predecessor},
         )
         assert again.status_code == 409
+
+
+class TestSceneEntityCounts:
+    def test_a_seeded_scene_reports_its_entities(self, client):
+        """The count reads the opposite end of each scene edge; selecting the
+        scene's own side is always NULL and rendered every scene as empty."""
+        import re
+
+        script_id = _first_script(client)
+        page = client.get(f"/scripts/{script_id}").text
+        counts = [int(n) for n in re.findall(r"(\d+) entities", page)]
+        assert counts and max(counts) > 0

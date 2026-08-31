@@ -490,15 +490,18 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
     running = 0
     for scene in script.scenes:
         characters = sum(len(unit.current_text) for unit in scene.units)
+        # The entity is on the opposite end from the scene: a scene-subject
+        # edge (requires, occurs_at) names its entity as the object, and a
+        # scene-object edge (appears_in, establishes) as the subject.
         entity_ids = set(
             session.scalars(
-                select(Assertion.subject_entity_id).where(
+                select(Assertion.object_entity_id).where(
                     Assertion.subject_scene_id == scene.id, Assertion.active.is_(True)
                 )
             )
         ) | set(
             session.scalars(
-                select(Assertion.object_entity_id).where(
+                select(Assertion.subject_entity_id).where(
                     Assertion.object_scene_id == scene.id, Assertion.active.is_(True)
                 )
             )
