@@ -1026,6 +1026,36 @@ def _judge_continuity(
             for before, after in diff.changed
         ],
     }
+    return judge_continuity_payloads(
+        session,
+        script,
+        scene,
+        edits_payload,
+        diff_payload,
+        packet,
+        provider,
+        model_id,
+        audit,
+    )
+
+
+def judge_continuity_payloads(
+    session: Session,
+    script: Script,
+    scene: Scene,
+    edits_payload: list[dict],
+    diff_payload: dict,
+    packet: EvidencePacket,
+    provider: LLMProvider,
+    model_id: str,
+    audit: list[ModelCall],
+) -> tuple[list[ContinuityConflict], str | None]:
+    """The continuity judgement over already-rendered payloads.
+
+    The preview builds its payloads from live edits and a graph diff; the
+    draft report builds them from unit lineage and the cross-draft entity
+    delta. Both meet the same prompt, validation, failover, and audit here.
+    """
     prompt = build_continuity_prompt(edits_payload, diff_payload, packet)
 
     try:

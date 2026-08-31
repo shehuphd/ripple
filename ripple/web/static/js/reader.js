@@ -515,17 +515,35 @@ async function driveRun(runId) {
 const pendingRun = new URLSearchParams(window.location.search).get('run');
 if (pendingRun) {
   (async () => {
+    const scriptId = window.location.pathname.split('/').pop();
     document.getElementById('run-label').textContent =
       'Extracting the changed scenes';
     try {
       await driveRun(pendingRun);
-      toast('Draft linked; the changed scenes are extracted.');
+      document.getElementById('run-label').textContent =
+        'Comparing the drafts';
+      const report = await api(`/api/scripts/${scriptId}/draft-report`, {
+        method: 'POST',
+      });
+      ripple.trace('draft.report', {
+        severity: report.severity,
+        conflicts: report.conflicts,
+      });
+      toast(`Draft report ready (${report.severity}); it is on the `
+        + 'Reports page, its findings on the Findings page.',
+      report.severity === 'high');
     } catch (error) {
       toast(error.message, true);
     }
     window.history.replaceState(null, '', window.location.pathname);
-    setTimeout(() => window.location.reload(), 900);
+    setTimeout(() => window.location.reload(), 1600);
   })();
+}
+
+/* A link with nothing to extract built its report server-side. */
+if (new URLSearchParams(window.location.search).get('report') === 'ready') {
+  toast('Draft linked; the report is on the Reports page.');
+  window.history.replaceState(null, '', window.location.pathname);
 }
 
 const extract = document.getElementById('extract');

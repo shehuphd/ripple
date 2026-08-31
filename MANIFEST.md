@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-08-31 20:38:33 UTC
+Last updated: 2026-08-31 21:01:46 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
 
@@ -96,6 +96,7 @@ Every file in the repository and what it does. Directories the application write
 | `services/__init__.py` | Package marker. |
 | `services/preview.py` | The judgement engine: one proposal across many lines, verdicts validated, calls audited and replayed. |
 | `services/changeset.py` | Atomic accept, reject, and latest-only undo of a proposal. |
+| `services/draft_report.py` | The cross-draft ripple report: entity deltas, lost introductions, judged conflicts. |
 | `services/drafts.py` | Draft linking: alignment, lineage, graph carry-over. |
 | `services/scenes.py` | Scene insertion, omission (OMITTED, reversible), and restoration. |
 | `services/spend.py` | Token ledger and the hard budget gate every call site checks. |

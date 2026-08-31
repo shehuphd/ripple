@@ -1246,3 +1246,53 @@ class TestSceneEntityCounts:
         page = client.get(f"/scripts/{script_id}").text
         counts = [int(n) for n in re.findall(r"(\d+) entities", page)]
         assert counts and max(counts) > 0
+
+
+class TestDraftReportRoutes:
+    def test_an_unlinked_script_gets_a_409_with_the_reason(self, client):
+        script_id = _first_script(client)
+        response = client.post(f"/api/scripts/{script_id}/draft-report")
+        assert response.status_code == 409
+        assert "not linked" in response.json()["detail"]
+
+    def test_an_identical_link_builds_its_report_in_the_link_call(
+        self, client, night_freight_fountain
+    ):
+        uploaded = client.post(
+            "/api/scripts",
+            files={"file": ("night-freight-d2.fountain", night_freight_fountain)},
+        ).json()
+        predecessor = uploaded["draft_candidates"][0]["id"]
+        linked = client.post(
+            f"/api/scripts/{uploaded['id']}/link-draft",
+            json={"predecessor_script_id": predecessor},
+        ).json()
+        assert linked["link"]["to_extract"] == 0
+
+        # Nothing was left to extract, so the link built the report itself.
+        report = client.post(f"/api/scripts/{uploaded['id']}/draft-report").json()
+        assert report["already_existed"] is True
+
+    def test_the_preview_offers_no_suggestions_for_a_clean_revision(
+        self, client, night_freight_fountain
+    ):
+        revised = night_freight_fountain.replace(
+            b"Six monitors", b"Twelve monitors"
+        )
+        uploaded = client.post(
+            "/api/scripts",
+            files={"file": ("night-freight-d2.fountain", revised)},
+        ).json()
+        predecessor = uploaded["draft_candidates"][0]["id"]
+        preview = client.post(
+            f"/api/scripts/{uploaded['id']}/link-draft/preview",
+            json={"predecessor_script_id": predecessor},
+        ).json()
+        assert preview["modified"] == 1
+        assert preview["suggestions"] == []
+        # Writing nothing means linking still works afterwards.
+        linked = client.post(
+            f"/api/scripts/{uploaded['id']}/link-draft",
+            json={"predecessor_script_id": predecessor},
+        )
+        assert linked.status_code == 200

@@ -108,7 +108,16 @@ PROVENANCE = ("model", "user", "accepted_change", "system")
 IMPORT_OUTCOMES = ("accepted", "accepted_with_warnings", "needs_review", "rejected")
 RUN_STATUSES = ("pending", "running", "partially_ready", "ready", "failed", "cancelled")
 SCENE_STATUSES = ("pending", "running", "completed", "failed", "cancelled")
-CHANGE_KINDS = ("edit", "multi_unit_edit", "undo", "direct_save", "omit_scene")
+CHANGE_KINDS = (
+    "edit",
+    "multi_unit_edit",
+    "undo",
+    "direct_save",
+    "omit_scene",
+    # The anchor for a draft link's report and findings; carries no
+    # operations, since linking writes lineage and copies rows directly.
+    "link_draft",
+)
 CHANGE_STATUSES = ("pending", "accepted", "rejected", "stale", "reverted", "failed")
 OPERATION_TYPES = (
     "add_assertion",

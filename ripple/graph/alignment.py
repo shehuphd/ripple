@@ -9,9 +9,10 @@ Three passes, each consuming only what the previous pass left unmatched:
    scene whose heading is the OMITTED placeholder declares its number's
    predecessor deleted.
 3. Order-preserving similarity: dynamic-programming alignment over a
-   text-similarity score. Only a strong score links; a middling score is
-   treated as no match, so the scene re-extracts rather than inheriting a
-   graph it may not deserve. Nothing links on a guess.
+   text-similarity score. Only a strong score links on its own; a middling
+   score becomes a suggestion for a person to confirm, and an unconfirmed
+   suggestion means the scene re-extracts rather than inheriting a graph it
+   may not deserve. Nothing links on a guess.
 
 No model is involved anywhere in this module, so an alignment is
 reproducible from its inputs.
@@ -26,6 +27,13 @@ from difflib import SequenceMatcher
 # "new scene, extract it": a wrong link inherits a graph, a missing link
 # costs one extraction.
 STRONG_MATCH = 0.65
+
+# Between WEAK_MATCH and STRONG_MATCH the aligner suspects a link but will
+# not make it: those pairs come back as suggestions for a person to confirm.
+# Below WEAK_MATCH the pair is not offered at all: character-level similarity
+# of unrelated English prose runs into the low forties, so the floor stands
+# above that noise.
+WEAK_MATCH = 0.50
 
 # The production placeholder for a cut scene.
 OMITTED_HEADINGS = {"OMITTED", "SCENE OMITTED"}
@@ -54,11 +62,18 @@ class ScenePair:
 
 @dataclass
 class Alignment:
-    """The full result: pairs plus what matched nothing on either side."""
+    """The full result: pairs plus what matched nothing on either side.
+
+    `suggestions` are pairs the aligner suspects but refuses to make on its
+    own: middling similarity, offered for a person to confirm. A suggested
+    pair's scenes are also counted in `inserted` and `deleted`, which is
+    what happens to them when nobody confirms.
+    """
 
     pairs: list[ScenePair] = field(default_factory=list)
     inserted: list[str] = field(default_factory=list)
     deleted: list[str] = field(default_factory=list)
+    suggestions: list[ScenePair] = field(default_factory=list)
 
     def pair_for_new(self, new_id: str) -> ScenePair | None:
         return next((p for p in self.pairs if p.new_id == new_id), None)
@@ -90,12 +105,40 @@ def _is_omitted_marker(scene: SceneContent) -> bool:
 
 
 def align_scenes(
-    old_scenes: list[SceneContent], new_scenes: list[SceneContent]
+    old_scenes: list[SceneContent],
+    new_scenes: list[SceneContent],
+    forced_pairs: dict[str, str] | None = None,
 ) -> Alignment:
-    """Align a new draft's scenes to a predecessor's."""
+    """Align a new draft's scenes to a predecessor's.
+
+    `forced_pairs` (new scene id to old scene id) are links a person
+    confirmed on the review screen; they are honoured before any automatic
+    pass, always as "modified" since confirmation was only needed because
+    the content moved.
+    """
     result = Alignment()
     matched_old: set[str] = set()
     matched_new: set[str] = set()
+
+    if forced_pairs:
+        by_id_old = {scene.scene_id: scene for scene in old_scenes}
+        by_id_new = {scene.scene_id: scene for scene in new_scenes}
+        for new_id, old_id in forced_pairs.items():
+            if new_id not in by_id_new or old_id not in by_id_old:
+                continue
+            if new_id in matched_new or old_id in matched_old:
+                continue
+            result.pairs.append(
+                ScenePair(
+                    new_id=new_id,
+                    old_id=old_id,
+                    kind="modified",
+                    score=_score(by_id_old[old_id], by_id_new[new_id]),
+                    method="confirmed",
+                )
+            )
+            matched_old.add(old_id)
+            matched_new.add(new_id)
 
     def pair(new: SceneContent, old: SceneContent, method: str) -> None:
         kind = (
@@ -168,6 +211,26 @@ def align_scenes(
         matched_old.add(old.scene_id)
         matched_new.add(new.scene_id)
 
+    # What still matches nothing might match something a person can see:
+    # rerun the same alignment over the leftovers at the weak threshold and
+    # offer those links as suggestions, deciding nothing.
+    old_left = [s for s in old_scenes if s.scene_id not in matched_old]
+    new_left = [
+        s
+        for s in new_scenes
+        if s.scene_id not in matched_new and not _is_omitted_marker(s)
+    ]
+    for new, old, score in _sequence_align(old_left, new_left, floor=WEAK_MATCH):
+        result.suggestions.append(
+            ScenePair(
+                new_id=new.scene_id,
+                old_id=old.scene_id,
+                kind="suggested",
+                score=score,
+                method="similarity",
+            )
+        )
+
     result.inserted = [
         s.scene_id
         for s in new_scenes
@@ -180,14 +243,17 @@ def align_scenes(
 
 
 def _sequence_align(
-    old_rest: list[SceneContent], new_rest: list[SceneContent]
+    old_rest: list[SceneContent],
+    new_rest: list[SceneContent],
+    floor: float = STRONG_MATCH,
 ) -> list[tuple[SceneContent, SceneContent, float]]:
-    """Order-preserving best-score alignment, strong matches only.
+    """Order-preserving best-score alignment above a score floor.
 
     Standard alignment DP: each cell chooses skip-old, skip-new, or link,
-    where a link is only offered when the pair scores at or above
-    STRONG_MATCH. Skips cost nothing, so the result is the highest-scoring
-    set of order-preserving strong links.
+    where a link is only offered when the pair scores at or above the
+    floor. Skips cost nothing, so the result is the highest-scoring set of
+    order-preserving links. The default floor makes links; the weak floor
+    is used a second time over the leftovers to make suggestions.
     """
     if not old_rest or not new_rest:
         return []
@@ -199,7 +265,7 @@ def _sequence_align(
     for i in range(1, rows + 1):
         for j in range(1, cols + 1):
             best[i][j] = max(best[i - 1][j], best[i][j - 1])
-            if scores[i - 1][j - 1] >= STRONG_MATCH:
+            if scores[i - 1][j - 1] >= floor:
                 best[i][j] = max(
                     best[i][j], best[i - 1][j - 1] + scores[i - 1][j - 1]
                 )
@@ -207,7 +273,7 @@ def _sequence_align(
     i, j = rows, cols
     while i > 0 and j > 0:
         if (
-            scores[i - 1][j - 1] >= STRONG_MATCH
+            scores[i - 1][j - 1] >= floor
             and best[i][j] == best[i - 1][j - 1] + scores[i - 1][j - 1]
         ):
             links.append((new_rest[j - 1], old_rest[i - 1], scores[i - 1][j - 1]))

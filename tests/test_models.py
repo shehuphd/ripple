@@ -833,7 +833,11 @@ class TestChangeVocabularyMigration:
 
         with engine.connect() as connection:
             self._regress(connection, "change_operations", [", 'set_scene_omitted'"])
-            self._regress(connection, "change_sets", [", 'omit_scene'"])
+            self._regress(
+                connection,
+                "change_sets",
+                [", 'omit_scene'", ", 'link_draft'"],
+            )
             connection.exec_driver_sql(
                 "INSERT INTO scripts (id, title, import_status, graph_status, "
                 "current_version, origin, draft_number, created_at, "
@@ -879,6 +883,7 @@ class TestChangeVocabularyMigration:
             )
             connection.commit()
         assert "'omit_scene'" in sets_ddl
+        assert "'link_draft'" in sets_ddl
         assert "'set_scene_omitted'" in ops_ddl
         assert dangling == []
         assert survivors == 1

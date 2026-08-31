@@ -51,18 +51,34 @@ async function upload(file) {
         'Link as new draft',
       );
       if (linkIt) {
-        const linked = await api(`/api/scripts/${body.id}/link-draft`, {
+        const preview = await api(`/api/scripts/${body.id}/link-draft/preview`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ predecessor_script_id: candidate.id }),
         });
+        const accepted = preview.suggestions.length
+          ? await reviewSuggestions(preview)
+          : {};
+        if (accepted === null) {
+          setTimeout(() => window.location.reload(), 400);
+          return;
+        }
+        const linked = await api(`/api/scripts/${body.id}/link-draft`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            predecessor_script_id: candidate.id,
+            accepted_pairs: accepted,
+          }),
+        });
         ripple.trace('draft.linked', {
           unchanged: linked.link.unchanged,
           toExtract: linked.link.to_extract,
+          confirmed: Object.keys(accepted).length,
         });
         const target = linked.run
           ? `/scripts/${body.id}?run=${linked.run.run_id}`
-          : `/scripts/${body.id}`;
+          : `/scripts/${body.id}?report=ready`;
         window.location.assign(target);
         return;
       }
@@ -70,8 +86,8 @@ async function upload(file) {
     setTimeout(() => window.location.reload(), 900);
   } catch (error) {
     ripple.trace('import.rejected', { error: error.message });
-    result.innerHTML = `<span class="status"><span class="dot rejected"></span>
-      rejected</span> <span class="muted"> ${esc(error.message)}</span>`;
+    result.innerHTML = `<span class="status">rejected</span>
+      <span class="muted"> ${esc(error.message)}</span>`;
   }
 }
 
@@ -123,3 +139,60 @@ search.addEventListener('input', () => {
     row.style.display = row.dataset.title.toLowerCase().includes(needle) ? '' : 'none';
   });
 });
+
+/* The alignment review screen: pairs the aligner suspects but refuses to
+   make alone. Each suggestion is a checkbox; unticked means both scenes are
+   treated as new and deleted, the safe reading. Resolves to the accepted
+   {newSceneId: oldSceneId} map, or null on cancel. */
+function reviewSuggestions(preview) {
+  return new Promise((resolve) => {
+    const veil = document.createElement('div');
+    veil.className = 'confirm-veil';
+    const rows = preview.suggestions.map((s, index) => `
+      <label class="sugg">
+        <input type="checkbox" data-index="${index}">
+        <span class="pairing">
+          <span>${esc(s.old.number ? `Sc ${s.old.number} · ` : '')}${esc(s.old.heading)}
+            <span class="muted tiny">${esc(s.old.first_line)}</span></span>
+          <span class="muted">continues as</span>
+          <span>${esc(s.new.number ? `Sc ${s.new.number} · ` : '')}${esc(s.new.heading)}
+            <span class="muted tiny">${esc(s.new.first_line)}</span></span>
+          <span class="muted tiny">${Math.round(s.score * 100)}% similar</span>
+        </span>
+      </label>`).join('');
+    veil.innerHTML = `
+      <div class="confirm-box review-align" role="dialog" aria-modal="true"
+           aria-label="Review uncertain scene matches">
+        <h2 style="margin-bottom:4px">Uncertain scene matches</h2>
+        <p class="tiny muted" style="margin-bottom:10px">
+          These pairs look related but not similar enough to link without
+          you. Tick a pair to carry its identity across; anything unticked
+          is treated as a new scene and re-read.</p>
+        ${rows}
+        <div class="confirm-acts">
+          <button class="btn" data-cancel>Cancel the link</button>
+          <button class="btn pri" data-ok>Continue</button>
+        </div>
+      </div>`;
+    const close = (answer) => { veil.remove(); resolve(answer); };
+    veil.querySelector('[data-cancel]').addEventListener('click', () => close(null));
+    veil.querySelector('[data-ok]').addEventListener('click', () => {
+      const accepted = {};
+      veil.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+        if (box.checked) {
+          const s = preview.suggestions[Number(box.dataset.index)];
+          accepted[s.new.id] = s.old.id;
+        }
+      });
+      close(accepted);
+    });
+    veil.addEventListener('click', (event) => {
+      if (event.target === veil) close(null);
+    });
+    veil.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); close(null); }
+    });
+    document.body.appendChild(veil);
+    veil.querySelector('input, button').focus();
+  });
+}

@@ -131,7 +131,18 @@ Linking aligns the two drafts in code, with no model call: scenes with identical
 | New | Extracted fresh | one extraction |
 | Deleted (or replaced by an OMITTED placeholder) | Recorded; nothing carries | none |
 
-With a model selected, the changed scenes extract as soon as the link completes, and the reader opens on the new draft driving that run. The previous draft is untouched, and the new draft's toolbar links back to it ("Draft 2 · open draft 1"). A scene the aligner cannot place with confidence is treated as new and re-extracted: a wrong link would inherit a graph the text may contradict, while a missing link costs one extraction.
+With a model selected, the changed scenes extract as soon as the link completes, and the reader opens on the new draft driving that run. The previous draft is untouched, and the new draft's toolbar links back to it ("Draft 2 · open draft 1").
+
+**Uncertain matches ask you.** A pair of scenes that look related but not similar enough to link automatically comes up for review before the link runs: both headings, first lines, and the similarity, each with a checkbox. Ticked pairs carry their identity across as rewrites; anything unticked is treated as a new scene and re-read. Cancelling the review cancels the whole link, leaving the upload as a separate script.
+
+**The draft report.** Once the changed scenes are extracted, Ripple compares the drafts and writes a report (on the Reports page, its findings on the Findings page):
+
+- entities the revision added and removed, with the scenes responsible
+- attribute values that moved between drafts (a count, a colour, a condition), with before and after
+- introductions that vanished while their dependants survive: the previous draft established something, this draft still uses it, and no scene here introduces it
+- continuity conflicts, judged one model call per changed scene against the same earlier-and-later evidence the ripple preview uses; this layer is advisory, so a failed call becomes a note in the summary, never a failed report
+
+The report refuses while changed scenes are still unextracted, because a missing extraction would read as missing content. Each finding carries Review (jumps to the surviving lines) and Dismiss, like every other finding.
 
 ## Continuity findings
 

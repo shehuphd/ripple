@@ -230,3 +230,168 @@ class TestCandidates:
         )
         upload = persist_import(session, result)
         assert draft_candidates(session, upload) == []
+
+
+def fake_extracted(session, scene) -> None:
+    """Mark a scene extracted without a model, for report-guard tests."""
+    from datetime import UTC, datetime
+
+    from ripple.db.models import ExtractionRun, SceneExtraction
+
+    run = ExtractionRun(
+        script_id=scene.script_id,
+        status="ready",
+        prompt_version="extract.v4",
+        model_id="test-model",
+        total_scenes=1,
+        completed_scenes=1,
+        started_at=datetime.now(UTC),
+        completed_at=datetime.now(UTC),
+    )
+    session.add(run)
+    session.flush()
+    session.add(
+        SceneExtraction(
+            extraction_run_id=run.id,
+            scene_id=scene.id,
+            status="completed",
+            input_hash="t" * 64,
+            prompt_version="extract.v4",
+            model_id="test-model",
+        )
+    )
+    session.flush()
+
+
+class TestDraftReport:
+    def test_the_report_refuses_while_changed_scenes_await_extraction(
+        self, session, draft_one
+    ):
+        from ripple.services.draft_report import ReportRefused, build_draft_report
+
+        draft_two = import_revision(session, REVISED)
+        link_draft(session, draft_two.id, draft_one.id)
+        with pytest.raises(ReportRefused, match="not extracted yet"):
+            build_draft_report(session, draft_two.id)
+
+    def test_an_identical_draft_reports_no_change_at_low_severity(
+        self, session, draft_one
+    ):
+        from ripple.db.models import RippleReport as ReportRow
+        from ripple.services.draft_report import build_draft_report
+
+        draft_two = import_revision(session, FOUNTAIN)
+        link_draft(session, draft_two.id, draft_one.id)
+        report = build_draft_report(session, draft_two.id)
+        assert report.severity == "low"
+        assert report.entities_added == []
+        assert report.entities_removed == []
+        assert report.attribute_changes == []
+        assert report.lost_introductions == []
+        assert "unchanged" in report.summary
+        row = session.scalar(
+            select(ReportRow).where(
+                ReportRow.change_set_id == uuid.UUID(report.change_set_id)
+            )
+        )
+        assert row is not None
+
+        again = build_draft_report(session, draft_two.id)
+        assert again.already_existed
+        assert again.change_set_id == report.change_set_id
+
+    def test_a_rewritten_scene_surfaces_losses_and_changes(
+        self, session, draft_one
+    ):
+        """Scene 3 rewritten: its extraction (simulated) restates the
+        monitors with a new count but establishes nothing, so the report
+        has to say what moved and what lost its introduction."""
+        from ripple.db.models import ContinuityFinding, EntityAttribute
+        from ripple.services.draft_report import build_draft_report
+
+        draft_two = import_revision(session, REVISED)
+        link = link_draft(session, draft_two.id, draft_one.id)
+        rewritten = session.get(Scene, uuid.UUID(link.to_extract[0]))
+        fake_extracted(session, rewritten)
+
+        monitors = session.scalar(
+            select(Entity).where(
+                Entity.script_id == draft_two.id,
+                Entity.canonical_name == "Dispatch monitors",
+            )
+        )
+        assert monitors is not None, "carried via scenes 20 and 27"
+        unit = session.scalar(
+            select(ScriptUnit)
+            .where(ScriptUnit.scene_id == rewritten.id)
+            .order_by(ScriptUnit.sequence_index)
+        )
+        session.add(
+            EntityAttribute(
+                entity_id=monitors.id,
+                key="count",
+                value="twelve",
+                source_unit_id=unit.id,
+                confidence=0.9,
+                provenance="model",
+            )
+        )
+        session.flush()
+
+        report = build_draft_report(session, draft_two.id)
+        assert report.severity == "high"
+        assert {
+            "entity": "Dispatch monitors",
+            "key": "count",
+            "before": "six",
+            "after": "twelve",
+        } in report.attribute_changes
+        # Entities introduced in the rewritten scene and still used later
+        # lost their introduction; the monitors are the canonical case.
+        assert any("Dispatch monitors" in m for m in report.lost_introductions)
+
+        findings = list(
+            session.scalars(
+                select(ContinuityFinding).where(
+                    ContinuityFinding.change_set_id
+                    == uuid.UUID(report.change_set_id)
+                )
+            )
+        )
+        kinds = {f.finding_type for f in findings}
+        assert "lost_introduction" in kinds
+        lost = next(
+            f for f in findings if f.finding_type == "lost_introduction"
+        )
+        assert lost.evidence, "a lost introduction cites the surviving uses"
+        assert "No model is selected" in " ".join(report.continuity_notes)
+
+    def test_the_judged_layer_runs_once_per_changed_scene(
+        self, session, draft_one
+    ):
+        from ripple.db.models import ModelCall
+        from ripple.services.draft_report import build_draft_report
+        from tests.test_preview import FakeJudge
+
+        draft_two = import_revision(session, REVISED)
+        link = link_draft(session, draft_two.id, draft_one.id)
+        rewritten = session.get(Scene, uuid.UUID(link.to_extract[0]))
+        fake_extracted(session, rewritten)
+
+        judge = FakeJudge()
+        report = build_draft_report(
+            session, draft_two.id, provider=judge, model_id="fake-judge"
+        )
+        assert judge.continuity_calls == 1
+        assert report.conflicts == 0
+        assert report.continuity_notes == []
+        # The pass's audit rows hang on the report's change set.
+        audited = session.scalar(
+            select(func.count())
+            .select_from(ModelCall)
+            .where(
+                ModelCall.change_set_id == uuid.UUID(report.change_set_id),
+                ModelCall.purpose == "continuity",
+            )
+        )
+        assert audited == 1

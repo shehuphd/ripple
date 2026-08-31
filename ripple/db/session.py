@@ -230,7 +230,9 @@ def _widen_change_vocabularies(engine: Engine) -> None:
             return row[0] if row else None
 
         for table, needle in (
-            ("change_sets", "'omit_scene'"),
+            # The needle is always the NEWEST member, so a database widened for an
+            # earlier vocabulary is widened again for this one.
+            ("change_sets", "'link_draft'"),
             ("change_operations", "'set_scene_omitted'"),
         ):
             has_leftover = table_sql(f"{table}_old") is not None

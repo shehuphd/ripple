@@ -522,3 +522,12 @@ section.omitted .sh .omit-tag,section.omitted .sh .sctl{text-decoration:none}
 .confirm-box.add-scene label{display:block;margin:10px 0 4px;color:var(--t3)}
 .confirm-box.add-scene .field{width:100%}
 .confirm-box.add-scene textarea.field{resize:vertical;font-family:var(--mono)}
+
+/* The alignment review dialog's suggestion rows. */
+.confirm-box.review-align{width:min(640px,94vw);max-height:80vh;overflow-y:auto}
+.sugg{display:flex;gap:10px;align-items:flex-start;padding:9px 0;cursor:pointer;
+  border-bottom:.5px solid var(--bd)}
+.sugg:last-of-type{border-bottom:0}
+.sugg input{margin-top:3px;flex:0 0 auto;width:15px;height:15px}
+.sugg .pairing{display:flex;flex-direction:column;gap:3px;font-size:13px}
+.sugg .pairing .tiny{display:block}

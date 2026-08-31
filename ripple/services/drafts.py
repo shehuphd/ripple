@@ -61,36 +61,102 @@ class LinkRefused(Exception):
     """Linking cannot proceed; the message says why."""
 
 
-def link_draft(session, script_id, predecessor_script_id) -> DraftLink:
-    """Align, write lineage, and carry the unchanged scenes' graph."""
+def _check_linkable(session, script: Script, old: Script) -> None:
+    if script.id == old.id:
+        raise LinkRefused("A script cannot be its own predecessor.")
+    if script.predecessor_script_id is not None:
+        raise LinkRefused("This script is already linked to a predecessor.")
+    if _in_chain(session, old, script.id):
+        raise LinkRefused("Linking there would make the drafts a loop.")
+    has_graph = session.scalar(
+        select(Assertion.id).where(Assertion.script_id == script.id).limit(1)
+    )
+    if has_graph is not None:
+        raise LinkRefused(
+            "This script already has a graph; link a fresh import instead."
+        )
+
+
+def preview_link(session, script_id, predecessor_script_id) -> dict:
+    """Run the alignment and describe it, writing nothing.
+
+    The review screen renders this: the counts, and each suggested pair
+    with both scenes' headings, numbers, first lines, and the score, so a
+    person can confirm or decline links the aligner refuses to make alone.
+    """
+    script = session.get(Script, script_id)
+    old = session.get(Script, predecessor_script_id)
+    if script is None or old is None:
+        raise ValueError("no such script")
+    _check_linkable(session, script, old)
+
+    alignment = align_scenes(
+        _contents(session, old.id), _contents(session, script.id)
+    )
+
+    def scene_card(scene_id) -> dict:
+        scene = session.get(Scene, _uuid(scene_id))
+        first = session.scalar(
+            select(ScriptUnit.current_text)
+            .where(
+                ScriptUnit.scene_id == scene.id,
+                ScriptUnit.unit_type != "scene_heading",
+            )
+            .order_by(ScriptUnit.sequence_index)
+        )
+        return {
+            "id": str(scene.id),
+            "number": scene.display_scene_number,
+            "heading": scene.heading,
+            "first_line": (first or "")[:120],
+        }
+
+    return {
+        "unchanged": sum(1 for p in alignment.pairs if p.kind == "unchanged"),
+        "modified": sum(1 for p in alignment.pairs if p.kind == "modified"),
+        "inserted": len(alignment.inserted),
+        "deleted": len(alignment.deleted),
+        "suggestions": [
+            {
+                "new": scene_card(pair.new_id),
+                "old": scene_card(pair.old_id),
+                "score": round(pair.score, 2),
+            }
+            for pair in alignment.suggestions
+        ],
+    }
+
+
+def link_draft(
+    session,
+    script_id,
+    predecessor_script_id,
+    accepted_pairs: dict[str, str] | None = None,
+) -> DraftLink:
+    """Align, write lineage, and carry the unchanged scenes' graph.
+
+    `accepted_pairs` (new scene id to old scene id) are suggestions the
+    user confirmed on the review screen; they link as modified.
+    """
     ensure_configured()
     with ActionTrace.start(action="draft.link", kind="change") as trace:
         trace.input(
             {
                 "script_id": str(script_id),
                 "predecessor": str(predecessor_script_id),
+                "confirmed": len(accepted_pairs or {}),
             }
         )
         script = session.get(Script, script_id)
         old = session.get(Script, predecessor_script_id)
         if script is None or old is None:
             raise ValueError("no such script")
-        if script.id == old.id:
-            raise LinkRefused("A script cannot be its own predecessor.")
-        if script.predecessor_script_id is not None:
-            raise LinkRefused("This script is already linked to a predecessor.")
-        if _in_chain(session, old, script.id):
-            raise LinkRefused("Linking there would make the drafts a loop.")
-        has_graph = session.scalar(
-            select(Assertion.id).where(Assertion.script_id == script.id).limit(1)
-        )
-        if has_graph is not None:
-            raise LinkRefused(
-                "This script already has a graph; link a fresh import instead."
-            )
+        _check_linkable(session, script, old)
 
         alignment = align_scenes(
-            _contents(session, old.id), _contents(session, script.id)
+            _contents(session, old.id),
+            _contents(session, script.id),
+            forced_pairs=accepted_pairs,
         )
         result = DraftLink(
             script_id=str(script.id),

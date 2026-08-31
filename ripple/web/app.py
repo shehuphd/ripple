@@ -77,6 +77,7 @@ from ripple.graph.layout import DEPARTMENT_ORDER, script_layout
 from ripple.graph.layout import layout as graph_layout
 from ripple.llm import ProviderError, get_provider
 from ripple.services import changeset, spend
+from ripple.services import draft_report as report_service
 from ripple.services import drafts as drafts_service
 from ripple.services import preview as preview_service
 from ripple.services import scenes as scenes_service
@@ -1021,9 +1022,18 @@ def link_draft_route(
     predecessor = payload.get("predecessor_script_id")
     if not predecessor:
         raise HTTPException(422, "Name the predecessor script to link to.")
+    accepted_raw = payload.get("accepted_pairs") or {}
+    accepted = {
+        str(new_id): str(old_id)
+        for new_id, old_id in accepted_raw.items()
+        if new_id and old_id
+    }
     try:
         link = drafts_service.link_draft(
-            session, _uuid(script_id), _uuid(predecessor)
+            session,
+            _uuid(script_id),
+            _uuid(predecessor),
+            accepted_pairs=accepted or None,
         )
     except drafts_service.LinkRefused as error:
         raise HTTPException(409, str(error)) from None
@@ -1040,9 +1050,51 @@ def link_draft_route(
             scene_ids=[_uuid(scene_id) for scene_id in link.to_extract],
         )
         run_progress = progress(session, run.id).__dict__
+    elif not link.to_extract:
+        # Nothing to extract, so the cross-draft report needs no wait; the
+        # judged layer has no changed scene to judge either way.
+        report_service.build_draft_report(session, _uuid(script_id))
     body = link.__dict__.copy()
     body["to_extract"] = len(link.to_extract)
     return {"link": body, "run": run_progress}
+
+
+@app.post("/api/scripts/{script_id}/link-draft/preview")
+def preview_link_route(
+    script_id: str,
+    payload: dict[str, Any] = Body(...),
+    session: Session = Depends(get_session),
+):
+    """Describe the alignment without writing it, for the review screen."""
+    predecessor = payload.get("predecessor_script_id")
+    if not predecessor:
+        raise HTTPException(422, "Name the predecessor script to link to.")
+    try:
+        return drafts_service.preview_link(
+            session, _uuid(script_id), _uuid(predecessor)
+        )
+    except drafts_service.LinkRefused as error:
+        raise HTTPException(409, str(error)) from None
+    except ValueError:
+        raise HTTPException(404, "No such script") from None
+
+
+@app.post("/api/scripts/{script_id}/draft-report")
+def draft_report_route(script_id: str, session: Session = Depends(get_session)):
+    """Build (or return) the cross-draft ripple report for a linked draft."""
+    provider = None
+    provider_name, model_id = settings_service.selected_model(session)
+    if provider_name and model_id:
+        provider = get_provider(provider_name)
+    try:
+        report = report_service.build_draft_report(
+            session, _uuid(script_id), provider=provider, model_id=model_id
+        )
+    except report_service.ReportRefused as error:
+        raise HTTPException(409, str(error)) from None
+    except ValueError:
+        raise HTTPException(404, "No such script") from None
+    return report.__dict__
 
 
 @app.post("/api/scripts/{script_id}/opened")

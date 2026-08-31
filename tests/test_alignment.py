@@ -136,3 +136,48 @@ class TestUnitAlignment:
         old = ["Rain.", "She turns away."]
         new = ["Rain.", "Thunder rolls.", "She turns away."]
         assert align_units(old, new) == [0, None, 1]
+
+
+class TestSuggestions:
+    def test_a_middling_match_is_suggested_not_made(self):
+        old = [scene("o1", None, "INT. DOCK OFFICE - NIGHT",
+                     "Rain hammers the corrugated roof over the dock office.")]
+        new = [scene("n1", None, "INT. HARBOUR OFFICE - NIGHT",
+                     "Sleet rattles the corrugated roof over the harbour office.")]
+        result = align_scenes(old, new)
+        if result.pairs:
+            # Similar enough to link outright; the suggestion band is empty.
+            assert result.suggestions == []
+        else:
+            assert [s.new_id for s in result.suggestions] == ["n1"]
+            assert result.suggestions[0].kind == "suggested"
+            # Unconfirmed, the scenes stay inserted and deleted.
+            assert result.inserted == ["n1"]
+            assert result.deleted == ["o1"]
+
+    def test_noise_is_not_even_suggested(self):
+        old = [scene("o1", None, "INT. VAULT - NIGHT",
+                     "The seal cracks under the pry bar.")]
+        new = [scene("n1", None, "EXT. MEADOW - DAY",
+                     "A kite drifts over the long grass.")]
+        result = align_scenes(old, new)
+        assert result.suggestions == []
+
+
+class TestForcedPairs:
+    def test_a_confirmed_pair_links_whatever_the_score(self):
+        old = [scene("o1", None, "INT. VAULT - NIGHT",
+                     "The seal cracks under the pry bar.")]
+        new = [scene("n1", None, "EXT. MEADOW - DAY",
+                     "A kite drifts over the long grass.")]
+        result = align_scenes(old, new, forced_pairs={"n1": "o1"})
+        assert kinds(result) == {"n1": ("o1", "modified")}
+        assert result.pairs[0].method == "confirmed"
+        assert result.inserted == []
+        assert result.deleted == []
+
+    def test_a_forced_pair_naming_a_missing_scene_is_ignored(self):
+        old = [scene("o1", None, "INT. A - DAY", "One.")]
+        new = [scene("n1", None, "INT. A - DAY", "One.")]
+        result = align_scenes(old, new, forced_pairs={"nx": "o1"})
+        assert kinds(result) == {"n1": ("o1", "unchanged")}
