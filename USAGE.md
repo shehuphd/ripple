@@ -118,6 +118,21 @@ The reader edits the script's structure as well as its lines.
 
 Both operations move the script's base version, so a ripple preview drafted against the old structure is refused as stale rather than applied against a script it never saw.
 
+## Importing a new draft
+
+Uploading a file whose title matches a script that already has a graph offers a choice: link it as the next draft, or keep it separate. Nothing links without your answer.
+
+Linking aligns the two drafts in code, with no model call: scenes with identical content match first, then matching locked scene numbers, then an order-preserving text-similarity pass that only accepts strong matches. What happens next depends on how each scene aligned:
+
+| Scene | What happens | Model cost |
+|---|---|---|
+| Unchanged | Its entities, facts, attributes, and evidence copy across | none |
+| Changed | Extracted fresh; untouched lines inside it keep their lineage | one extraction |
+| New | Extracted fresh | one extraction |
+| Deleted (or replaced by an OMITTED placeholder) | Recorded; nothing carries | none |
+
+With a model selected, the changed scenes extract as soon as the link completes, and the reader opens on the new draft driving that run. The previous draft is untouched, and the new draft's toolbar links back to it ("Draft 2 · open draft 1"). A scene the aligner cannot place with confidence is treated as new and re-extracted: a wrong link would inherit a graph the text may contradict, while a missing link costs one extraction.
+
 ## Continuity findings
 
 Findings are evidence-backed warnings about a proposal's effect on other scenes, and they come from two places. One is computed with no model at all: removing the only line that establishes an entity while later scenes still reference it. The rest come from a continuity judgement, one model call per preview: the model is handed the edit, the graph changes, and a bounded packet of earlier and later facts about the affected entities, each with the line that states it, and reports the conflicts the edit creates. A reported conflict is kept only when it cites evidence the model was shown, and it carries its own severity. The pass is advisory: when its call fails, the preview stands on the deterministic findings and a banner says so.

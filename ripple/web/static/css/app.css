@@ -59,7 +59,8 @@ button{font:inherit}
 .srow{display:flex;align-items:center;gap:9px;height:30px;padding:0 9px;border-radius:5px;
   font-size:13px;color:var(--t1);white-space:nowrap;cursor:pointer;overflow:hidden}
 .srow:hover{background:var(--raised)}
-.srow.on{background:var(--ac-w);box-shadow:inset 2px 0 0 var(--ac)}
+.srow.on{background:var(--ac-w)}
+.srow.on .lb{font-weight:600}
 .srow .ic{width:15px;text-align:center;color:var(--t3);flex:0 0 auto;font-size:13px}
 .srow.on .ic{color:var(--ac)}
 .srow .lb{overflow:hidden;text-overflow:ellipsis}
@@ -180,7 +181,7 @@ table.scripts td{padding:15px 16px;border-bottom:.5px solid var(--bd);font-size:
 table.scripts tr:last-child td{border-bottom:0}
 table.scripts tbody tr{cursor:pointer}
 table.scripts tbody tr:hover{background:var(--raised)}
-table.scripts tbody tr.on{background:#15242b;box-shadow:inset 3px 0 0 var(--ac)}
+table.scripts tbody tr.on{background:#15242b;font-weight:600}
 table.scripts .title{font-family:var(--serif);font-size:17px;display:flex;
   align-items:center;gap:11px}
 table.scripts .title .ic{color:var(--t4);font-size:13px}

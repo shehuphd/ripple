@@ -31,13 +31,42 @@ async function upload(file) {
       .map((w) => `<div class="muted">${esc(w.code).replace(/_/g, ' ')}:
         ${esc(w.message)}</div>`).join('');
     result.innerHTML =
-      `<span class="status"><span class="dot ${body.outcome}"></span>
-       ${body.outcome.replace(/_/g, ' ')}</span>
+      `<span class="status">${body.outcome.replace(/_/g, ' ')}</span>
        <span class="muted"> · ${body.scenes} scenes, ${body.units} units</span>
        ${warnings}`;
     try {
       sessionStorage.setItem(IMPORT_STASH, result.innerHTML);
     } catch (error) { /* no storage, the reload wipes the notice */ }
+
+    /* A same-titled script with a graph: offer to continue it as a new
+       draft. The title is the invitation; the user's answer is the link. */
+    const candidate = (body.draft_candidates || [])[0];
+    if (candidate) {
+      const linkIt = await confirmDialog(
+        `"${body.title}" matches an existing script (draft `
+        + `${candidate.draft_number}). Import this file as draft `
+        + `${candidate.draft_number + 1}? Unchanged scenes keep their `
+        + 'graph at no model cost; changed scenes are re-read. '
+        + 'Cancel keeps it as a separate script.',
+        'Link as new draft',
+      );
+      if (linkIt) {
+        const linked = await api(`/api/scripts/${body.id}/link-draft`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ predecessor_script_id: candidate.id }),
+        });
+        ripple.trace('draft.linked', {
+          unchanged: linked.link.unchanged,
+          toExtract: linked.link.to_extract,
+        });
+        const target = linked.run
+          ? `/scripts/${body.id}?run=${linked.run.run_id}`
+          : `/scripts/${body.id}`;
+        window.location.assign(target);
+        return;
+      }
+    }
     setTimeout(() => window.location.reload(), 900);
   } catch (error) {
     ripple.trace('import.rejected', { error: error.message });

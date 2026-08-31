@@ -1186,3 +1186,51 @@ class TestSceneStructure:
     def test_an_unknown_scene_is_a_404(self, client):
         missing = "11111111-1111-1111-1111-111111111111"
         assert client.post(f"/api/scenes/{missing}/omit").status_code == 404
+
+
+class TestDraftLinking:
+    """Upload-then-link: the API surface over the drafts service."""
+
+    def _upload_revision(self, client, night_freight_fountain) -> dict:
+        revised = night_freight_fountain.replace(
+            b"Six monitors", b"Twelve monitors"
+        )
+        response = client.post(
+            "/api/scripts",
+            files={"file": ("night-freight-d2.fountain", revised)},
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    def test_an_upload_offers_the_same_titled_script(
+        self, client, night_freight_fountain
+    ):
+        body = self._upload_revision(client, night_freight_fountain)
+        titles = [c["title"] for c in body["draft_candidates"]]
+        assert titles == ["NIGHT FREIGHT"]
+
+    def test_linking_carries_the_graph_and_shows_the_chain(
+        self, client, night_freight_fountain
+    ):
+        body = self._upload_revision(client, night_freight_fountain)
+        predecessor = body["draft_candidates"][0]["id"]
+        linked = client.post(
+            f"/api/scripts/{body['id']}/link-draft",
+            json={"predecessor_script_id": predecessor},
+        )
+        assert linked.status_code == 200, linked.text
+        payload = linked.json()
+        assert payload["link"]["draft_number"] == 2
+        assert payload["link"]["modified"] == 1
+        assert payload["link"]["assertions_carried"] > 300
+        # No model configured in the test client, so no run starts.
+        assert payload["run"] is None
+
+        page = client.get(f"/scripts/{body['id']}").text
+        assert "Draft 2" in page
+
+        again = client.post(
+            f"/api/scripts/{body['id']}/link-draft",
+            json={"predecessor_script_id": predecessor},
+        )
+        assert again.status_code == 409

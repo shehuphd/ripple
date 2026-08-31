@@ -77,9 +77,57 @@ def create_all(engine: Engine) -> None:
     _widen_model_call_outcomes(engine)
     _add_script_origin(engine)
     _add_scene_omitted(engine)
+    _add_lineage_columns(engine)
     _widen_change_vocabularies(engine)
     _repair_dangling_references(engine)
     Base.metadata.create_all(engine)
+
+
+# Nullable draft-lineage columns, added to databases that predate them. Each
+# entry is (table, column, DDL fragment after the column name).
+_LINEAGE_COLUMNS = (
+    ("scripts", "draft_number", "INTEGER NOT NULL DEFAULT 1"),
+    ("scripts", "predecessor_script_id", "CHAR(32) REFERENCES scripts (id)"),
+    ("scenes", "predecessor_scene_id", "CHAR(32) REFERENCES scenes (id)"),
+    ("scenes", "lineage_kind", "VARCHAR(16)"),
+    (
+        "script_units",
+        "predecessor_unit_id",
+        "CHAR(32) REFERENCES script_units (id)",
+    ),
+    (
+        "entities",
+        "predecessor_entity_id",
+        "CHAR(32) REFERENCES entities (id)",
+    ),
+)
+
+
+def _add_lineage_columns(engine: Engine) -> None:
+    """Add the draft-lineage columns to a database that predates them."""
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.connect() as connection:
+        for table, column, ddl in _LINEAGE_COLUMNS:
+            exists = connection.exec_driver_sql(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                (table,),
+            ).fetchone()
+            if not exists:
+                continue
+            columns = {
+                row[1]
+                for row in connection.exec_driver_sql(
+                    f"PRAGMA table_info({table})"
+                )
+            }
+            if column in columns:
+                continue
+            logger.info("adding %s.%s", table, column)
+            connection.exec_driver_sql(
+                f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"
+            )
+        connection.commit()
 
 
 def _repair_dangling_references(engine: Engine) -> None:

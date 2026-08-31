@@ -23,6 +23,12 @@
 {% block toolbar %}
 <h1>{{ script.title }}</h1>
 <span class="sub" id="crumb">base v{{ script.current_version }}</span>
+{% if script.draft_number > 1 and script.predecessor_script_id %}
+<a class="chip" href="/scripts/{{ script.predecessor_script_id }}"
+   data-tip="Open the previous draft; its graph carried into this one where
+scenes are unchanged">Draft {{ script.draft_number }} · open draft
+  {{ script.draft_number - 1 }}</a>
+{% endif %}
 <div class="right">
   <a class="btn" href="/scripts/{{ script.id }}/graph">⁙ Graph</a>
   {% if findings %}

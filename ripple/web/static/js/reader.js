@@ -510,6 +510,24 @@ async function driveRun(runId) {
   return progress;
 }
 
+/* A draft link hands its extraction run over in the URL, so the reader
+   finishes the changed scenes the moment it opens. */
+const pendingRun = new URLSearchParams(window.location.search).get('run');
+if (pendingRun) {
+  (async () => {
+    document.getElementById('run-label').textContent =
+      'Extracting the changed scenes';
+    try {
+      await driveRun(pendingRun);
+      toast('Draft linked; the changed scenes are extracted.');
+    } catch (error) {
+      toast(error.message, true);
+    }
+    window.history.replaceState(null, '', window.location.pathname);
+    setTimeout(() => window.location.reload(), 900);
+  })();
+}
+
 const extract = document.getElementById('extract');
 if (extract) {
   extract.addEventListener('click', async () => {

@@ -77,6 +77,7 @@ from ripple.graph.layout import DEPARTMENT_ORDER, script_layout
 from ripple.graph.layout import layout as graph_layout
 from ripple.llm import ProviderError, get_provider
 from ripple.services import changeset, spend
+from ripple.services import drafts as drafts_service
 from ripple.services import preview as preview_service
 from ripple.services import scenes as scenes_service
 from ripple.services.preview import PreviewFailed, PreviewRefused, PreviewResult
@@ -989,7 +990,56 @@ async def upload_script(
         "scenes": result.scene_count,
         "units": result.unit_count,
         "warnings": [{"code": w.code, "message": w.message} for w in result.warnings],
+        # Same-titled scripts with graphs this upload could continue. An
+        # offer for the user to accept, never a link made on a title alone.
+        "draft_candidates": [
+            {
+                "id": str(candidate.id),
+                "title": candidate.title,
+                "draft_number": candidate.draft_number,
+            }
+            for candidate in drafts_service.draft_candidates(session, script)
+        ],
     }
+
+
+@app.post("/api/scripts/{script_id}/link-draft")
+def link_draft_route(
+    script_id: str,
+    payload: dict[str, Any] = Body(...),
+    session: Session = Depends(get_session),
+):
+    """Link an upload as the next draft of an existing script.
+
+    Alignment and carry-over run here; when a model is selected, extraction
+    of the changed scenes starts and the run rides back for the browser
+    loop.
+    """
+    predecessor = payload.get("predecessor_script_id")
+    if not predecessor:
+        raise HTTPException(422, "Name the predecessor script to link to.")
+    try:
+        link = drafts_service.link_draft(
+            session, _uuid(script_id), _uuid(predecessor)
+        )
+    except drafts_service.LinkRefused as error:
+        raise HTTPException(409, str(error)) from None
+    except ValueError:
+        raise HTTPException(404, "No such script") from None
+
+    run_progress = None
+    _, model_id = settings_service.selected_model(session)
+    if model_id and link.to_extract:
+        run = start_run(
+            session,
+            _uuid(script_id),
+            model_id,
+            scene_ids=[_uuid(scene_id) for scene_id in link.to_extract],
+        )
+        run_progress = progress(session, run.id).__dict__
+    body = link.__dict__.copy()
+    body["to_extract"] = len(link.to_extract)
+    return {"link": body, "run": run_progress}
 
 
 @app.post("/api/scripts/{script_id}/opened")

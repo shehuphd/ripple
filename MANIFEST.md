@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-08-31 20:15:27 UTC
+Last updated: 2026-08-31 20:36:04 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
 
@@ -76,6 +76,7 @@ Every file in the repository and what it does. Directories the application write
 | `graph/predicates.py` | The predicate vocabulary and signatures, one source of truth. |
 | `graph/diff.py` | Deterministic diff of two assertion sets by edge identity. |
 | `graph/continuity.py` | Bounded continuity evidence retrieval and the model-free orphaned-reference finding. |
+| `graph/alignment.py` | Deterministic scene and unit alignment between drafts. |
 | `graph/layout.py` | Deterministic 2D layout: scenes on a spine, entities in department wedges. |
 | `graph/fixtures.py` | Judge-visible scene context assembly for the preview prompt. |
 
@@ -95,6 +96,7 @@ Every file in the repository and what it does. Directories the application write
 | `services/__init__.py` | Package marker. |
 | `services/preview.py` | The judgement engine: one proposal across many lines, verdicts validated, calls audited and replayed. |
 | `services/changeset.py` | Atomic accept, reject, and latest-only undo of a proposal. |
+| `services/drafts.py` | Draft linking: alignment, lineage, graph carry-over. |
 | `services/scenes.py` | Scene insertion, omission (OMITTED, reversible), and restoration. |
 | `services/spend.py` | Token ledger and the hard budget gate every call site checks. |
 | `services/settings.py` | Credential entry and validation, main and fallback model selection. |
@@ -137,6 +139,8 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_adapters.py` | Import pipeline across all four formats. |
 | `tests/test_adversarial.py` | Hostile inputs: malformed files, encoding traps, oversized documents. |
 | `tests/test_changeset.py` | Accept, reject, undo, and inverse operations. |
+| `tests/test_alignment.py` | The draft aligner's passes and refusals. |
+| `tests/test_drafts.py` | Draft linking and carry-over on a one-line revision. |
 | `tests/test_scenes.py` | Scene insertion, omission, and restoration. |
 | `tests/test_continuity.py` | Evidence retrieval and orphaned-reference detection. |
 | `tests/test_continuity_judge.py` | Continuity reply verification and prompt assembly. |

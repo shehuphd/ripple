@@ -7,7 +7,7 @@ dependencies = [
     "defusedxml>=0.7.1",
     "pdf-inspector>=0.2.6",
     "traceact==1.0.0",
-    "keycall[traceact]==1.7.0",
+    "keycall[traceact]==1.8.0",
     "sqlalchemy>=2.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",

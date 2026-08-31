@@ -462,15 +462,15 @@ wheels = [
 
 [[package]]
 name = "keycall"
-version = "1.7.0"
+version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "httpx-ws" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/47/ce/a71a204bf165b74d461f31eaf8a5da7c242fb74828b5f77488d0a9927fbc/keycall-1.7.0.tar.gz", hash = "sha256:2a689eeb9e2c5fd319632d6a77fb71b84e698a94222473c28d15acbde174aef3", size = 384798, upload-time = "2026-08-30T17:44:25.162Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/39/ad/490aeafdab52428b5138193d029743b822c6e0817d054524f81dbe895d4d/keycall-1.8.0.tar.gz", hash = "sha256:5e803e122ced9d0cee8d40da10914e0b03ef7f93461dc8f1345c11809906cb97", size = 392602, upload-time = "2026-08-31T20:00:51.853Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bb/5f/a985d112bda42bd21d82068fa613f986cb0751063698e3a1fac29bf5a8c4/keycall-1.7.0-py3-none-any.whl", hash = "sha256:96ddebc38c6857dea9ccdf7921414d3758c7c210e756651ab81edd0142aaf6a8", size = 240421, upload-time = "2026-08-30T17:44:23.744Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/df/b25f3d67ea6b7493766b7ad2f3272070feda6a506e5176e4f94ee65993d6/keycall-1.8.0-py3-none-any.whl", hash = "sha256:52c33e9d131b2e828677b06c4c7ab0b05264f9e77d4cc955c514484a86568f34", size = 243295, upload-time = "2026-08-31T20:00:49.896Z" },
 ]
 
 [package.optional-dependencies]
@@ -1013,7 +1013,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", marker = "extra == 'dev'" },
     { name = "jinja2", specifier = ">=3.1" },
-    { name = "keycall", extras = ["traceact"], specifier = "==1.7.0" },
+    { name = "keycall", extras = ["traceact"], specifier = "==1.8.0" },
     { name = "pdf-inspector", specifier = ">=0.2.6" },
     { name = "pypdf", marker = "extra == 'dev'" },
     { name = "pytest", marker = "extra == 'dev'" },

@@ -160,6 +160,13 @@ class Script(Base):
     # Ground-truth seeding keys on this, never on the title: a user's upload
     # that happens to share a demo title must build its graph by extraction.
     origin: Mapped[str] = mapped_column(String(16), default="upload")
+    # Draft lineage. A script whose predecessor is set is a later draft of
+    # the same work; the chain of predecessors IS the work, so no separate
+    # grouping table is needed. The predecessor is never mutated by a link.
+    draft_number: Mapped[int] = mapped_column(Integer, default=1)
+    predecessor_script_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("scripts.id", ondelete="SET NULL")
+    )
     current_version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
@@ -229,6 +236,13 @@ class Scene(Base):
     # convention: later references stay resolvable, and restoring the scene is
     # a flag flip plus the reactivation its change set records.
     omitted: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Alignment lineage, written when this script was imported as a draft of
+    # another: which predecessor scene this one continues, and how the
+    # aligner classified it (unchanged, modified, inserted).
+    predecessor_scene_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("scenes.id", ondelete="SET NULL")
+    )
+    lineage_kind: Mapped[str | None] = mapped_column(String(16))
 
     script: Mapped[Script] = relationship(back_populates="scenes")
     units: Mapped[list[ScriptUnit]] = relationship(
@@ -272,6 +286,10 @@ class ScriptUnit(Base):
     current_version: Mapped[int] = mapped_column(Integer, default=1)
     parser_confidence: Mapped[float] = mapped_column(Float, default=1.0)
     parser_method: Mapped[str] = mapped_column(String(32))
+    # The predecessor draft's unit this line continues, from unit alignment.
+    predecessor_unit_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("script_units.id", ondelete="SET NULL")
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
     )
@@ -341,6 +359,13 @@ class Entity(Base):
     normalized_name: Mapped[str] = mapped_column(String(300))
     description: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # The predecessor draft's entity this one continues. The chain is the
+    # entity's cross-draft identity: Mara in draft 2 links to Mara in draft
+    # 1, so her history survives a new draft, and a rename is a new label on
+    # a linked row, never a new identity.
+    predecessor_entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("entities.id", ondelete="SET NULL")
+    )
 
     script: Mapped[Script] = relationship(back_populates="entities")
     aliases: Mapped[list[EntityAlias]] = relationship(

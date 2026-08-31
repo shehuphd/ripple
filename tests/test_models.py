@@ -836,9 +836,10 @@ class TestChangeVocabularyMigration:
             self._regress(connection, "change_sets", [", 'omit_scene'"])
             connection.exec_driver_sql(
                 "INSERT INTO scripts (id, title, import_status, graph_status, "
-                "current_version, origin, created_at, updated_at) "
+                "current_version, origin, draft_number, created_at, "
+                "updated_at) "
                 "VALUES ('aa11', 'T', 'accepted', 'not_analysed', 1, 'upload', "
-                "datetime('now'), datetime('now'))"
+                "1, datetime('now'), datetime('now'))"
             )
             connection.exec_driver_sql(
                 "INSERT INTO change_sets (id, script_id, kind, status, "
@@ -897,9 +898,10 @@ class TestDanglingReferenceRepair:
         with engine.connect() as connection:
             connection.exec_driver_sql(
                 "INSERT INTO scripts (id, title, import_status, graph_status, "
-                "current_version, origin, created_at, updated_at) "
+                "current_version, origin, draft_number, created_at, "
+                "updated_at) "
                 "VALUES ('aa11', 'T', 'accepted', 'not_analysed', 1, 'upload', "
-                "datetime('now'), datetime('now'))"
+                "1, datetime('now'), datetime('now'))"
             )
             connection.exec_driver_sql(
                 "INSERT INTO change_sets (id, script_id, kind, status, "
