@@ -16,9 +16,9 @@ from typing import Any
 from ripple.db.models import ENTITY_TYPES, PREDICATES
 from ripple.graph.predicates import SIGNATURES
 
-PROMPT_VERSION = "extract.v1"
+PROMPT_VERSION = "extract.v2"
 
-# Schema Lock v1 section 6: below this the extractor has failed rather than
+# Below this the extractor has failed rather than
 # hedged, so the value is stated in the prompt as a floor.
 MINIMUM_CONFIDENCE = 0.35
 
@@ -38,6 +38,29 @@ OUTPUT_SCHEMA: dict[str, Any] = {
                     "aliases": {"type": "array", "items": {"type": "string"}},
                     "description": {"type": "string"},
                     "confidence": {"type": "number"},
+                    "attributes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["key", "value", "source_unit_id", "confidence"],
+                            "properties": {
+                                "key": {"type": "string"},
+                                "value": {"type": "string"},
+                                "source_unit_id": {"type": "string"},
+                                "evidence_start": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 100000,
+                                },
+                                "evidence_end": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 100000,
+                                },
+                                "confidence": {"type": "number"},
+                            },
+                        },
+                    },
                 },
             },
         },
@@ -61,8 +84,12 @@ OUTPUT_SCHEMA: dict[str, Any] = {
                     "object_kind": {"type": "string", "enum": ["entity", "scene"]},
                     "object_local_id": {"type": "string"},
                     "source_unit_id": {"type": "string"},
-                    "evidence_start": {"type": "integer"},
-                    "evidence_end": {"type": "integer"},
+                    "evidence_start": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100000,
+                    },
+                    "evidence_end": {"type": "integer", "minimum": 0, "maximum": 100000},
                     "confidence": {"type": "number"},
                 },
             },
@@ -121,7 +148,17 @@ Rules for assertions:
 - Confidence is between {MINIMUM_CONFIDENCE} and 1. If you would go lower,
   omit the assertion instead.
 - Omit anything you cannot support with text in this scene. A short, correct
-  answer is worth more than a long, speculative one.
+  answer beats a long, speculative one.
+
+Rules for attributes:
+- An entity's stated descriptors are attributes: "the emerald gown" is a gown
+  with color "emerald", "a dead forklift" is a forklift with condition "dead".
+- Prefer these keys when one fits: color, material, state, condition,
+  quantity, size, age, style. Invent a key only when none of them fits.
+- Every attribute cites the source_unit_id of the unit that states it, with
+  evidence_start and evidence_end offsets into that unit's text.
+- One value per key per entity. Report what this scene states, not what an
+  earlier scene might have said.
 """
 
 
@@ -151,12 +188,17 @@ def build_prompt(
 def input_hash(heading: str, units: list[tuple[str, str, str]]) -> str:
     """A content hash for the extraction cache key.
 
-    Covers the heading and every unit's type and text, so an edit to any unit
-    invalidates the scene's cached extraction. Unit identifiers are excluded:
-    they are stable across edits, and including them would tie the cache to row
-    identity rather than to content.
+    Covers the heading, every unit's type and text, and the prompt material
+    itself. RULES is assembled from the predicate signatures and vocabularies,
+    so an edit to those changes every prompt without anyone touching
+    PROMPT_VERSION; folding the fingerprint in means such an edit invalidates
+    the cache instead of serving answers the new prompt never produced. Unit
+    identifiers are excluded: they are stable across edits, and including
+    them would tie the cache to row identity rather than to content.
     """
     digest = hashlib.sha256()
+    digest.update(prompt_fingerprint().encode("utf-8"))
+    digest.update(b"\x00")
     digest.update(heading.encode("utf-8"))
     for _, unit_type, text in units:
         digest.update(b"\x00")
@@ -164,6 +206,15 @@ def input_hash(heading: str, units: list[tuple[str, str, str]]) -> str:
         digest.update(b"\x00")
         digest.update(text.encode("utf-8"))
     return digest.hexdigest()
+
+
+def prompt_fingerprint() -> str:
+    """A short hash of everything the model is shown besides the scene."""
+    digest = hashlib.sha256()
+    for part in (SYSTEM_PROMPT, RULES, json.dumps(OUTPUT_SCHEMA, sort_keys=True)):
+        digest.update(part.encode("utf-8"))
+        digest.update(b"\x00")
+    return digest.hexdigest()[:16]
 
 
 def schema_fingerprint() -> str:

@@ -1,13 +1,14 @@
 """SQLAlchemy models for the accepted screenplay, graph, and change history.
 
-Implements the ERD, with the assertion change Schema Lock v1 section 1 requires:
-both ends of an assertion are explicitly kinded, so a scene can be a graph node.
+The full schema, with kinded assertion endpoints:
+both ends of an assertion are explicitly kinded, so a scene can be a graph
+node. Entity attributes and the model-call audit record ride alongside.
 
 Portability notes. UUIDs use `sqlalchemy.Uuid`, which is a native UUID on
 PostgreSQL and a 32-character string on SQLite. Enumerated values are stored as
 strings with CHECK constraints rather than native database enums, because
 altering a PostgreSQL enum is a migration and altering a CHECK is not, and
-SQLite has no enum type at all. The lists come from Schema Lock v1, which is
+SQLite has no enum type at all. The lists are the closed vocabularies, which is
 authoritative; changing one here without changing the lock is a defect.
 """
 
@@ -59,7 +60,7 @@ def _in(column: str, values: tuple[str, ...]) -> CheckConstraint:
     return CheckConstraint(f"{column} IN ({quoted})", name=f"ck_{column}_vocabulary")
 
 
-# Vocabularies, all from Schema Lock v1.
+# The closed vocabularies.
 UNIT_TYPES = (
     "scene_heading",
     "action",
@@ -115,10 +116,24 @@ OPERATION_TYPES = (
     "update_assertion",
     "create_entity",
     "update_entity",
+    "set_entity_attribute",
+    "remove_entity_attribute",
     "set_unit_text",
 )
 FINDING_STATUSES = ("open", "dismissed", "resolved")
 GRAPH_STATUSES = ("not_analysed", "analysing", "partially_ready", "ready", "failed")
+MODEL_CALL_PURPOSES = ("extract", "judge", "continuity", "synthesize", "query")
+MODEL_CALL_OUTCOMES = (
+    "ok",
+    # The reply was replayed from an identical earlier call at zero cost.
+    "cached",
+    "provider_error",
+    "malformed",
+    "truncated",
+    # Schema-valid, but verdicts for listed items were missing.
+    "incomplete",
+    "budget_refused",
+)
 
 
 class Script(Base):
@@ -210,7 +225,7 @@ class Scene(Base):
 
 
 class ScriptUnit(Base):
-    """The atomic editable object. Schema Lock v1 section 2."""
+    """The atomic editable object."""
 
     __tablename__ = "script_units"
     __table_args__ = (
@@ -254,7 +269,7 @@ class ScriptUnit(Base):
 
 
 class SourceAnchor(Base):
-    """Immutable provenance into the imported document. ERD section 2.
+    """Immutable provenance into the imported document.
 
     Nullable throughout because availability depends on the adapter. A unit the
     user created has no anchor at all.
@@ -317,6 +332,9 @@ class Entity(Base):
     aliases: Mapped[list[EntityAlias]] = relationship(
         back_populates="entity", cascade="all, delete-orphan"
     )
+    attributes: Mapped[list[EntityAttribute]] = relationship(
+        back_populates="entity", cascade="all, delete-orphan"
+    )
 
 
 class EntityAlias(Base):
@@ -339,10 +357,72 @@ class EntityAlias(Base):
     entity: Mapped[Entity] = relationship(back_populates="aliases")
 
 
+class EntityAttribute(Base):
+    """An evidence-backed key-value fact about one entity.
+
+    Descriptors leave the name: "the emerald gown" is entity `gown` with
+    `color: emerald`, so an attribute edit is one changed row naming the key
+    and both values, never a coincidence of entity naming. The schema
+    section 5. One active row per (entity, key); a new value is an update
+    operation, and history lives in change operations, as with assertions.
+    """
+
+    __tablename__ = "entity_attributes"
+    __table_args__ = (
+        _in("provenance", PROVENANCE),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_attribute_confidence_range",
+        ),
+        CheckConstraint(
+            "evidence_start IS NULL OR evidence_start >= 0",
+            name="ck_attribute_evidence_non_negative",
+        ),
+        # A model must cite its evidence; a user may state a fact directly.
+        CheckConstraint(
+            "provenance != 'model' OR source_unit_id IS NOT NULL",
+            name="ck_attribute_model_needs_evidence",
+        ),
+        # Partial on `active`, matching the assertion dedupe index: deactivating
+        # a value frees the key for its replacement without losing history.
+        Index(
+            "uq_attribute_active_key",
+            "entity_id",
+            "key",
+            unique=True,
+            sqlite_where=text("active = 1"),
+            postgresql_where=text("active"),
+        ),
+        Index("ix_attributes_entity", "entity_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    entity_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("entities.id", ondelete="CASCADE")
+    )
+    # Normalized token via naming.normalize_key: NFKC, casefold, spaces to
+    # underscores. The display form is the value; the key is vocabulary.
+    key: Mapped[str] = mapped_column(String(64))
+    value: Mapped[str] = mapped_column(String(300))
+    source_unit_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("script_units.id", ondelete="CASCADE")
+    )
+    evidence_start: Mapped[int | None] = mapped_column(Integer)
+    evidence_end: Mapped[int | None] = mapped_column(Integer)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    provenance: Mapped[str] = mapped_column(String(32), default="model")
+    prompt_version: Mapped[str | None] = mapped_column(String(32))
+    model_id: Mapped[str | None] = mapped_column(String(120))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    entity: Mapped[Entity] = relationship(back_populates="attributes")
+
+
 class Assertion(Base):
     """An evidence-backed directed edge between two graph nodes.
 
-    Both ends are kinded, so a scene can be a subject or an object. Schema Lock
+    Both ends are kinded, so a scene can be a subject or an object. The schema
     v1 section 1 explains why, and section 4 fixes which predicate accepts which
     kind. The CHECKs below enforce only the structural half of that: precisely
     one foreign key per side, agreeing with its kind. Predicate signatures are
@@ -701,11 +781,97 @@ class QueryLog(Base):
     asked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class ModelCall(Base):
+    """One model interaction, recorded in full for the audit surface.
+
+    Distinct from TraceAct's redacted operational traces: this row exists so
+    the user can audit what the model was asked and answered, so it carries
+    the full prompt and raw response. Application data, deleted with its
+    script. A `budget_refused` row records a call the budget cap prevented,
+    with zero tokens, so the ledger shows what the cap saved.
+    """
+
+    __tablename__ = "model_calls"
+    __table_args__ = (
+        _in("purpose", MODEL_CALL_PURPOSES),
+        _in("outcome", MODEL_CALL_OUTCOMES),
+        CheckConstraint(
+            "input_tokens IS NULL OR input_tokens >= 0",
+            name="ck_call_input_tokens_non_negative",
+        ),
+        CheckConstraint(
+            "output_tokens IS NULL OR output_tokens >= 0",
+            name="ck_call_output_tokens_non_negative",
+        ),
+        CheckConstraint("duration_ms >= 0", name="ck_call_duration_non_negative"),
+        Index("ix_model_calls_script_time", "script_id", "created_at"),
+        Index("ix_model_calls_change_set", "change_set_id"),
+        Index("ix_model_calls_purpose", "purpose", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    script_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("scripts.id", ondelete="CASCADE")
+    )
+    change_set_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("change_sets.id", ondelete="SET NULL")
+    )
+    scene_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("scenes.id", ondelete="SET NULL")
+    )
+    purpose: Mapped[str] = mapped_column(String(16))
+    prompt_version: Mapped[str] = mapped_column(String(32))
+    model_id: Mapped[str] = mapped_column(String(120))
+    request_text: Mapped[str] = mapped_column(Text)
+    response_text: Mapped[str | None] = mapped_column(Text)
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    outcome: Mapped[str] = mapped_column(String(16))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    validation_json: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class BudgetSetting(Base):
+    """The user's token budget. One row under key "default"; no row, no cap.
+
+    The cap is compared against the sum of recorded token counts in
+    `model_calls`, so it can only be as complete as the audit table. Every
+    call site writes its row for that reason, not only for the Traces page.
+    """
+
+    __tablename__ = "budget_settings"
+    __table_args__ = (
+        CheckConstraint(
+            "max_total_tokens > 0", name="ck_budget_positive"
+        ),
+    )
+
+    key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    max_total_tokens: Mapped[int] = mapped_column(Integer)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
+class UiPreference(Base):
+    """One user-set interface preference. No row means the default applies."""
+
+    __tablename__ = "ui_preferences"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(String(120))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
 class AppConfiguration(Base):
     """Selected provider and model identifiers. Never credentials.
 
     Survives every script and graph deletion. Google credentials live only in
-    Replit Secrets; ERD section 12.
+    Replit Secrets.
     """
 
     __tablename__ = "app_configuration"

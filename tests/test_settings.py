@@ -60,7 +60,19 @@ class TestCredentialsNeverLeak:
         assert SECRET not in rendered
         assert "sk-" not in rendered
 
-    def test_a_validation_failure_does_not_echo_the_key(self, service):
+    def test_a_validation_failure_does_not_echo_the_key(self, service, monkeypatch):
+        class Rejecting:
+            name = "google"
+            credential_variable = "GOOGLE_API_KEY"
+
+            def list_models(self, *, api_key=None):
+                raise ProviderError(
+                    "invalid_api_key", "The provider rejected this key."
+                )
+
+        monkeypatch.setattr(
+            "ripple.services.settings.get_provider", lambda name: Rejecting()
+        )
         result = service.validate("google", SECRET)
         assert not result.valid
         assert SECRET not in repr(result)
@@ -122,19 +134,45 @@ class TestStorage:
 
 
 class TestValidation:
-    def test_an_invalid_key_is_not_stored(self, service, store):
+    @pytest.fixture
+    def rejecting_provider(self, monkeypatch):
+        """A provider that rejects every key, standing in for the endpoint.
+
+        Stubbed so no test here contacts the network: what is under test is
+        the service's handling, not Google's reply.
+        """
+
+        class Rejecting:
+            name = "google"
+            credential_variable = "GOOGLE_API_KEY"
+
+            def list_models(self, *, api_key=None):
+                raise ProviderError(
+                    "invalid_api_key", "The provider rejected this key."
+                )
+
+        monkeypatch.setattr(
+            "ripple.services.settings.get_provider", lambda name: Rejecting()
+        )
+        return Rejecting()
+
+    def test_an_invalid_key_is_not_stored(self, service, store, rejecting_provider):
         """A stored bad key produces a screen that claims to work and does not."""
         result = service.save_credential("google", "obviously-not-a-key")
         assert not result.valid
         assert not store.status("google", "GOOGLE_API_KEY").configured
 
-    def test_validating_does_not_leave_the_key_in_the_environment(self, service):
+    def test_validating_does_not_leave_the_key_in_the_environment(
+        self, service, rejecting_provider
+    ):
         service.validate("google", SECRET)
         assert not os.environ.get("GOOGLE_API_KEY")
 
-    def test_validating_restores_a_previous_environment_value(
-        self, service, monkeypatch
+    def test_validating_never_disturbs_an_environment_value(
+        self, service, monkeypatch, rejecting_provider
     ):
+        """The candidate is passed to the call, never written process-wide,
+        so whatever the environment held stays untouched throughout."""
         monkeypatch.setenv("GOOGLE_API_KEY", "the-original")
         service.validate("google", "a-temporary-key")
         assert os.environ["GOOGLE_API_KEY"] == "the-original"
@@ -147,15 +185,34 @@ class TestValidation:
 
 class TestModelSelection:
     def test_no_model_is_selected_before_a_choice(self, session, service):
-        """PRD section 11 defaults to manual selection rather than guessing."""
+        """Model selection is manual rather than guessed."""
         assert service.selected_model(session) == (None, None)
 
     def test_selecting_a_model_the_provider_does_not_offer_is_refused(
         self, session, service, monkeypatch
     ):
-        monkeypatch.setenv("GOOGLE_API_KEY", "sk-test")
-        with pytest.raises(ProviderError):
+        from ripple.llm.base import ModelInfo, Tier
+
+        class Catalog:
+            name = "google"
+            credential_variable = "GOOGLE_API_KEY"
+
+            def list_models(self, *, api_key=None):
+                return [
+                    ModelInfo(
+                        id="offered-model",
+                        provider="google",
+                        display_name="offered-model",
+                        tier=Tier.CHEAP,
+                    )
+                ]
+
+        monkeypatch.setattr(
+            "ripple.services.settings.get_provider", lambda name: Catalog()
+        )
+        with pytest.raises(ProviderError) as caught:
             service.select_model(session, "google", "a-model-that-does-not-exist")
+        assert caught.value.code == "unknown_model"
 
     def test_an_unknown_provider_is_refused(self, session, service):
         with pytest.raises(ProviderError) as caught:
@@ -194,3 +251,97 @@ class TestFixtureProvider:
 
         models = FixtureProvider(tmp_path).list_models()
         assert {model.tier.value for model in models} == {"cheap", "mid", "strong"}
+
+
+class TestFallbackSelection:
+    """The fallback model: stored like the main, validated the same way."""
+
+    @pytest.fixture
+    def catalog(self, monkeypatch):
+        from ripple.llm.base import ModelInfo, Tier
+
+        class FakeProvider:
+            name = "google"
+            credential_variable = "GOOGLE_API_KEY"
+
+            def list_models(self):
+                return [
+                    ModelInfo(id=m, provider="google", display_name=m,
+                              tier=Tier.CHEAP)
+                    for m in ("main-model", "backup-model")
+                ]
+
+        monkeypatch.setattr(
+            "ripple.services.settings.get_provider", lambda name: FakeProvider()
+        )
+        return FakeProvider()
+
+    @pytest.fixture
+    def db(self):
+        from ripple.db.session import create_all, create_db_engine, session_factory
+
+        engine = create_db_engine("sqlite+pysqlite:///:memory:")
+        create_all(engine)
+        instance = session_factory(engine)()
+        yield instance
+        instance.close()
+
+    def test_a_fallback_is_stored_and_read_back(self, catalog, db):
+        service = SettingsService()
+        service.select_fallback(db, "google", "backup-model")
+        assert service.fallback_model(db) == ("google", "backup-model")
+
+    def test_an_unknown_fallback_is_refused(self, catalog, db):
+        from ripple.llm import ProviderError
+
+        service = SettingsService()
+        with pytest.raises(ProviderError) as caught:
+            service.select_fallback(db, "google", "invented-model")
+        assert caught.value.code == "unknown_model"
+
+    def test_a_fallback_equal_to_the_main_is_refused(self, catalog, db):
+        from ripple.llm import ProviderError
+
+        service = SettingsService()
+        service.select_model(db, "google", "main-model")
+        with pytest.raises(ProviderError) as caught:
+            service.select_fallback(db, "google", "main-model")
+        assert caught.value.code == "fallback_is_main"
+
+    def test_clearing_the_fallback(self, catalog, db):
+        service = SettingsService()
+        service.select_fallback(db, "google", "backup-model")
+        service.select_fallback(db, "google", None)
+        assert service.fallback_model(db) == (None, None)
+
+
+class TestValidationNeverTouchesTheEnvironment:
+    def test_a_candidate_key_is_passed_to_the_call_not_the_process(
+        self, service, monkeypatch
+    ):
+        """Regression: validate() used to write the candidate into os.environ
+        for the duration of the network call, so a concurrent extraction
+        could read the wrong key mid-window."""
+        from ripple.llm import PROVIDERS
+
+        observed = {}
+
+        class SpyProvider:
+            name = "spy"
+            credential_variable = "SPY_PROVIDER_KEY"
+
+            def is_configured(self):
+                return False
+
+            def list_models(self, *, api_key=None):
+                observed["api_key"] = api_key
+                observed["env"] = os.environ.get("SPY_PROVIDER_KEY")
+                return []
+
+        monkeypatch.delenv("SPY_PROVIDER_KEY", raising=False)
+        monkeypatch.setitem(PROVIDERS, "spy", SpyProvider())
+        result = service.validate("spy", "  candidate-key-123  ")
+        assert result.valid
+        assert observed["api_key"] == "candidate-key-123"
+        assert observed["env"] is None
+        assert "SPY_PROVIDER_KEY" not in os.environ

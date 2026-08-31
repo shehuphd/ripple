@@ -4,11 +4,7 @@ Ripple treats a screenplay as a production database rather than a static documen
 
 The loop is: select a unit, inspect its graph, edit it, see the ripple, decide.
 
-## Status
-
-Working: import adapters, the demo corpus, persistence, provider settings, scene-level graph extraction, the deterministic diff engine, continuity retrieval, and a web application covering the library, reader, requirement pane, and settings.
-
-In progress: the synthesizer that writes the ripple explanation, the change-set service for accepting and undoing an edit, and a graph renderer for the local graph view.
+The full manual is [USAGE.md](https://github.com/shehuphd/ripple/blob/main/USAGE.md).
 
 ## Requirements
 
@@ -21,7 +17,7 @@ In progress: the synthesizer that writes the ripple explanation, the change-set 
 ./launch.command
 ```
 
-This creates `tools/.venv`, installs the package, picks a free port, starts the server, and opens a browser. The library seeds the three bundled screenplays on first run, so there is something to read immediately. Run `./launch.command --test` to run the test suite instead.
+This stops any Ripple server already running, creates `tools/.venv`, installs the package, picks a free port, starts the server, and opens a browser. The library seeds the three bundled screenplays on first run, so there is something to read immediately. Run `./launch.command --test` to run the test suite instead.
 
 To build a graph, add a provider key in Settings and choose a model. Nothing else needs a credential: import, the reader, the diff engine, and the deterministic continuity findings all work without one.
 
@@ -65,7 +61,7 @@ Each script ships a `dependencies.md` recording the entities, assertions, and pl
 
 ## Tracing
 
-Meaningful actions are traced with [TraceAct](https://github.com/traceact/traceact) 0.14.0. Automatic argument capture is off and the `ai_prompts`, `api_keys`, `http`, `filesystem_paths`, and `env_vars` redaction presets are on, so screenplay text, filenames, and uploaded bytes are never recorded. Traces land in `data/traces/`.
+Meaningful actions are traced with [TraceAct](https://github.com/traceact/traceact). Automatic argument capture is off and the `ai_prompts`, `api_keys`, `http`, `filesystem_paths`, and `env_vars` redaction presets are on, so screenplay text, filenames, and uploaded bytes are never recorded. Traces are written to `data/traces/`.
 
 Set `RIPPLE_TRACING=off` to disable trace writing.
 
@@ -77,8 +73,14 @@ tools/.venv/bin/python -m pytest
 
 Test-order randomisation is enabled. A failure that depends on order is a bug in shared state, not something to pin away.
 
+## Status
+
+Working: import adapters, the demo corpus, persistence, provider settings, scene-level graph extraction with attributes, the judged ripple preview, the deterministic diff engine, continuity retrieval, the synthesizer, the change-set service with undo, natural-language query, a model-call audit with a token budget and a fallback model, and a web application covering the library, reader, ripple preview, graph views, list pages, and settings.
+
+Not yet deployed anywhere; local development only.
+
 ## Licence
 
-AGPL-3.0. See [LICENSE](LICENSE).
+AGPL-3.0. See [LICENSE](https://github.com/shehuphd/ripple/blob/main/LICENSE).
 
-Built by Mo Shehu — mohammedshehu.com
+By [Mo Shehu](https://mohammedshehu.com)

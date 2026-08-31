@@ -8,7 +8,7 @@ present and is rejected with a stated reason when it is not.
 Layout rules classify blocks by their horizontal position relative to the
 page's own left margin, so a script typeset at any margin parses the same way.
 Ambiguous blocks are marked for the structure repair agent rather than guessed
-at; PRD section 5 sends only those to a model.
+at; only those are ever sent to a model.
 """
 
 from __future__ import annotations

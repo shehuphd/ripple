@@ -91,7 +91,7 @@ def _import(data: bytes, source_name: str, trace: ActionTrace) -> ImportResult:
     """Run the import pipeline, recording each stage on the open trace.
 
     Only counts, codes, hashes, and formats reach the trace. Screenplay text,
-    the filename, and the uploaded bytes never do; PRD section 12.
+    the filename, and the uploaded bytes never do.
     """
     try:
         payload = SourcePayload(data=data, suggested_name=source_name)
@@ -239,8 +239,8 @@ def _enforce_limits(scenes: list[ParsedScene]) -> list[ImportWarning]:
 def _outcome(warnings: list[ImportWarning], needs_review: bool) -> ImportOutcome:
     """Map warnings to an import outcome.
 
-    Anything OCR-derived or structurally uncertain is needs_review, per PRD
-    section 5, so a human sees it before the graph is built on it.
+    Anything OCR-derived or structurally uncertain is needs_review, so a
+    human sees it before the graph is built on it.
     """
     review_codes = {
         "ocr_derived",

@@ -22,12 +22,14 @@ from ripple.db.models import (
     ChangeSet,
     Entity,
     EntityAlias,
+    EntityAttribute,
+    ModelCall,
     RippleReport,
     Scene,
     Script,
     ScriptUnit,
 )
-from ripple.db.naming import normalize
+from ripple.db.naming import normalize, normalize_key
 from ripple.db.repository import (
     clear_all_graphs,
     delete_all_scripts,
@@ -211,7 +213,7 @@ class TestNumericRanges:
 
 
 class TestAssertionSides:
-    """Schema Lock v1 section 1: each side is kinded and holds precisely one key."""
+    """Each assertion side is kinded and holds precisely one key."""
 
     def test_an_entity_subject_without_an_entity_id_is_rejected(self, session):
         script = _script(session)
@@ -563,3 +565,243 @@ class TestPersistImport:
         }
         assert "MARA" in speakers
         assert None not in speakers
+
+
+class TestEntityAttributes:
+    """Entity attributes are evidence-backed key-value facts."""
+
+    def _attribute(self, session, entity, unit, key="color", value="emerald", **kw):
+        attribute = EntityAttribute(
+            entity_id=entity.id,
+            key=normalize_key(key),
+            value=value,
+            source_unit_id=unit.id if unit is not None else None,
+            confidence=kw.pop("confidence", 0.9),
+            provenance=kw.pop("provenance", "model"),
+        )
+        session.add(attribute)
+        session.flush()
+        return attribute
+
+    def test_one_active_row_per_entity_and_key(self, session):
+        script = _script(session)
+        scene = _scene(session, script)
+        unit = _unit(session, scene)
+        entity = _entity(session, script, "Gown", "wardrobe")
+        self._attribute(session, entity, unit, value="emerald")
+        with pytest.raises(IntegrityError):
+            self._attribute(session, entity, unit, value="red")
+
+    def test_deactivating_frees_the_key(self, session):
+        script = _script(session)
+        scene = _scene(session, script)
+        unit = _unit(session, scene)
+        entity = _entity(session, script, "Gown", "wardrobe")
+        first = self._attribute(session, entity, unit, value="emerald")
+        first.active = False
+        session.flush()
+        second = self._attribute(session, entity, unit, value="red")
+        assert second.value == "red"
+
+    def test_two_keys_coexist_on_one_entity(self, session):
+        script = _script(session)
+        scene = _scene(session, script)
+        unit = _unit(session, scene)
+        entity = _entity(session, script, "Gown", "wardrobe")
+        self._attribute(session, entity, unit, key="color", value="emerald")
+        self._attribute(session, entity, unit, key="material", value="silk")
+        assert len(entity.attributes) == 2
+
+    def test_a_model_attribute_without_evidence_is_refused(self, session):
+        script = _script(session)
+        entity = _entity(session, script, "Gown", "wardrobe")
+        with pytest.raises(IntegrityError):
+            self._attribute(session, entity, None, provenance="model")
+
+    def test_a_user_attribute_may_omit_evidence(self, session):
+        script = _script(session)
+        entity = _entity(session, script, "Gown", "wardrobe")
+        attribute = self._attribute(session, entity, None, provenance="user")
+        assert attribute.source_unit_id is None
+
+    def test_confidence_outside_the_range_is_refused(self, session):
+        script = _script(session)
+        scene = _scene(session, script)
+        unit = _unit(session, scene)
+        entity = _entity(session, script, "Gown", "wardrobe")
+        with pytest.raises(IntegrityError):
+            self._attribute(session, entity, unit, confidence=1.5)
+
+    def test_deleting_the_entity_deletes_its_attributes(self, session):
+        script = _script(session)
+        scene = _scene(session, script)
+        unit = _unit(session, scene)
+        entity = _entity(session, script, "Gown", "wardrobe")
+        self._attribute(session, entity, unit)
+        session.delete(entity)
+        session.flush()
+        remaining = session.scalar(
+            select(func.count()).select_from(EntityAttribute)
+        )
+        assert remaining == 0
+
+
+class TestModelCalls:
+    """The per-call audit record."""
+
+    def _call(self, session, script, **kw):
+        call = ModelCall(
+            script_id=script.id if script is not None else None,
+            purpose=kw.pop("purpose", "judge"),
+            prompt_version=kw.pop("prompt_version", "judge.v1"),
+            model_id=kw.pop("model_id", "gemini-flash-latest"),
+            request_text="prompt body",
+            response_text=kw.pop("response_text", "{}"),
+            outcome=kw.pop("outcome", "ok"),
+            **kw,
+        )
+        session.add(call)
+        session.flush()
+        return call
+
+    def test_an_unknown_purpose_is_refused(self, session):
+        script = _script(session)
+        with pytest.raises(IntegrityError):
+            self._call(session, script, purpose="summarise")
+
+    def test_an_unknown_outcome_is_refused(self, session):
+        script = _script(session)
+        with pytest.raises(IntegrityError):
+            self._call(session, script, outcome="mystery")
+
+    def test_a_budget_refusal_carries_zero_tokens(self, session):
+        script = _script(session)
+        call = self._call(
+            session,
+            script,
+            outcome="budget_refused",
+            response_text=None,
+            input_tokens=0,
+            output_tokens=0,
+        )
+        assert call.response_text is None
+        assert (call.input_tokens, call.output_tokens) == (0, 0)
+
+    def test_deleting_the_script_deletes_its_calls(self, session):
+        script = _script(session)
+        self._call(session, script)
+        session.delete(script)
+        session.flush()
+        assert session.scalar(select(func.count()).select_from(ModelCall)) == 0
+
+    def test_negative_tokens_are_refused(self, session):
+        script = _script(session)
+        with pytest.raises(IntegrityError):
+            self._call(session, script, input_tokens=-1)
+
+
+class TestOutcomeVocabularyMigration:
+    def test_an_old_outcome_vocabulary_is_widened_on_startup(self, tmp_path):
+        """A database from before the cached/incomplete outcomes must accept
+        them after create_all, or the first replayed judge call fails its
+        CHECK constraint."""
+        from ripple.db.session import create_db_engine
+
+        url = f"sqlite+pysqlite:///{tmp_path}/old.db"
+        engine = create_db_engine(url)
+        create_all(engine)
+
+        # Regress the table to the old vocabulary, indexes included, the way
+        # a database created before this build looks. The indexes are the
+        # part that bit in production: a rename carries them along under
+        # their original names, colliding with the new table's.
+        with engine.connect() as connection:
+            current = connection.exec_driver_sql(
+                "SELECT sql FROM sqlite_master WHERE name='model_calls'"
+            ).fetchone()[0]
+            old = current.replace("'cached', ", "").replace("'incomplete', ", "")
+            assert old != current
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.exec_driver_sql("DROP TABLE model_calls")
+            connection.exec_driver_sql(old)
+            connection.exec_driver_sql(
+                "CREATE INDEX ix_model_calls_purpose "
+                "ON model_calls (purpose, created_at)"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO model_calls "
+                "(id, purpose, prompt_version, model_id, request_text, outcome, "
+                "duration_ms, created_at) "
+                "VALUES ('cafebabe', 'judge', 'judge.v2', 'm', 'p', 'ok', "
+                "0, datetime('now'))"
+            )
+            connection.commit()
+
+        second = create_db_engine(url)
+        create_all(second)
+        with second.connect() as connection:
+            rebuilt = connection.exec_driver_sql(
+                "SELECT sql FROM sqlite_master WHERE name='model_calls'"
+            ).fetchone()[0]
+            survivors = connection.exec_driver_sql(
+                "SELECT count(*) FROM model_calls"
+            ).fetchone()[0]
+            indexes = {
+                name
+                for (name,) in connection.exec_driver_sql(
+                    "SELECT name FROM sqlite_master WHERE type='index' "
+                    "AND tbl_name='model_calls'"
+                ).fetchall()
+            }
+        assert "'cached'" in rebuilt
+        assert "'incomplete'" in rebuilt
+        assert survivors == 1
+        assert "ix_model_calls_purpose" in indexes
+
+    def test_a_half_finished_rebuild_resumes(self, tmp_path):
+        """pysqlite autocommits DDL, so an interrupted rebuild persists in a
+        half-done state; the next startup must finish it, not crash on it."""
+        from ripple.db.session import create_db_engine
+
+        url = f"sqlite+pysqlite:///{tmp_path}/half.db"
+        engine = create_db_engine(url)
+        create_all(engine)
+        with engine.connect() as connection:
+            connection.exec_driver_sql(
+                "INSERT INTO model_calls "
+                "(id, purpose, prompt_version, model_id, request_text, outcome, "
+                "duration_ms, created_at) "
+                "VALUES ('deadbeef', 'judge', 'judge.v2', 'm', 'p', 'ok', "
+                "0, datetime('now'))"
+            )
+            # The state a run interrupted right after the rename leaves.
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.exec_driver_sql(
+                "ALTER TABLE model_calls RENAME TO model_calls_old"
+            )
+            connection.commit()
+
+        second = create_db_engine(url)
+        create_all(second)
+        with second.connect() as connection:
+            survivors = connection.exec_driver_sql(
+                "SELECT count(*) FROM model_calls"
+            ).fetchone()[0]
+            leftover = connection.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE name='model_calls_old'"
+            ).fetchone()
+        assert survivors == 1
+        assert leftover is None
+
+    def test_create_all_is_idempotent_on_a_current_database(self, tmp_path):
+        from ripple.db.session import create_db_engine
+
+        url = f"sqlite+pysqlite:///{tmp_path}/current.db"
+        engine = create_db_engine(url)
+        create_all(engine)
+        create_all(engine)
+        with engine.connect() as connection:
+            leftovers = connection.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE name='model_calls_old'"
+            ).fetchone()
+        assert leftovers is None

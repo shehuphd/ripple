@@ -1,7 +1,7 @@
 """Provider registry.
 
-Gemini is the only provider Ripple builds and tests against, per PRD section
-14. It is a KeycallProvider (`ripple/llm/keycall_provider.py`): KeyCall
+Gemini is the only provider Ripple builds and tests against. It is a
+KeycallProvider (`ripple/llm/keycall_provider.py`): KeyCall
 (https://github.com/shehuphd/keycall) is what talks to the provider's API, so
 there is nothing provider-specific left to hand-write here.
 """
@@ -22,15 +22,12 @@ from ripple.llm.keycall_provider import KeycallProvider
 
 logger = logging.getLogger(__name__)
 
-SUBMISSION_PROVIDER = "google"
-
 PROVIDERS: dict[str, LLMProvider] = {
     "google": KeycallProvider("google", "GOOGLE_API_KEY"),
 }
 
 __all__ = [
     "PROVIDERS",
-    "SUBMISSION_PROVIDER",
     "GenerationResult",
     "LLMProvider",
     "ModelInfo",
@@ -57,7 +54,7 @@ def configured_providers() -> list[str]:
     """Names of providers holding a credential.
 
     Reports which providers are usable without revealing any credential value,
-    masked or otherwise. PRD section 11.
+    masked or otherwise.
     """
     return sorted(
         name for name, provider in PROVIDERS.items() if provider.is_configured()

@@ -1,37 +1,42 @@
 {% macro sidebar(counts, active, script_id=None) %}
 <div class="side-scroll">
-  <a class="srow {{ 'on' if active == 'all' }}" href="/">
+  <a class="srow {{ 'on' if active == 'all' }}"{% if active == 'all' %} aria-current="page"{% endif %} href="/">
     <span class="ic">▤</span><span class="lb">All scripts</span>
     <span class="ct num">{{ counts.scripts }}</span></a>
-  <a class="srow {{ 'on' if active == 'recent' }}" href="/?filter=recent">
+  <a class="srow {{ 'on' if active == 'recent' }}"{% if active == 'recent' %} aria-current="page"{% endif %} href="/?filter=recent">
     <span class="ic">◷</span><span class="lb">Recently opened</span>
     <span class="ct num">{{ counts.recent }}</span></a>
-  <a class="srow {{ 'on' if active == 'review' }}" href="/?filter=review">
+  <a class="srow {{ 'on' if active == 'review' }}"{% if active == 'review' %} aria-current="page"{% endif %} href="/?filter=review">
     <span class="ic">◎</span><span class="lb">Needs review</span>
     <span class="ct num">{{ counts.needs_review }}</span></a>
 
   <div class="sgroup">Analysis</div>
-  <a class="srow {{ 'on' if active == 'reports' }}" href="/reports">
+  <a class="srow {{ 'on' if active == 'reports' }}"{% if active == 'reports' %} aria-current="page"{% endif %} href="/reports">
     <span class="ic">≋</span><span class="lb">Ripple reports</span>
     <span class="ct num">{{ counts.reports }}</span></a>
-  <a class="srow {{ 'on' if active == 'findings' }}" href="/findings">
+  <a class="srow {{ 'on' if active == 'findings' }}"{% if active == 'findings' %} aria-current="page"{% endif %} href="/findings">
     <span class="ic">⚠</span><span class="lb">Continuity findings</span>
     <span class="ct num">{{ counts.findings }}</span></a>
-  <a class="srow {{ 'on' if active == 'ask' }}"
+  <a class="srow {{ 'on' if active == 'ask' }}"{% if active == 'ask' %} aria-current="page"{% endif %}
      href="/ask{% if script_id %}?script={{ script_id }}{% endif %}">
     <span class="ic">⌕</span><span class="lb">Ask the graph</span>
     <span class="ct num">{{ counts.queries }}</span></a>
 
   <div class="sgroup">Graph</div>
-  <a class="srow {{ 'on' if active == 'entities' }}" href="/entities">
+  <a class="srow {{ 'on' if active == 'entities' }}"{% if active == 'entities' %} aria-current="page"{% endif %} href="/entities">
     <span class="ic">⁙</span><span class="lb">Entities</span>
     <span class="ct num">{{ counts.entities }}</span></a>
-  <a class="srow {{ 'on' if active == 'assertions' }}" href="/assertions">
+  <a class="srow {{ 'on' if active == 'assertions' }}"{% if active == 'assertions' %} aria-current="page"{% endif %} href="/assertions">
     <span class="ic">☰</span><span class="lb">Assertions</span>
     <span class="ct num">{{ counts.assertions }}</span></a>
 
+  <div class="sgroup">Audit</div>
+  <a class="srow {{ 'on' if active == 'traces' }}"{% if active == 'traces' %} aria-current="page"{% endif %} href="/traces">
+    <span class="ic">≡</span><span class="lb">Traces</span>
+    <span class="ct num">{{ counts.model_calls }}</span></a>
+
   <div class="sgroup">Configuration</div>
-  <a class="srow {{ 'on' if active == 'settings' }}" href="/settings">
+  <a class="srow {{ 'on' if active == 'settings' }}"{% if active == 'settings' %} aria-current="page"{% endif %} href="/settings">
     <span class="ic">⚙</span><span class="lb">Settings</span></a>
 </div>
 {% endmacro %}

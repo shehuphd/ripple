@@ -4,7 +4,7 @@ A thin HTTP layer over the services. Every route resolves a session, calls into
 `ripple.*`, and returns data; no business rule lives here, so the same
 operations stay testable without a client.
 
-The extraction loop is browser-driven, per PRD section 10: the page asks for one
+The extraction loop is browser-driven: the page asks for one
 scene at a time and the server commits each independently. That keeps the work
 inside request handlers, with no background worker to pay for.
 """
@@ -17,12 +17,23 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import (
+    Body,
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from traceact import ActionTrace
 
 from ripple.adapters import import_screenplay
 from ripple.adapters.base import MAX_UPLOAD_BYTES
@@ -35,6 +46,7 @@ from ripple.db.models import (
     EntityAlias,
     ExtractionRun,
     Import,
+    ModelCall,
     QueryLog,
     RippleReport,
     Scene,
@@ -42,10 +54,15 @@ from ripple.db.models import (
     ScriptUnit,
 )
 from ripple.db.repository import (
+    LANDING_VIEWS,
     clear_all_graphs,
     delete_script,
     deletion_preview,
+    get_landing_view,
+    graph_labels,
     persist_import,
+    set_landing_view,
+    unavailable_models,
 )
 from ripple.db.session import create_all, create_db_engine, session_factory
 from ripple.extraction.service import (
@@ -54,15 +71,18 @@ from ripple.extraction.service import (
     progress,
     start_run,
 )
-from ripple.graph.continuity import detect_orphaned_references, retrieve
-from ripple.graph.diff import Edge, EdgeRef, diff_edges, to_operations
-from ripple.graph.layout import DEPARTMENT_ORDER
+from ripple.graph.diff import Edge, GraphDiff
+from ripple.graph.fixtures import seed_demo_graphs
+from ripple.graph.layout import DEPARTMENT_ORDER, script_layout
 from ripple.graph.layout import layout as graph_layout
 from ripple.llm import ProviderError, get_provider
-from ripple.services import changeset
+from ripple.services import changeset, spend
+from ripple.services import preview as preview_service
+from ripple.services.preview import PreviewFailed, PreviewRefused, PreviewResult
 from ripple.services.settings import SettingsService
 from ripple.services.synthesizer import answer_question, synthesize
 from ripple.tracing import configure_tracing
+from ripple.tracing import ensure_configured as ensure_tracing
 from ripple.web.stats import eighths, page_of, runtime, script_pages
 
 logger = logging.getLogger(__name__)
@@ -90,8 +110,8 @@ def get_session() -> Session:
 def seed_demo_corpus(session: Session) -> int:
     """Import the bundled screenplays on an empty database.
 
-    The application is worth opening on first run rather than showing an empty
-    library and asking for an upload before anything can be explored.
+    The application opens with something to explore on first run rather than
+    showing an empty library and asking for an upload first.
     """
     if session.scalar(select(func.count()).select_from(Script)):
         return 0
@@ -117,6 +137,10 @@ async def lifespan(_app: FastAPI):
     _sessions = session_factory(_engine)
     with _sessions() as session:
         seed_demo_corpus(session)
+        # Ground-truth graphs, so the demo corpus opens with a full graph and
+        # zero model calls. Idempotent; a cleared graph is rebuilt on restart.
+        seed_demo_graphs(session, DEMO_SCRIPTS)
+        session.commit()
     yield
 
 
@@ -124,6 +148,18 @@ app = FastAPI(title="Ripple", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
 settings_service = SettingsService()
+
+
+@app.middleware("http")
+async def no_store(request: Request, call_next):
+    """Every response says not to cache it.
+
+    Without this a browser tab keeps last version's HTML, CSS, or JS after a
+    local restart, with no visible sign anything is stale.
+    """
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def asset_version() -> str:
@@ -144,7 +180,110 @@ def asset_version() -> str:
     return f"{int(newest)}"
 
 
-templates.env.globals["asset_version"] = asset_version()
+class _LiveAssetVersion:
+    """Re-reads the asset timestamps on every render, not once at import.
+
+    Computed at import, the version freezes for the life of the process, and
+    an edited stylesheet keeps serving under its old cache key until the
+    server restarts. Rendering through `__str__` keeps every template's
+    `{{ asset_version }}` working unchanged.
+    """
+
+    def __str__(self) -> str:
+        return asset_version()
+
+
+templates.env.globals["asset_version"] = _LiveAssetVersion()
+
+
+def app_version() -> str:
+    """The installed package version, shown beside the mark for support.
+
+    A screenshot of any page then says which build it came from. Falls back
+    to "dev" when the package metadata is absent (running from a checkout
+    with no install).
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("ripple")
+    except PackageNotFoundError:
+        return "dev"
+
+
+templates.env.globals["app_version"] = app_version()
+
+
+ERROR_HEADINGS = {
+    404: "Not found",
+    400: "That request can't be processed",
+    409: "That version has moved on",
+}
+
+ERROR_HINTS = {
+    404: "It may have been deleted, or the link may be from before a "
+    "re-import gave everything new identifiers.",
+    400: "The address is malformed. Follow a link from inside the app "
+    "rather than editing the address bar.",
+    409: "The script changed since this page was loaded. Reopen it to "
+    "work against the current version.",
+}
+
+
+def _error_page(request: Request, status_code: int, message: str):
+    """Render the in-app error view for a page route."""
+    counts = None
+    if _sessions is not None:
+        try:
+            with _sessions() as session:
+                counts = sidebar_counts(session)
+        except Exception:
+            counts = None
+    return templates.TemplateResponse(
+        request,
+        "error.html",
+        {
+            "status_code": status_code,
+            "heading": ERROR_HEADINGS.get(status_code, "Something went wrong"),
+            "message": message,
+            "hint": ERROR_HINTS.get(status_code, "Start again from the library."),
+            "counts": counts,
+        },
+        status_code=status_code,
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(request: Request, error: StarletteHTTPException):
+    """API routes answer in JSON; page routes render an in-app error view.
+
+    A person following a stale bookmark to a page route should see the app
+    saying what happened and where to go, never a naked JSON body.
+    """
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            status_code=error.status_code, content={"detail": error.detail}
+        )
+    return _error_page(
+        request, error.status_code, str(error.detail or "The page can't be shown.")
+    )
+
+
+@app.exception_handler(Exception)
+async def unexpected_error_handler(request: Request, error: Exception):
+    """Anything unhandled still answers in the app's own voice.
+
+    Page routes render the error view; API routes answer JSON. The stack
+    trace goes to the server log, never to the browser.
+    """
+    logger.exception("unhandled error on %s", request.url.path)
+    message = (
+        "Something went wrong on the server. The details are in the "
+        "server log."
+    )
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(status_code=500, content={"detail": message})
+    return _error_page(request, 500, message)
 
 
 @app.exception_handler(ProviderError)
@@ -155,9 +294,63 @@ async def provider_error_handler(_request: Request, error: ProviderError):
     )
 
 
+def _actionable_error(code: str, message: str) -> str:
+    """A failure message with a next step appended when there is one.
+
+    Gemini's own model-listing endpoint carries no lifecycle field, so a model
+    KeyCall lists can still turn out to be dead on the account that owns the
+    key. KeyCall's `model_not_available` code is the live-call signal for that,
+    since the catalog cannot carry an account-specific entitlement problem.
+    """
+    if code == "model_not_available":
+        message += " Pick a different model in Settings."
+    return message
+
+
+@app.exception_handler(PreviewRefused)
+async def preview_refused_handler(_request: Request, error: PreviewRefused):
+    """A refusal is a user-fixable state: no model call was made or billed."""
+    return JSONResponse(
+        status_code=400, content={"code": error.code, "message": error.message}
+    )
+
+
+@app.exception_handler(PreviewFailed)
+async def preview_failed_handler(_request: Request, error: PreviewFailed):
+    """The judge call failed after retry. Nothing was persisted."""
+    return JSONResponse(
+        status_code=400,
+        content={
+            "code": error.code,
+            "message": _actionable_error(error.code, error.message),
+        },
+    )
+
+
+def _record_proposal_status(change_set_id: str | None, status: str | None) -> None:
+    """Persist a proposal status that a raise rolled back.
+
+    The service marks a proposal stale or failed and then raises; the
+    request's session rolls the mark back with everything else, so without
+    this the proposal stays pending forever. A fresh session re-applies the
+    one status write on its own.
+    """
+    if change_set_id is None or status is None or _sessions is None:
+        return
+    try:
+        with _sessions() as session:
+            change_set = session.get(ChangeSet, _uuid(change_set_id))
+            if change_set is not None and change_set.status == "pending":
+                change_set.status = status
+                session.commit()
+    except Exception:  # the status write must never mask the 4xx response
+        logger.exception("could not record proposal %s as %s", change_set_id, status)
+
+
 @app.exception_handler(changeset.StaleProposal)
 async def stale_handler(_request: Request, error: changeset.StaleProposal):
     """A stale proposal is a 409: the client must regenerate, not retry."""
+    _record_proposal_status(error.change_set_id, error.durable_status)
     return JSONResponse(
         status_code=409, content={"code": error.code, "message": error.message}
     )
@@ -167,6 +360,7 @@ async def stale_handler(_request: Request, error: changeset.StaleProposal):
 async def invalid_operation_handler(
     _request: Request, error: changeset.InvalidOperation
 ):
+    _record_proposal_status(error.change_set_id, error.durable_status)
     return JSONResponse(
         status_code=400, content={"code": error.code, "message": error.message}
     )
@@ -189,6 +383,7 @@ def sidebar_counts(session: Session) -> dict[str, int]:
         "queries": count(QueryLog),
         "entities": count(Entity),
         "assertions": count(Assertion, Assertion.active.is_(True)),
+        "model_calls": count(ModelCall),
     }
 
 
@@ -258,6 +453,7 @@ def library(
         "library.html",
         {
             "rows": rows,
+            "landing_view": get_landing_view(session),
             "counts": sidebar_counts(session),
             "active": {"review": "review", "recent": "recent"}.get(filter, "all"),
             "heading": {
@@ -285,10 +481,6 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
     if script is None:
         raise HTTPException(404, "No such script")
 
-    # Opening is what "Recently opened" means, so record it here rather than
-    # relying on updated_at, which moves on any write.
-    script.last_opened_at = datetime.now(UTC)
-
     _, model = settings_service.selected_model(session)
     page_total = script_pages(session, script.id)
     scenes = []
@@ -314,7 +506,7 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
                 # An unnumbered scene shows no number rather than a position.
                 # Intercut sub-scenes carry no number of their own, and
                 # substituting sequence_index + 1 invents one that collides
-                # with the real scene holding that number later in the script.
+                # with the scene that carries that number later in the script.
                 "number": scene.display_scene_number or "",
                 "heading": scene.heading,
                 "page": page_of(running),
@@ -358,8 +550,13 @@ def ask_page(
     request: Request, script: str | None = None, session: Session = Depends(get_session)
 ):
     """Grounded natural-language query over one script's accepted graph."""
-    chosen = session.get(Script, _uuid(script)) if script else None
-    if chosen is None:
+    if script:
+        chosen = session.get(Script, _uuid(script))
+        if chosen is None:
+            # A stale link names a script that is gone. Falling back to a
+            # different script would answer questions about the wrong one.
+            raise HTTPException(404, "No such script")
+    else:
         chosen = session.scalar(select(Script).order_by(Script.created_at.desc()))
     counts = sidebar_counts(session)
     return templates.TemplateResponse(
@@ -389,7 +586,7 @@ def ask_page(
                 if chosen
                 else 0
             ),
-            "lock": _graph_lock(session) if chosen else None,
+            "lock": _graph_lock(session, chosen.id) if chosen else None,
         },
     )
 
@@ -401,13 +598,18 @@ def _list_page(request, session, **kwargs):
     )
 
 
-def _graph_lock(session) -> dict[str, str] | None:
+def _graph_lock(session, script_id=None) -> dict[str, str] | None:
     """Why the graph pages are empty, when they are.
 
     An empty page with no explanation reads as a broken feature. Naming the
-    missing step, and linking to it, is the difference.
+    missing step, and linking to it, is the difference. Scoped to one script
+    when the page is: another script's graph existing does not explain this
+    script's empty canvas.
     """
-    if session.scalar(select(func.count()).select_from(Assertion)):
+    query = select(func.count()).select_from(Assertion)
+    if script_id is not None:
+        query = query.where(Assertion.script_id == script_id)
+    if session.scalar(query):
         return None
     _, model = settings_service.selected_model(session)
     if not model:
@@ -458,14 +660,30 @@ def reports_page(request: Request, session: Session = Depends(get_session)):
 
 
 @app.get("/findings")
-def findings_page(request: Request, session: Session = Depends(get_session)):
-    """Continuity findings across every script."""
-    rows = session.execute(
+def findings_page(
+    request: Request, script: str | None = None, session: Session = Depends(get_session)
+):
+    """Continuity findings, across every script or filtered to one.
+
+    The reader's findings chip links here with its script, so the notice
+    leads to the findings it counted.
+    """
+    chosen = None
+    if script:
+        chosen = session.get(Script, _uuid(script))
+        if chosen is None:
+            # Widening to every script here would show findings the link
+            # never pointed at, without saying so.
+            raise HTTPException(404, "No such script")
+    query = (
         select(ContinuityFinding, Script)
         .join(ChangeSet, ContinuityFinding.change_set_id == ChangeSet.id)
         .join(Script, ChangeSet.script_id == Script.id)
         .order_by(ContinuityFinding.created_at.desc())
-    ).all()
+    )
+    if chosen is not None:
+        query = query.where(ChangeSet.script_id == chosen.id)
+    rows = session.execute(query).all()
     items = [
         {
             "tag": finding.status,
@@ -482,6 +700,19 @@ def findings_page(request: Request, session: Session = Depends(get_session)):
                 else ""
             ),
             "right": finding.created_at.strftime("%d %b %H:%M"),
+            "actions": [
+                {"label": "Review", "href": f"/scripts/{script.id}"},
+                *(
+                    [
+                        {
+                            "label": "Dismiss",
+                            "url": f"/api/findings/{finding.id}/dismiss",
+                        }
+                    ]
+                    if finding.status == "open"
+                    else []
+                ),
+            ],
         }
         for finding, script in rows
     ]
@@ -490,11 +721,131 @@ def findings_page(request: Request, session: Session = Depends(get_session)):
         session,
         heading="Continuity findings",
         active="findings",
-        subtitle=f"{len(items)} finding(s) · warnings do not block a decision",
+        subtitle=f"{len(items)} finding(s)"
+        + (f" · {chosen.title}" if chosen is not None else "")
+        + " · warnings do not block a decision",
         items=items,
-        empty="No findings yet.",
+        empty=(
+            f"No findings for {chosen.title}." if chosen is not None
+            else "No findings yet."
+        ),
         lock=None,
     )
+
+
+@app.get("/traces")
+def traces_page(request: Request, session: Session = Depends(get_session)):
+    """Every recorded model call, newest first, with the spend ledger on top.
+
+    This is the application-data audit trail: full
+    prompts and replies live in `model_calls` and are deleted with their
+    script, distinct from TraceAct's redacted operational traces.
+    """
+    ledger = spend.summary(session)
+    budget = spend.get_budget(session)
+    rows = session.execute(
+        select(ModelCall, Script)
+        .outerjoin(Script, ModelCall.script_id == Script.id)
+        .order_by(ModelCall.created_at.desc())
+        .limit(200)
+    ).all()
+
+    def tokens_of(call: ModelCall) -> str:
+        if call.input_tokens is None and call.output_tokens is None:
+            return "no token counts"
+        return f"{call.input_tokens or 0} in · {call.output_tokens or 0} out"
+
+    items = [
+        {
+            "tag": call.outcome,
+            "tag_class": {
+                "ok": "set_design",
+                "cached": "set_design",
+                "budget_refused": "prop",
+            }.get(call.outcome, "stunt"),
+            "title": f"{call.purpose} · {call.model_id}",
+            "sub": " · ".join(
+                part
+                for part in (
+                    script.title if script else None,
+                    call.prompt_version,
+                    tokens_of(call),
+                    f"{call.duration_ms} ms" if call.duration_ms else None,
+                    call.error_message,
+                )
+                if part
+            ),
+            "right": call.created_at.strftime("%d %b %H:%M"),
+        }
+        for call, script in rows
+    ]
+    budget_note = (
+        f"budget {ledger.total_tokens:,} of {budget:,} tokens"
+        if budget
+        else "no budget cap set"
+    )
+    return _list_page(
+        request,
+        session,
+        heading="Traces",
+        active="traces",
+        subtitle=(
+            f"{ledger.calls} call(s) · {ledger.input_tokens:,} in · "
+            f"{ledger.output_tokens:,} out · {budget_note}"
+        ),
+        items=items,
+        empty="No model calls recorded yet. Every call is recorded here, "
+        "successes and refusals alike.",
+        lock=None,
+    )
+
+
+@app.get("/api/settings/budget")
+def get_budget(session: Session = Depends(get_session)):
+    """The token budget and the recorded spend it is measured against."""
+    ledger = spend.summary(session)
+    return {
+        "max_total_tokens": spend.get_budget(session),
+        "spent_tokens": ledger.total_tokens,
+        "calls": ledger.calls,
+        "by_purpose": ledger.by_purpose,
+    }
+
+
+@app.post("/api/settings/budget")
+def set_budget(
+    max_total_tokens: str = Form(""),
+    session: Session = Depends(get_session),
+):
+    """Set or clear the token budget. An empty value clears it."""
+    text = max_total_tokens.strip().replace(",", "")
+    if not text:
+        spend.set_budget(session, None)
+        return {"max_total_tokens": None}
+    try:
+        cap = int(text)
+    except ValueError:
+        raise HTTPException(
+            400, "The budget must be a whole number of tokens."
+        ) from None
+    if cap <= 0:
+        raise HTTPException(400, "The budget must be above zero.")
+    spend.set_budget(session, cap)
+    return {"max_total_tokens": cap}
+
+
+@app.post("/api/settings/landing")
+def choose_landing_view(
+    landing_view: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    """Persist where clicking a script in the library goes."""
+    if landing_view not in LANDING_VIEWS:
+        raise HTTPException(
+            400, f"The opening view must be one of: {', '.join(LANDING_VIEWS)}."
+        )
+    set_landing_view(session, landing_view)
+    return {"landing_view": landing_view}
 
 
 @app.get("/entities")
@@ -564,7 +915,7 @@ def assertions_page(request: Request, session: Session = Depends(get_session)):
             obj = labels.get(row.object_entity_id or row.object_scene_id, "?")
             items.append(
                 {
-                    "tag": row.predicate,
+                    "tag": row.predicate.replace("_", " "),
                     "tag_class": "location",
                     "title": f"{subject} → {obj}",
                     "sub": f"{script.title} · {row.provenance}"
@@ -588,6 +939,7 @@ def assertions_page(request: Request, session: Session = Depends(get_session)):
 def settings_page(request: Request, session: Session = Depends(get_session)):
     """Provider credentials and model selection."""
     provider, model = settings_service.selected_model(session)
+    _, fallback = settings_service.fallback_model(session)
     return templates.TemplateResponse(
         request,
         "settings.html",
@@ -595,7 +947,11 @@ def settings_page(request: Request, session: Session = Depends(get_session)):
             "statuses": settings_service.provider_statuses(),
             "selected_provider": provider,
             "selected_model": model,
+            "fallback_model": fallback,
             "counts": sidebar_counts(session),
+            "ledger": spend.summary(session),
+            "budget": spend.get_budget(session),
+            "landing_view": get_landing_view(session),
         },
     )
 
@@ -633,6 +989,20 @@ async def upload_script(
     }
 
 
+@app.post("/api/scripts/{script_id}/opened")
+def record_opened(script_id: str, session: Session = Depends(get_session)):
+    """Record that a person opened this script, for "Recently opened".
+
+    A POST from the page's own script rather than a side effect of the GET:
+    a prefetch or a crawler fetching the page must not reorder the list.
+    """
+    script = session.get(Script, _uuid(script_id))
+    if script is None:
+        raise HTTPException(404, "No such script")
+    script.last_opened_at = datetime.now(UTC)
+    return {"id": str(script.id)}
+
+
 @app.delete("/api/scripts/{script_id}")
 def remove_script(script_id: str, session: Session = Depends(get_session)):
     """Delete one script and everything under it."""
@@ -642,7 +1012,7 @@ def remove_script(script_id: str, session: Session = Depends(get_session)):
 
 @app.get("/api/scripts/{script_id}/deletion-preview")
 def preview_deletion(script_id: str, session: Session = Depends(get_session)):
-    """What deleting this script would remove. PRD section 9."""
+    """What deleting this script would remove, counted before anything is."""
     return deletion_preview(session, _uuid(script_id)).__dict__
 
 
@@ -790,7 +1160,7 @@ def unit_graph(
         ]
         if wanted and not any(t in wanted for t in types if t):
             continue
-        for (node_id, kind, _), entity_type in zip(ends, types):
+        for (node_id, kind, _), entity_type in zip(ends, types, strict=True):
             nodes.setdefault(
                 str(node_id),
                 {
@@ -811,7 +1181,7 @@ def unit_graph(
         )
 
     # The unit's own scene anchors the view even when nothing cites it yet, so
-    # an empty graph still shows where the selection sits.
+    # an empty graph still shows where the selection belongs.
     nodes.setdefault(
         str(scene.id),
         {
@@ -877,7 +1247,188 @@ def graph_page(request: Request, unit_id: str, session: Session = Depends(get_se
             ],
             "total_departments": len(DEPARTMENT_ORDER),
             "counts": sidebar_counts(session),
-            "lock": _graph_lock(session),
+            "lock": _graph_lock(session, script.id),
+        },
+    )
+
+
+# Script-level graph, the opening view for a script
+
+
+@app.get("/api/scripts/{script_id}/graph")
+def script_graph(
+    script_id: str,
+    min_confidence: float = 0.0,
+    departments: str | None = None,
+    session: Session = Depends(get_session),
+):
+    """The whole script's graph, with deterministic positions.
+
+    Every scene is on the spine whether or not anything cites it yet, so the
+    spine always shows the full script; entities come from the graph. Edges
+    ship in full and the client decides which to draw, so selecting a node
+    costs no request.
+    """
+    script = session.get(Script, _uuid(script_id))
+    if script is None:
+        raise HTTPException(404, "No such script")
+    labels = _labels(session, script.id)
+    wanted = set(departments.split(",")) if departments else None
+
+    nodes: dict[str, dict[str, Any]] = {}
+    for scene in session.scalars(
+        select(Scene)
+        .where(Scene.script_id == script.id)
+        .order_by(Scene.sequence_index)
+    ):
+        nodes[str(scene.id)] = {
+            "id": str(scene.id),
+            "label": labels.get(scene.id, "Scene"),
+            "kind": "scene",
+            "entity_type": None,
+        }
+
+    entity_types: dict[str, str] = {}
+    for entity in session.scalars(
+        select(Entity).where(Entity.script_id == script.id)
+    ):
+        entity_types[str(entity.id)] = entity.entity_type
+        if wanted and entity.entity_type not in wanted:
+            continue
+        nodes[str(entity.id)] = {
+            "id": str(entity.id),
+            "label": entity.canonical_name,
+            "kind": "entity",
+            "entity_type": entity.entity_type,
+        }
+
+    below = 0
+    links: list[dict[str, Any]] = []
+    for assertion in session.scalars(
+        select(Assertion).where(
+            Assertion.script_id == script.id, Assertion.active.is_(True)
+        )
+    ):
+        if assertion.confidence < min_confidence:
+            below += 1
+            continue
+        subject = str(assertion.subject_entity_id or assertion.subject_scene_id)
+        obj = str(assertion.object_entity_id or assertion.object_scene_id)
+        if subject not in nodes or obj not in nodes:
+            continue
+        links.append(
+            {
+                "source": subject,
+                "target": obj,
+                "predicate": assertion.predicate,
+                "confidence": round(assertion.confidence, 2),
+                "removed": False,
+            }
+        )
+
+    placed = script_layout(list(nodes.values()))
+    return {
+        "focus": None,
+        "nodes": [
+            {**nodes[p.id], "x": round(p.x, 4), "y": round(p.y, 4), "ring": p.ring}
+            for p in placed
+        ],
+        "links": links,
+        "departments": sorted(set(entity_types.values())),
+        "hidden_below_threshold": below,
+    }
+
+
+@app.get("/api/entities/{entity_id}/detail")
+def entity_detail(entity_id: str, session: Session = Depends(get_session)):
+    """Everything the graph knows about one entity, with its evidence."""
+    entity = session.get(Entity, _uuid(entity_id))
+    if entity is None:
+        raise HTTPException(404, "No such entity")
+    labels = _labels(session, entity.script_id)
+
+    assertions = list(
+        session.scalars(
+            select(Assertion).where(
+                Assertion.active.is_(True),
+                (Assertion.subject_entity_id == entity.id)
+                | (Assertion.object_entity_id == entity.id),
+            )
+        )
+    )
+    scene_numbers: list[str] = []
+    for assertion in assertions:
+        scene_id = assertion.subject_scene_id or assertion.object_scene_id
+        if scene_id is not None:
+            label = labels.get(scene_id, "?").removeprefix("Sc ")
+            if label not in scene_numbers:
+                scene_numbers.append(label)
+
+    def _snippet(unit_id) -> str:
+        unit = session.get(ScriptUnit, unit_id) if unit_id else None
+        if unit is None:
+            return ""
+        text = unit.current_text
+        return text if len(text) <= 140 else text[:137] + "…"
+
+    return {
+        "id": str(entity.id),
+        "name": entity.canonical_name,
+        "type": entity.entity_type,
+        "description": entity.description,
+        "aliases": sorted(a.alias for a in entity.aliases),
+        "attributes": [
+            {
+                "key": attribute.key,
+                "value": attribute.value,
+                "confidence": attribute.confidence,
+                "provenance": attribute.provenance,
+                "evidence": _snippet(attribute.source_unit_id),
+            }
+            for attribute in sorted(entity.attributes, key=lambda a: a.key)
+            if attribute.active
+        ],
+        "assertions": [
+            {
+                **_assertion_payload(assertion, labels),
+                "evidence": _snippet(assertion.source_unit_id),
+                "source_unit_id": str(assertion.source_unit_id),
+            }
+            for assertion in assertions
+        ],
+        "scenes": scene_numbers,
+    }
+
+
+@app.get("/scripts/{script_id}/graph")
+def script_graph_page(
+    request: Request, script_id: str, session: Session = Depends(get_session)
+):
+    """The script's graph as its opening view; the reader is the drill-down."""
+    script = session.get(Script, _uuid(script_id))
+    if script is None:
+        raise HTTPException(404, "No such script")
+
+    by_department = dict(
+        session.execute(
+            select(Entity.entity_type, func.count())
+            .where(Entity.script_id == script.id)
+            .group_by(Entity.entity_type)
+        ).all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "script_graph.html",
+        {
+            "script": script,
+            "departments": [
+                {"name": name, "count": by_department.get(name, 0)}
+                for name in DEPARTMENT_ORDER
+                if by_department.get(name)
+            ],
+            "total_departments": len(DEPARTMENT_ORDER),
+            "counts": sidebar_counts(session),
+            "lock": _graph_lock(session, script.id) if not by_department else None,
         },
     )
 
@@ -891,7 +1442,10 @@ def begin_extraction(script_id: str, session: Session = Depends(get_session)):
     provider_name, model_id = settings_service.selected_model(session)
     if not provider_name or not model_id:
         raise HTTPException(400, "Choose a provider and model in Settings first.")
-    run = start_run(session, _uuid(script_id), model_id)
+    try:
+        run = start_run(session, _uuid(script_id), model_id)
+    except ValueError:
+        raise HTTPException(404, "No such script") from None
     return progress(session, run.id).__dict__
 
 
@@ -904,21 +1458,30 @@ def extract_next(run_id: str, session: Session = Depends(get_session)):
     provider = get_provider(provider_name)
 
     job = claim_next_scene(session, _uuid(run_id))
-    if job is None:
-        return {"done": True, "progress": progress(session, _uuid(run_id)).__dict__}
-    outcome = extract_scene(session, job, provider)
-    session.commit()
-    return {
-        "done": False,
-        "scene": outcome.__dict__,
-        "progress": progress(session, _uuid(run_id)).__dict__,
-    }
+    try:
+        if job is None:
+            return {
+                "done": True,
+                "progress": progress(session, _uuid(run_id)).__dict__,
+            }
+        outcome = extract_scene(session, job, provider)
+        session.commit()
+        return {
+            "done": False,
+            "scene": outcome.__dict__,
+            "progress": progress(session, _uuid(run_id)).__dict__,
+        }
+    except ValueError:
+        raise HTTPException(404, "No such extraction run") from None
 
 
 @app.get("/api/extract/{run_id}/progress")
 def extraction_progress(run_id: str, session: Session = Depends(get_session)):
     """Current run progress."""
-    return progress(session, _uuid(run_id)).__dict__
+    try:
+        return progress(session, _uuid(run_id)).__dict__
+    except ValueError:
+        raise HTTPException(404, "No such extraction run") from None
 
 
 @app.get("/api/scripts/{script_id}/runs")
@@ -945,120 +1508,72 @@ def script_runs(script_id: str, session: Session = Depends(get_session)):
 # Ripple preview
 
 
-@app.post("/api/units/{unit_id}/preview")
-def preview_ripple(
-    unit_id: str,
-    proposed_text: str = Form(...),
-    session: Session = Depends(get_session),
-):
-    """Run the preview pipeline and record the proposal without applying it.
+FINDING_TITLES = {
+    "orphaned_reference": "Orphaned reference",
+    "continuity_conflict": "Continuity conflict",
+}
 
-    Stage order follows PRD section 8: extract the proposed side, diff in code,
-    retrieve continuity evidence, judge, synthesize. Timings are recorded per
-    stage because the preview is the demo's centrepiece and a slow stage should
-    be visible rather than inferred.
+
+def _finding_payload(finding) -> dict:
+    """One finding as the preview overlay renders it.
+
+    Handles both the fresh rows (citations attached in memory) and the
+    rebuild's stored rows (citations read from finding_evidence).
     """
-    import time
-
-    unit = session.get(ScriptUnit, _uuid(unit_id))
-    if unit is None:
-        raise HTTPException(404, "No such unit")
-    scene = session.get(Scene, unit.scene_id)
-    labels = _labels(session, scene.script_id)
-    stages: list[dict[str, Any]] = []
-
-    def stage(name: str, started: float) -> None:
-        stages.append(
-            {"name": name, "seconds": round(time.perf_counter() - started, 2)}
+    entity_label = getattr(finding, "entity_label", "") or ""
+    if entity_label:
+        title = f"Later units still reference {entity_label}"
+    else:
+        title = FINDING_TITLES.get(
+            getattr(finding, "finding_type", ""), "Continuity finding"
         )
-
-    mark = time.perf_counter()
-    accepted_rows = list(
-        session.scalars(
-            select(Assertion).where(
-                Assertion.source_unit_id == unit.id, Assertion.active.is_(True)
-            )
-        )
-    )
-    accepted = [_to_edge(session, row, labels) for row in accepted_rows]
-    stage("Parse unit", mark)
-
-    provider_name, model_id = settings_service.selected_model(session)
-    provider = get_provider(provider_name) if provider_name else None
-
-    mark = time.perf_counter()
-    proposed = _extract_proposed(
-        session, unit, scene, proposed_text, provider, model_id
-    )
-    stage("Extract assertions", mark)
-
-    mark = time.perf_counter()
-    diff = diff_edges(accepted, proposed)
-    stage(
-        f"Diff against base v{session.get(Script, scene.script_id).current_version}",
-        mark,
-    )
-
-    mark = time.perf_counter()
-    removed_establishes = [
-        (row.object_entity_id, labels.get(row.object_entity_id, "?"), row.id)
-        for row in accepted_rows
-        if row.predicate == "establishes"
-        and row.object_entity_id
-        and any(
-            edge.predicate == "establishes" and edge.assertion_id == str(row.id)
-            for edge in diff.removed
-        )
-    ]
-    orphans = detect_orphaned_references(session, scene.script_id, removed_establishes)
-    affected = [
-        row.object_entity_id or row.subject_entity_id
-        for row in accepted_rows
-        if row.object_entity_id or row.subject_entity_id
-    ]
-    packet = retrieve(session, scene.script_id, affected, scene.sequence_index)
-    stage("Continuity sweep", mark)
-
-    mark = time.perf_counter()
-    synthesis = synthesize(diff, orphans, provider, model_id)
-    stage("Synthesize", mark)
-
-    proposal = changeset.create_proposal(
-        session, unit.id, proposed_text, to_operations(diff)
-    )
-    proposal.severity = synthesis.severity
-    for orphan in orphans:
-        session.add(
-            ContinuityFinding(
-                change_set_id=proposal.id,
-                finding_type="orphaned_reference",
-                severity="high",
-                message=orphan.message,
-                status="open",
-            )
-        )
-    session.add(
-        RippleReport(
-            change_set_id=proposal.id,
-            summary=synthesis.summary,
-            severity=synthesis.severity,
-            model_id=synthesis.model_id,
-            prompt_version=synthesis.prompt_version,
-        )
-    )
-    session.flush()
-
-    anchor = unit.anchors[0] if unit.anchors else None
     return {
-        "change_set_id": str(proposal.id),
-        "unit_id": str(unit.id),
-        "scene_number": scene.display_scene_number or scene.sequence_index + 1,
-        "accepted_text": unit.current_text,
-        "proposed_text": proposed_text,
-        "severity": synthesis.severity,
-        "summary": synthesis.summary,
-        "summary_source": synthesis.source,
-        "model_id": synthesis.model_id,
+        "id": str(finding.id) if getattr(finding, "id", None) else None,
+        "severity": getattr(finding, "severity", "high"),
+        "title": title,
+        "message": finding.message,
+        "status": getattr(finding, "status", "open"),
+        "cited_units": [
+            str(unit_id) for unit_id in getattr(finding, "later_unit_ids", [])
+        ],
+        "scenes": getattr(finding, "later_scene_numbers", []),
+    }
+
+
+def _preview_payload(
+    session: Session, result: PreviewResult, model_id: str | None
+) -> dict[str, Any]:
+    """The response the preview page renders, from a PreviewResult."""
+    edits = []
+    for edit in result.edits:
+        edit_unit = session.get(ScriptUnit, _uuid(edit["unit_id"]))
+        edit_scene = session.get(Scene, edit_unit.scene_id)
+        edits.append(
+            {
+                **edit,
+                # An unnumbered scene shows a dash rather than its position,
+                # which would collide with a numbered scene elsewhere.
+                "scene_number": edit_scene.display_scene_number or "—",
+            }
+        )
+    first = edits[0]
+    unit = session.get(ScriptUnit, _uuid(first["unit_id"]))
+    anchor = unit.anchors[0] if unit.anchors else None
+    diff = result.diff
+    return {
+        "change_set_id": str(result.change_set.id),
+        "unit_id": first["unit_id"],
+        "scene_number": first["scene_number"],
+        "accepted_text": first["accepted_text"],
+        "proposed_text": first["proposed_text"],
+        "edits": edits,
+        "severity": result.severity,
+        "summary": result.summary,
+        "summary_source": "deterministic",
+        "model_id": model_id,
+        "cached": result.cached,
+        "extraction_error": None,
+        "synthesis_error": None,
         "diff": {
             "summary": diff.summary(),
             "operations": diff.operation_count,
@@ -1069,18 +1584,14 @@ def preview_ripple(
                 for b, a in diff.changed
             ],
         },
-        "findings": [
-            {
-                "severity": "high",
-                "title": f"Later units still reference {orphan.entity_label}",
-                "message": orphan.message,
-                "cited_units": orphan.later_unit_ids,
-                "scenes": orphan.later_scene_numbers,
-            }
-            for orphan in orphans
+        "attribute_changes": [
+            change.payload() for change in result.attribute_changes
         ],
-        "evidence_count": packet.total_items,
-        "pipeline": stages,
+        "findings": [_finding_payload(finding) for finding in result.findings],
+        "continuity_error": result.continuity_error,
+        "evidence_count": result.evidence_count,
+        "pipeline": result.stages,
+        "judgement": result.judgement.summary() if result.judgement else None,
         "origin": {
             "text": unit.current_text,
             "page": anchor.source_page_number if anchor else None,
@@ -1091,75 +1602,116 @@ def preview_ripple(
     }
 
 
-def _extract_proposed(
-    session: Session, unit, scene, proposed_text: str, provider, model_id
-) -> list[Edge]:
-    """Extract typed assertions from the proposed text.
+def _run_preview(
+    session: Session, edits: list[preview_service.UnitEdit]
+) -> dict[str, Any]:
+    provider_name, model_id = settings_service.selected_model(session)
+    provider = get_provider(provider_name) if provider_name else None
+    result = preview_service.preview_changes(session, edits, provider, model_id)
+    return _preview_payload(session, result, model_id)
 
-    With no provider the proposed side is empty, so the diff shows the removal
-    side only. That is honest rather than complete: the preview says which
-    assertions the edit drops, and says nothing about what replaces them.
+
+@app.post("/api/scripts/{script_id}/preview")
+def preview_script_changes(
+    script_id: str,
+    payload: dict[str, Any] = Body(...),
+    session: Session = Depends(get_session),
+):
+    """Preview any number of unit edits as one proposal.
+
+    The judgement engine runs once per affected scene, against the stored
+    graph.
     """
-    if provider is None or not model_id:
-        return []
-
-    from ripple.extraction.prompt import OUTPUT_SCHEMA, SYSTEM_PROMPT, build_prompt
-    from ripple.extraction.validate import MalformedResponse, validate_response
-
-    units = [(str(unit.id), unit.unit_type, proposed_text)]
-    prompt = build_prompt(scene.heading, scene.display_scene_number, units)
-    try:
-        result = provider.generate(
-            model_id,
-            prompt,
-            system=SYSTEM_PROMPT,
-            max_output_tokens=2048,
-            json_schema=OUTPUT_SCHEMA,
+    script = session.get(Script, _uuid(script_id))
+    if script is None:
+        raise HTTPException(404, "No such script")
+    raw_edits = payload.get("edits") or []
+    edits = [
+        preview_service.UnitEdit(
+            unit_id=str(edit.get("unit_id", "")),
+            proposed_text=str(edit.get("proposed_text", "")),
         )
-        report = validate_response(result.text, {str(unit.id)})
-    except (ProviderError, MalformedResponse) as error:
-        logger.info("proposed-side extraction failed: %s", error)
-        return []
+        for edit in raw_edits
+        if isinstance(edit, dict)
+    ]
+    return _run_preview(session, edits)
 
-    by_local = {entity.local_id: entity for entity in report.entities}
-    edges: list[Edge] = []
-    for assertion in report.assertions:
-        subject = _proposed_endpoint(
-            assertion.subject_kind, assertion.subject_local_id, by_local, scene
-        )
-        obj = _proposed_endpoint(
-            assertion.object_kind, assertion.object_local_id, by_local, scene
-        )
-        if subject is None or obj is None:
-            continue
-        edges.append(
-            Edge(
-                subject=subject,
-                predicate=assertion.predicate,
-                obj=obj,
-                confidence=assertion.confidence,
-                source_unit_id=str(unit.id),
-                display_subject=_display(subject, by_local, scene),
-                display_object=_display(obj, by_local, scene),
+
+@app.post("/api/units/{unit_id}/preview")
+def preview_ripple(
+    unit_id: str,
+    proposed_text: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    """Preview one unit's edit. The single-unit form of the same engine."""
+    unit = session.get(ScriptUnit, _uuid(unit_id))
+    if unit is None:
+        raise HTTPException(404, "No such unit")
+    return _run_preview(
+        session,
+        [preview_service.UnitEdit(unit_id=str(unit.id), proposed_text=proposed_text)],
+    )
+
+
+@app.post("/api/changes/{change_set_id}/explain")
+def explain_change(change_set_id: str, session: Session = Depends(get_session)):
+    """Write the model explanation for an existing preview, on demand.
+
+    Synthesis is a click rather than an automatic call: the deterministic
+    summary is free and always shown, so the model only writes prose when
+    someone asks for it.
+    """
+    change_set = session.get(ChangeSet, _uuid(change_set_id))
+    if change_set is None:
+        raise HTTPException(404, "No such change set")
+    report = session.scalar(
+        select(RippleReport).where(RippleReport.change_set_id == change_set.id)
+    )
+    if report is None:
+        raise HTTPException(404, "This proposal has no preview to explain")
+
+    diff = GraphDiff()
+    for operation in change_set.operations:
+        before = operation.before_json or {}
+        after = operation.after_json or {}
+        if operation.operation_type == "add_assertion":
+            diff.added.append(preview_service._edge_from_payload(after))
+        elif operation.operation_type == "remove_assertion":
+            diff.removed.append(preview_service._edge_from_payload(before))
+        elif operation.operation_type == "update_assertion":
+            diff.changed.append(
+                (
+                    preview_service._edge_from_payload(before),
+                    preview_service._edge_from_payload(after),
+                )
+            )
+    findings = list(
+        session.scalars(
+            select(ContinuityFinding).where(
+                ContinuityFinding.change_set_id == change_set.id,
+                ContinuityFinding.finding_type == "orphaned_reference",
             )
         )
-    return edges
+    )
 
+    provider_name, model_id = settings_service.selected_model(session)
+    provider = get_provider(provider_name) if provider_name else None
+    if provider is None or not model_id:
+        raise HTTPException(400, "No model is selected. Pick one in Settings.")
 
-def _proposed_endpoint(kind: str, local_id: str, by_local, scene) -> EdgeRef | None:
-    if kind == "scene":
-        return EdgeRef.scene(scene.id)
-    entity = by_local.get(local_id)
-    return EdgeRef.entity(entity.canonical_name, entity.entity_type) if entity else None
-
-
-def _display(ref: EdgeRef, by_local, scene) -> str:
-    if ref.kind == "scene":
-        return f"Sc {scene.display_scene_number or scene.sequence_index + 1}"
-    for entity in by_local.values():
-        if EdgeRef.entity(entity.canonical_name, entity.entity_type) == ref:
-            return entity.canonical_name
-    return ref.label
+    synthesis = synthesize(
+        diff, findings, provider, model_id, session, change_set.script_id
+    )
+    if synthesis.generated:
+        report.summary = synthesis.summary
+        report.model_id = synthesis.model_id
+        session.flush()
+    return {
+        "summary": synthesis.summary,
+        "source": synthesis.source,
+        "model_id": synthesis.model_id,
+        "error": synthesis.error,
+    }
 
 
 @app.post("/api/changes/{change_set_id}/accept")
@@ -1258,7 +1810,18 @@ def ask_graph(
 
     provider_name, model_id = settings_service.selected_model(session)
     provider = get_provider(provider_name) if provider_name else None
-    answer = answer_question(question, matched[:40], provider, model_id)
+    ensure_tracing()
+    with ActionTrace.start(action="graph.query", kind="query") as query_trace:
+        query_trace.input({"terms": len(terms), "matched": len(matched)})
+        answer = answer_question(
+            question, matched[:40], provider, model_id, session, script.id
+        )
+        query_trace.output(
+            {
+                "generated": answer.generated,
+                "cited": len(answer.cited_assertion_ids),
+            }
+        )
 
     session.add(
         QueryLog(
@@ -1328,14 +1891,21 @@ def forget_provider(provider: str):
 
 
 @app.get("/api/settings/models")
-def provider_models(provider: str):
-    """Selectable text-generation models for a configured provider."""
+def provider_models(provider: str, session: Session = Depends(get_session)):
+    """Selectable text-generation models for a configured provider.
+
+    `unavailable` marks a model a live call has found dead on this account.
+    The catalog cannot say this on its own, so the mark comes from recorded
+    call failures and clears when a later call succeeds.
+    """
+    dead = unavailable_models(session, provider)
     return [
         {
             "id": model.id,
             "display_name": model.display_name,
             "tier": model.tier.value,
             "context_window": model.context_window,
+            "unavailable": model.id in dead,
         }
         for model in settings_service.available_models(provider)
     ]
@@ -1352,6 +1922,21 @@ def choose_model(
     return {"provider": provider, "model_id": model_id}
 
 
+@app.post("/api/settings/fallback")
+def choose_fallback(
+    provider: str = Form(...),
+    model_id: str = Form(""),
+    session: Session = Depends(get_session),
+):
+    """Persist the fallback model. An empty model clears it.
+
+    The fallback answers a call the main model refused for an availability
+    reason: a dead model on this account, a provider outage, a rate limit.
+    """
+    settings_service.select_fallback(session, provider, model_id or None)
+    return {"provider": provider, "model_id": model_id or None}
+
+
 # Helpers
 
 
@@ -1366,18 +1951,7 @@ def _uuid(value: str):
 
 
 def _labels(session: Session, script_id) -> dict[Any, str]:
-    labels: dict[Any, str] = {}
-    for entity_id, name in session.execute(
-        select(Entity.id, Entity.canonical_name).where(Entity.script_id == script_id)
-    ):
-        labels[entity_id] = name
-    for scene_id, number, index in session.execute(
-        select(Scene.id, Scene.display_scene_number, Scene.sequence_index).where(
-            Scene.script_id == script_id
-        )
-    ):
-        labels[scene_id] = f"Sc {number or index + 1}"
-    return labels
+    return graph_labels(session, script_id)
 
 
 def _entity_type(session: Session, entity_id) -> str | None:
@@ -1397,37 +1971,6 @@ def _assertion_payload(assertion: Assertion, labels: dict[Any, str]) -> dict[str
         "evidence_start": assertion.evidence_start,
         "evidence_end": assertion.evidence_end,
     }
-
-
-def _to_edge(session: Session, assertion: Assertion, labels: dict[Any, str]) -> Edge:
-    """Turn a stored assertion into a diff-engine edge."""
-
-    def endpoint(entity_id, scene_id, kind) -> EdgeRef:
-        if kind == "scene":
-            return EdgeRef.scene(scene_id)
-        entity = session.get(Entity, entity_id)
-        return EdgeRef.entity(entity.canonical_name, entity.entity_type)
-
-    return Edge(
-        subject=endpoint(
-            assertion.subject_entity_id,
-            assertion.subject_scene_id,
-            assertion.subject_kind,
-        ),
-        predicate=assertion.predicate,
-        obj=endpoint(
-            assertion.object_entity_id, assertion.object_scene_id, assertion.object_kind
-        ),
-        confidence=assertion.confidence,
-        source_unit_id=str(assertion.source_unit_id),
-        assertion_id=str(assertion.id),
-        display_subject=labels.get(
-            assertion.subject_entity_id or assertion.subject_scene_id, "?"
-        ),
-        display_object=labels.get(
-            assertion.object_entity_id or assertion.object_scene_id, "?"
-        ),
-    )
 
 
 def _edge_payload(edge: Edge) -> dict[str, Any]:

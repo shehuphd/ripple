@@ -1,11 +1,11 @@
 """Shared contract every import adapter implements.
 
-PRD section 5 requires one contract across Fountain, Final Draft XML, PDF, and
+One contract covers Fountain, Final Draft XML, PDF, and
 plain text: detection, extraction, parsing, validation, and a shared typed
 result. Adapters return the types below and never write to the database; the
 import service owns persistence.
 
-Enumerated values here mirror Schema Lock v1. Changing one means changing the
+Enumerated values here mirror the database vocabularies. Changing one means changing the
 lock first.
 """
 
@@ -25,7 +25,7 @@ MAX_UNITS_PER_SCENE = 500
 
 
 class UnitType(str, Enum):
-    """Schema Lock v1 section 2."""
+    """The unit kinds a screenplay decomposes into."""
 
     SCENE_HEADING = "scene_heading"
     ACTION = "action"
@@ -38,7 +38,7 @@ class UnitType(str, Enum):
 
 
 class ParserMethod(str, Enum):
-    """Schema Lock v1 section 7."""
+    """How a unit's classification was decided."""
 
     FOUNTAIN = "fountain"
     FDX = "fdx"
@@ -58,7 +58,7 @@ class DetectedFormat(str, Enum):
 
 
 class ImportOutcome(str, Enum):
-    """PRD section 5."""
+    """What an import can conclude."""
 
     ACCEPTED = "accepted"
     ACCEPTED_WITH_WARNINGS = "accepted_with_warnings"
@@ -94,7 +94,7 @@ class SourceAnchor:
 
     Every field is optional because availability depends on the adapter:
     Fountain and plain text give character offsets, PDF gives page, block
-    index, and a bounding box. ERD section 2.
+    index, and a bounding box.
     """
 
     extraction_method: str
@@ -170,7 +170,7 @@ class ImportResult:
 class SourcePayload:
     """Raw upload plus the filename hint, which is a hint and not authority.
 
-    PRD section 5: file extensions are hints, not authority. `suggested_name`
+    File extensions are hints, not authority. `suggested_name`
     is carried so an adapter can break a tie between two equally plausible
     text formats, never to decide detection on its own.
     """

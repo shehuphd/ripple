@@ -2,8 +2,7 @@
 
 The model proposes; this module decides what is admissible. Everything it
 rejects is dropped with a recorded reason rather than repaired, because a
-repair pass is a second inference over an answer already known to be wrong, and
-Schema Lock v1 section 8 forbids it.
+repair pass is a second inference over an answer already known to be wrong.
 
 An invalid item never fails the whole scene. A scene that produced nine good
 assertions and one malformed one should keep the nine.
@@ -16,18 +15,31 @@ import logging
 from dataclasses import dataclass, field
 
 from ripple.db.models import ENTITY_TYPES
+from ripple.db.naming import normalize_key
 from ripple.extraction.prompt import MINIMUM_CONFIDENCE
 from ripple.graph.predicates import SignatureError, validate_edge
 
 logger = logging.getLogger(__name__)
 
-# Schema Lock v1 section 6. Below this an assertion is discarded at the
+# Below this an assertion is discarded at the
 # validation boundary and never written.
 DISCARD_BELOW = 0.5
 
 
 class MalformedResponse(ValueError):
     """The reply was not a JSON object of the expected shape."""
+
+
+@dataclass
+class ValidatedAttribute:
+    """One attribute the model proposed on an entity, after checking."""
+
+    key: str
+    value: str
+    source_unit_id: str
+    confidence: float
+    evidence_start: int | None = None
+    evidence_end: int | None = None
 
 
 @dataclass
@@ -40,6 +52,7 @@ class ValidatedEntity:
     aliases: list[str] = field(default_factory=list)
     description: str | None = None
     confidence: float = 1.0
+    attributes: list[ValidatedAttribute] = field(default_factory=list)
 
 
 @dataclass
@@ -91,7 +104,7 @@ def parse_response(text: str) -> dict:
 def validate_response(
     text: str, valid_unit_ids: set[str], scene_local_id: str = "scene"
 ) -> ValidationReport:
-    """Check a reply against Schema Lock v1 and return what is admissible.
+    """Check a reply against the schema rules and return what is admissible.
 
     `valid_unit_ids` is the set of units in the scene being extracted. An
     assertion citing anything else is dropped: an evidence pointer into a unit
@@ -108,7 +121,7 @@ def validate_response(
 
     by_local_id: dict[str, ValidatedEntity] = {}
     for item in entities_raw:
-        entity = _validate_entity(item, report)
+        entity = _validate_entity(item, valid_unit_ids, report)
         if entity is None:
             continue
         if entity.local_id in by_local_id:
@@ -144,7 +157,9 @@ def validate_response(
     return report
 
 
-def _validate_entity(item: object, report: ValidationReport) -> ValidatedEntity | None:
+def _validate_entity(
+    item: object, valid_unit_ids: set[str], report: ValidationReport
+) -> ValidatedEntity | None:
     """Check one proposed entity."""
     if not isinstance(item, dict):
         report.reject("entity", "not_an_object")
@@ -182,7 +197,62 @@ def _validate_entity(item: object, report: ValidationReport) -> ValidatedEntity 
         aliases=aliases,
         description=description.strip() if isinstance(description, str) else None,
         confidence=confidence,
+        attributes=_validate_attributes(
+            item.get("attributes"), valid_unit_ids, report
+        ),
     )
+
+
+def _validate_attributes(
+    raw: object, valid_unit_ids: set[str], report: ValidationReport
+) -> list[ValidatedAttribute]:
+    """Check an entity's proposed attributes. One bad row never drops the rest.
+
+    A model-provenance attribute must cite a unit that was shown, the same
+    fabrication rule assertions follow. Keys are normalized here so "Color"
+    and "color " cannot become two active rows for one fact.
+    """
+    if not isinstance(raw, list):
+        return []
+    kept: list[ValidatedAttribute] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            report.reject("attribute", "not_an_object")
+            continue
+        key = item.get("key")
+        value = item.get("value")
+        source_unit_id = item.get("source_unit_id")
+        if not isinstance(key, str) or not key.strip():
+            report.reject("attribute", "missing_key")
+            continue
+        if not isinstance(value, str) or not value.strip():
+            report.reject("attribute", "missing_value")
+            continue
+        if not isinstance(source_unit_id, str) or source_unit_id not in valid_unit_ids:
+            report.reject("attribute", "unknown_source_unit")
+            continue
+        confidence = _confidence(item.get("confidence"))
+        if confidence is None:
+            report.reject("attribute", "bad_confidence")
+            continue
+        normalized = normalize_key(key)
+        if normalized in seen:
+            report.reject("attribute", "duplicate_key")
+            continue
+        seen.add(normalized)
+        start, end = _evidence_span(item)
+        kept.append(
+            ValidatedAttribute(
+                key=normalized,
+                value=value.strip(),
+                source_unit_id=source_unit_id,
+                confidence=confidence,
+                evidence_start=start,
+                evidence_end=end,
+            )
+        )
+    return kept
 
 
 def _validate_assertion(
@@ -236,11 +306,7 @@ def _validate_assertion(
         report.reject("assertion", "signature_mismatch")
         return None
 
-    start, end = item.get("evidence_start"), item.get("evidence_end")
-    if not isinstance(start, int) or start < 0:
-        start = None
-    if not isinstance(end, int) or (start is not None and end < start):
-        end = None
+    start, end = _evidence_span(item)
 
     return ValidatedAssertion(
         subject_kind=subject_kind,
@@ -255,6 +321,26 @@ def _validate_assertion(
     )
 
 
+def _evidence_span(item: dict) -> tuple[int | None, int | None]:
+    """Both evidence offsets, or neither.
+
+    A half pair cannot address a span, and passing one side through makes
+    downstream slicing silently read from the start or to the end of the
+    unit. Order and sign are checked here; the upper bound is the caller's
+    to check once it holds the unit's text.
+    """
+    start, end = item.get("evidence_start"), item.get("evidence_end")
+    if (
+        isinstance(start, int)
+        and not isinstance(start, bool)
+        and isinstance(end, int)
+        and not isinstance(end, bool)
+        and 0 <= start <= end
+    ):
+        return start, end
+    return None, None
+
+
 class _Unresolved:
     """Sentinel for an endpoint that names nothing the model declared."""
 
@@ -267,7 +353,7 @@ def _endpoint_type(
     local_id: str,
     entities: dict[str, ValidatedEntity],
     scene_local_id: str,
-) -> str | None | _Unresolved:
+) -> str | _Unresolved | None:
     """The entity type of one endpoint, None for a scene, sentinel if unknown."""
     if kind == "scene":
         return None if local_id == scene_local_id else _UNRESOLVED

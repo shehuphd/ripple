@@ -4,7 +4,7 @@ No model identifier is hardcoded anywhere in this package. Each adapter lists
 models from its provider's own endpoint, because a name taken from memory or a
 naming pattern goes stale silently and only fails at runtime.
 
-PRD section 11 requires the picker to offer text-generation models and exclude
+The model picker offers text-generation models and excludes
 image, video, audio, speech-to-text, embedding, and realtime models. The
 filtering lives here so every provider applies the same rule.
 
@@ -38,11 +38,26 @@ class ProviderNotConfigured(ProviderError):
         )
 
 
+# Codes meaning the model or provider is unavailable right now, rather than
+# the request being wrong. A configured fallback model answers these; a
+# malformed or truncated reply is not an availability problem and never
+# fails over, since a different model would produce a different answer.
+AVAILABILITY_CODES = frozenset(
+    {
+        "model_not_available",
+        "provider_unavailable",
+        "rate_limited",
+        "timeout",
+        "network_error",
+    }
+)
+
+
 class Tier(str, Enum):
     """Rough cost tier, used to route work to the cheapest capable model.
 
     Assigned from the model identifier by each adapter, so it is a hint rather
-    than a guarantee. The PRD routes bulk extraction to CHEAP and reserves
+    than a guarantee. Bulk extraction routes to CHEAP; synthesis reserves
     STRONG for synthesis.
     """
 
@@ -67,8 +82,8 @@ class ModelInfo:
 class GenerationResult:
     """What a completed generation returns.
 
-    Token counts are recorded because PRD section 10 caps spend and section 12
-    traces token counts. A provider that does not report them leaves them None
+    Token counts are recorded because the spend cap and the audit trail
+    both read them. A provider that does not report them leaves them None
     rather than guessing.
     """
 
@@ -152,8 +167,12 @@ class LLMProvider(Protocol):
     def is_configured(self) -> bool:
         """True when a credential is present. Never returns the credential."""
 
-    def list_models(self) -> list[ModelInfo]:
-        """Text-generation models from the provider's own endpoint."""
+    def list_models(self, *, api_key: str | None = None) -> list[ModelInfo]:
+        """Text-generation models from the provider's own endpoint.
+
+        `api_key` checks a candidate credential without storing it anywhere,
+        including the process environment.
+        """
 
     def generate(
         self,

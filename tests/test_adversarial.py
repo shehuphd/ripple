@@ -150,7 +150,7 @@ class TestNotAScreenplay:
 
 
 class TestWrongExtension:
-    """Extensions are hints. Content decides. PRD section 5."""
+    """Extensions are hints. Content decides."""
 
     def test_fountain_named_as_pdf_is_still_fountain(self, night_freight_fountain):
         result = import_screenplay(night_freight_fountain, "mislabelled.pdf")

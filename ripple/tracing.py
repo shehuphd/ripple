@@ -1,6 +1,6 @@
 """TraceAct configuration for Ripple.
 
-PRD section 12 requires traced application actions and forbids recording
+Application actions are traced, and the traces must not record
 screenplay text, prompts, model responses, uploaded bytes, credentials,
 authorization headers, and raw filesystem paths.
 
@@ -26,7 +26,7 @@ DEFAULT_TRACE_DIR = Path("data/traces")
 TRACE_FILE_MAX_BYTES = 8 * 1024 * 1024
 
 # Field-name redaction layered on the always-on baseline. `ai_prompts` and the
-# security presets are the ones PRD section 12 names.
+# security presets cover what the traces must never carry.
 REDACTION = ("ai_prompts", "api_keys", "http", "filesystem_paths", "env_vars")
 
 _configured = False

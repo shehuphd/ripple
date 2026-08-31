@@ -1,4 +1,4 @@
-"""Predicate signatures from Schema Lock v1 section 4.
+"""The predicate signatures: which endpoint kinds and types each accepts.
 
 The database CHECK constraints enforce the structural half of an assertion:
 each side is kinded and holds precisely one key. They cannot enforce which
@@ -129,7 +129,7 @@ def validate_edge(
     signature = SIGNATURES.get(predicate)
     if signature is None:
         raise SignatureError(
-            f"{predicate!r} is not one of the nine predicates in Schema Lock v1."
+            f"{predicate!r} is not one of the nine defined predicates."
         )
 
     if subject_kind != signature.subject_kind.value:
@@ -170,7 +170,7 @@ def canonical_endpoints(
 
     `interacts_with` is symmetric, so A-with-B and B-with-A are one edge.
     Storing it twice would double every count and make the dedupe key useless.
-    Schema Lock v1 section 4 fixes the lower identifier as the subject.
+    The lower identifier is fixed as the subject.
 
     Endpoints are returned as they were passed, so a caller handing in UUIDs
     gets UUIDs back. Ordering compares their string forms, which is stable for

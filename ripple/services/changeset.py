@@ -1,12 +1,12 @@
 """The change-set service: atomic acceptance, rejection, and undo.
 
-ERD section 6. Accepting a proposal runs one transaction that checks base
+Accepting a proposal runs one transaction that checks base
 versions, resolves or creates entities, applies ordered operations, bumps
 versions, and marks the change set accepted. Any failure rolls the whole thing
 back; a stale base version marks the proposal stale rather than silently
 applying it to state it was not computed against.
 
-ERD section 8. Undo creates an inverse change set pointing at the original and
+Undo creates an inverse change set pointing at the original and
 applies it through this same path, so there is one code path that mutates
 accepted state. The original becomes `reverted`, never `rejected`: rejecting
 something is a decision not to apply it, and reverting is applying it and then
@@ -32,11 +32,12 @@ from ripple.db.models import (
     ChangeSetUnit,
     ContinuityFinding,
     Entity,
+    EntityAttribute,
     Scene,
     Script,
     ScriptUnit,
 )
-from ripple.db.naming import normalize
+from ripple.db.naming import normalize, normalize_key
 from ripple.graph.predicates import SignatureError, validate_edge
 from ripple.tracing import ensure_configured
 
@@ -48,25 +49,63 @@ INVERSE = {
     "remove_assertion": "add_assertion",
     "update_assertion": "update_assertion",
     "set_unit_text": "set_unit_text",
+    "remove_entity_attribute": "set_entity_attribute",
+    # Entities are never deleted as a side effect, so the
+    # inverse of creating one is the idempotent create, and an entity update
+    # inverts to an update with the sides swapped.
+    "create_entity": "create_entity",
+    "update_entity": "update_entity",
+    # set_entity_attribute inverts by shape: setting a fresh key inverts to a
+    # removal, updating an existing one inverts to a set with the sides
+    # swapped. _inverse_type below decides from the operation's before_json.
 }
 
 
-class StaleProposal(Exception):
-    """The proposal was computed against state that has since moved."""
+def _inverse_type(operation: ChangeOperation) -> str:
+    """The operation that undoes this one."""
+    if operation.operation_type == "set_entity_attribute":
+        return (
+            "set_entity_attribute" if operation.before_json else
+            "remove_entity_attribute"
+        )
+    return INVERSE[operation.operation_type]
 
-    def __init__(self, message: str) -> None:
+
+class StaleProposal(Exception):
+    """The proposal was computed against state that has since moved.
+
+    Raising unwinds the transaction, taking the in-session status write with
+    it, so the exception carries what the web layer needs to record the
+    status durably in a fresh session.
+    """
+
+    def __init__(self, message: str, change_set_id: str | None = None) -> None:
         super().__init__(message)
         self.code = "stale_proposal"
         self.message = message
+        self.change_set_id = change_set_id
+        self.durable_status = "stale"
 
 
 class InvalidOperation(Exception):
-    """An operation the schema lock does not permit."""
+    """An operation the schema lock does not permit.
 
-    def __init__(self, message: str) -> None:
+    `change_set_id` and `durable_status` are set when the failure should
+    change the proposal's recorded status; the raise rolls back any
+    in-session write, so the web layer re-applies it in a fresh session.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        change_set_id: str | None = None,
+        durable_status: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = "invalid_operation"
         self.message = message
+        self.change_set_id = change_set_id
+        self.durable_status = durable_status
 
 
 @dataclass(frozen=True)
@@ -90,48 +129,76 @@ def create_proposal(
     operations: list[dict[str, Any]],
     kind: str = "edit",
 ) -> ChangeSet:
-    """Record a proposal without applying any of it.
+    """Record a single-unit proposal without applying any of it."""
+    return create_multi_proposal(
+        session, [(unit_id, proposed_text)], operations, kind=kind
+    )
 
-    Base versions are captured now, so acceptance can tell whether the world
-    moved between preview and decision.
+
+def create_multi_proposal(
+    session: Session,
+    edits: list[tuple[Any, str]],
+    operations: list[dict[str, Any]],
+    kind: str | None = None,
+) -> ChangeSet:
+    """Record a proposal over any number of units, without applying any of it.
+
+    `edits` is (unit_id, proposed_text) pairs. Base versions are captured now,
+    so acceptance can tell whether the world moved between preview and
+    decision. Every edited unit gets its own `set_unit_text` operation, which
+    is what lets undo restore each unit's original wording.
     """
-    unit = session.get(ScriptUnit, unit_id)
-    if unit is None:
-        raise ValueError(f"no unit with id {unit_id}")
-    scene = session.get(Scene, unit.scene_id)
-    script = session.get(Script, scene.script_id)
+    if not edits:
+        raise ValueError("a proposal needs at least one edited unit")
+
+    units: list[tuple[ScriptUnit, str]] = []
+    script = None
+    for unit_id, proposed_text in edits:
+        unit = session.get(ScriptUnit, unit_id)
+        if unit is None:
+            raise ValueError(f"no unit with id {unit_id}")
+        scene = session.get(Scene, unit.scene_id)
+        unit_script = session.get(Script, scene.script_id)
+        if script is None:
+            script = unit_script
+        elif script.id != unit_script.id:
+            raise ValueError("a proposal cannot span two scripts")
+        units.append((unit, proposed_text))
 
     change_set = ChangeSet(
         script_id=script.id,
-        kind=kind,
+        kind=kind or ("edit" if len(units) == 1 else "multi_unit_edit"),
         status="pending",
         base_script_version=script.current_version,
     )
     session.add(change_set)
     session.flush()
 
-    session.add(
-        ChangeSetUnit(
-            change_set_id=change_set.id,
-            script_unit_id=unit.id,
-            base_unit_version=unit.current_version,
-            proposed_text=proposed_text,
+    text_operations: list[dict[str, Any]] = []
+    for unit, proposed_text in units:
+        session.add(
+            ChangeSetUnit(
+                change_set_id=change_set.id,
+                script_unit_id=unit.id,
+                base_unit_version=unit.current_version,
+                proposed_text=proposed_text,
+            )
         )
-    )
-    # The text change is an operation rather than a side effect of acceptance.
-    # An operation carries a before and an after, which is what lets undo put
-    # the original wording back; a ChangeSetUnit holds only the proposal.
-    operations = [
-        *operations,
-        {
-            "operation_type": "set_unit_text",
-            "target_type": "script_unit",
-            "target_id": str(unit.id),
-            "before_json": {"text": unit.current_text},
-            "after_json": {"text": proposed_text},
-        },
-    ]
-    for index, operation in enumerate(operations):
+        # The text change is an operation rather than a side effect of
+        # acceptance. An operation carries a before and an after, which is
+        # what lets undo put the original wording back; a ChangeSetUnit holds
+        # only the proposal.
+        text_operations.append(
+            {
+                "operation_type": "set_unit_text",
+                "target_type": "script_unit",
+                "target_id": str(unit.id),
+                "before_json": {"text": unit.current_text},
+                "after_json": {"text": proposed_text},
+            }
+        )
+
+    for index, operation in enumerate([*operations, *text_operations]):
         session.add(
             ChangeOperation(
                 change_set_id=change_set.id,
@@ -151,10 +218,13 @@ def accept(session: Session, change_set_id) -> AcceptanceResult:
     """Apply a proposal atomically.
 
     The caller commits. Every write here happens inside one transaction, so a
-    failure part-way leaves the accepted graph exactly as it was.
+    failure part-way leaves the accepted graph unchanged.
     """
     ensure_configured()
     with ActionTrace.start(action="ripple.accept", kind="change") as trace:
+        # Recorded before any check that can raise, so a failed acceptance
+        # still leaves a trace naming what was being accepted.
+        trace.input({"change_set_id": str(change_set_id)})
         change_set = _load(session, change_set_id)
         trace.set_meta("change_set", str(change_set.id))
 
@@ -223,12 +293,13 @@ def reject(session: Session, change_set_id, reason: str | None = None) -> Change
 def undo_latest(session: Session, unit_id) -> AcceptanceResult:
     """Undo the most recent accepted change affecting a unit.
 
-    Only the latest, per PRD section 4 step 10: undoing an older change while a
+    Only the latest: undoing an older change while a
     newer one touches the same unit would apply an inverse against state that
     change never saw.
     """
     ensure_configured()
     with ActionTrace.start(action="ripple.undo", kind="change") as trace:
+        trace.input({"unit_id": str(unit_id)})
         latest = session.scalar(
             select(ChangeSet)
             .join(ChangeSetUnit)
@@ -259,7 +330,7 @@ def undo_latest(session: Session, unit_id) -> AcceptanceResult:
                 ChangeOperation(
                     change_set_id=inverse.id,
                     sequence_index=index,
-                    operation_type=INVERSE[operation.operation_type],
+                    operation_type=_inverse_type(operation),
                     target_type=operation.target_type,
                     target_id=operation.target_id,
                     before_json=operation.after_json,
@@ -294,7 +365,7 @@ def _original_text(
     """The text a unit held before this change set was accepted.
 
     Taken from the change set's own `set_unit_text` operation when it has one,
-    so undo restores what was actually there rather than re-deriving it.
+    so undo restores what was there rather than re-deriving it.
     """
     for operation in change_set.operations:
         if (
@@ -328,18 +399,24 @@ def _check_versions(session: Session, change_set: ChangeSet, script: Script) -> 
         change_set.status = "stale"
         raise StaleProposal(
             f"The script moved from v{change_set.base_script_version} to "
-            f"v{script.current_version} since this preview. Regenerate it."
+            f"v{script.current_version} since this preview. Regenerate it.",
+            change_set_id=str(change_set.id),
         )
     for unit_link in change_set.units:
         unit = session.get(ScriptUnit, unit_link.script_unit_id)
         if unit is None:
             change_set.status = "failed"
-            raise InvalidOperation("A unit in this proposal no longer exists.")
+            raise InvalidOperation(
+                "A unit in this proposal no longer exists.",
+                change_set_id=str(change_set.id),
+                durable_status="failed",
+            )
         if unit.current_version != unit_link.base_unit_version:
             change_set.status = "stale"
             raise StaleProposal(
                 f"A unit moved from v{unit_link.base_unit_version} to "
-                f"v{unit.current_version} since this preview. Regenerate it."
+                f"v{unit.current_version} since this preview. Regenerate it.",
+                change_set_id=str(change_set.id),
             )
 
 
@@ -352,6 +429,8 @@ def _apply(session: Session, script: Script, operation: ChangeOperation) -> int:
         "set_unit_text": _set_unit_text,
         "create_entity": _create_entity,
         "update_entity": _update_entity,
+        "set_entity_attribute": _set_entity_attribute,
+        "remove_entity_attribute": _remove_entity_attribute,
     }.get(operation.operation_type)
     if handler is None:
         raise InvalidOperation(f"Unknown operation {operation.operation_type!r}.")
@@ -398,6 +477,19 @@ def _add_assertion(session: Session, script: Script, operation: ChangeOperation)
             session.flush()
             return 0
 
+    return _add_from_payload(session, script, operation)
+
+
+def _add_from_payload(
+    session: Session, script: Script, operation: ChangeOperation
+) -> int:
+    """Write the edge the operation's after_json describes.
+
+    Separate from _add_assertion because an update names the row it replaces
+    in target_id; routing an update through the reactivation fast-path above
+    would re-activate the row the update just deactivated and never read the
+    new edge at all.
+    """
     payload = operation.after_json or {}
     _validate_payload(payload)
     subject_id, created_a = _resolve_endpoint(
@@ -429,7 +521,7 @@ def _add_assertion(session: Session, script: Script, operation: ChangeOperation)
     )
 
     # An edge this evidence already supports may exist and be deactivated,
-    # which is exactly the state undo restores from. Reactivating that row
+    # which is the state undo restores from. Reactivating that row
     # rather than inserting a second one keeps the assertion's identity stable
     # across an undo, and avoids colliding with the dedupe index.
     duplicate = session.scalar(
@@ -464,7 +556,7 @@ def _remove_assertion(
 ) -> int:
     """Deactivate rather than delete, so history survives and undo can restore.
 
-    ERD section 3: an entity is never removed just because one assertion was;
+    An entity is never removed just because one assertion was;
     garbage collection is a separate decision with its own reference checks.
     """
     if operation.target_id is None:
@@ -485,7 +577,8 @@ def _update_assertion(
         existing = session.get(Assertion, operation.target_id)
         if existing is not None:
             existing.active = False
-    return _add_assertion(session, script, operation)
+            session.flush()
+    return _add_from_payload(session, script, operation)
 
 
 def _set_unit_text(
@@ -500,7 +593,12 @@ def _set_unit_text(
 
 
 def _create_entity(session: Session, script: Script, operation: ChangeOperation) -> int:
-    payload = operation.after_json or {}
+    # An undo swaps the sides, so the inverse create finds its payload in
+    # before_json. Entities are never deleted as a side effect, which is
+    # why the inverse of a create is the same idempotent create.
+    payload = operation.after_json or operation.before_json or {}
+    if not payload.get("canonical_name") or not payload.get("entity_type"):
+        raise InvalidOperation("A create_entity operation must name its entity.")
     _, created = _resolve_endpoint(
         session, script, "entity", payload["canonical_name"], payload["entity_type"]
     )
@@ -516,6 +614,90 @@ def _update_entity(
     payload = operation.after_json or {}
     if "description" in payload:
         entity.description = payload["description"]
+    session.flush()
+    return 0
+
+
+def _attribute_entity(
+    session: Session, script: Script, payload: dict[str, Any]
+) -> tuple[Any, int]:
+    """The entity an attribute operation targets, created when it is new."""
+    if payload.get("entity_id"):
+        entity = session.get(Entity, _as_uuid(payload["entity_id"]))
+        if entity is None:
+            raise InvalidOperation("The attribute's entity no longer exists.")
+        return entity.id, 0
+    if not payload.get("entity_ref") or not payload.get("entity_type"):
+        raise InvalidOperation("An attribute operation must name its entity.")
+    return _resolve_endpoint(
+        session, script, "entity", payload["entity_ref"], payload["entity_type"]
+    )
+
+
+def _set_entity_attribute(
+    session: Session, script: Script, operation: ChangeOperation
+) -> int:
+    """Set one attribute value, deactivating any value the key already holds.
+
+    History-preserving, mirroring assertions: the old row deactivates and a
+    new row carries the new value, so undo can restore the old one and the
+    audit trail keeps both.
+    """
+    payload = operation.after_json or {}
+    key = normalize_key(payload.get("key", ""))
+    value = payload.get("value")
+    if not key or value is None:
+        raise InvalidOperation("An attribute operation needs a key and a value.")
+    entity_id, created = _attribute_entity(session, script, payload)
+
+    current = session.scalar(
+        select(EntityAttribute).where(
+            EntityAttribute.entity_id == entity_id,
+            EntityAttribute.key == key,
+            EntityAttribute.active.is_(True),
+        )
+    )
+    if current is not None:
+        if current.value == value:
+            operation.target_id = current.id
+            session.flush()
+            return created
+        current.active = False
+
+    attribute = EntityAttribute(
+        entity_id=entity_id,
+        key=key,
+        value=value,
+        source_unit_id=_as_uuid(payload.get("source_unit_id")),
+        evidence_start=payload.get("evidence_start"),
+        evidence_end=payload.get("evidence_end"),
+        confidence=payload.get("confidence", 0.8),
+        provenance="accepted_change",
+    )
+    session.add(attribute)
+    session.flush()
+    # Recorded for the same reason _add_assertion records it: undo turns this
+    # into a removal, and a removal has to name what it removes.
+    operation.target_id = attribute.id
+    session.flush()
+    return created
+
+
+def _remove_entity_attribute(
+    session: Session, _script: Script, operation: ChangeOperation
+) -> int:
+    """Deactivate an attribute value, keeping the row for history and undo.
+
+    Undo of an update never reaches here: a set that displaced an old value
+    inverts to a set of that old value. Only a set that introduced a fresh
+    key inverts to this removal, naming the row the set recorded.
+    """
+    if operation.target_id is None:
+        raise InvalidOperation("A removal must name the attribute it removes.")
+    attribute = session.get(EntityAttribute, operation.target_id)
+    if attribute is None:
+        raise InvalidOperation("The attribute to remove no longer exists.")
+    attribute.active = False
     session.flush()
     return 0
 
@@ -565,6 +747,7 @@ __all__ = [
     "InvalidOperation",
     "StaleProposal",
     "accept",
+    "create_multi_proposal",
     "create_proposal",
     "reject",
     "undo_latest",

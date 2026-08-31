@@ -1,6 +1,6 @@
 """Canonical name normalization.
 
-Implements Schema Lock v1 section 5. Entity uniqueness is
+Entity uniqueness is
 `(script_id, entity_type, normalize(canonical_name))`, and `entity_aliases`
 uses the same function, so `THE BLUE SEDAN`, `the blue sedan`, and
 `Blue Sedan (2)` all resolve to one entity.
@@ -31,3 +31,13 @@ def normalize(name: str) -> str:
     text = TRAILING_PARENTHETICAL.sub("", text)
     text = LEADING_ARTICLE.sub("", text, count=1)
     return text.rstrip(TERMINAL_PUNCTUATION).strip()
+
+
+def normalize_key(key: str) -> str:
+    """Reduce an attribute key to its stored token.
+
+    NFKC, casefold, whitespace runs to a single
+    underscore. `Color`, ` color `, and `COLOR` are one key.
+    """
+    text = unicodedata.normalize("NFKC", key).casefold().strip()
+    return WHITESPACE.sub("_", text)

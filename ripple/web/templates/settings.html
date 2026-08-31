@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_nav.html" import sidebar %}
-{% block title %}Settings — Ripple{% endblock %}
+{% block title %}Settings · Ripple{% endblock %}
 {% block sidebar %}{{ sidebar(counts, 'settings') }}{% endblock %}
 
 {% block toolbar %}
@@ -10,41 +10,115 @@
 {% endblock %}
 
 {% block content %}
-<div class="cards">
-{% for status in statuses %}
-  <div class="card" data-provider="{{ status.provider }}">
-    <div class="hd">
-      <span class="status"><span class="dot {{ 'accepted' if status.configured
-        else 'needs_review' }}"></span></span>
-      <h2>{{ status.provider }}</h2>
-      {% if status.is_submission_provider %}
-        <span class="tag location">ships with the submission</span>
-      {% else %}
-        <span class="tag prop">development only</span>
-      {% endif %}
-      <span class="meta">{{ status.credential_variable }} ·
-        {{ status.source.replace('_',' ') }}</span>
-    </div>
-    <div class="setrow">
-      <input type="password" class="field key" placeholder="Paste a key to validate"
-             autocomplete="off" spellcheck="false">
-      <button class="btn validate">Validate</button>
-      <button class="btn pri save">Save</button>
-      {% if status.configured %}<button class="btn forget">Forget</button>{% endif %}
-    </div>
-    <div class="result tiny"></div>
-    <div class="models" style="margin-top:11px"></div>
-  </div>
-{% endfor %}
+<div class="settings-split">
+  <nav class="settings-rail" role="tablist" aria-label="Settings sections">
+    <button class="stab on" role="tab" data-tab="keys" id="tab-keys" aria-controls="pane-keys" aria-selected="true">
+      API keys</button>
+    <button class="stab" role="tab" data-tab="spend" id="tab-spend" aria-controls="pane-spend" aria-selected="false">
+      Spend</button>
+    <button class="stab" role="tab" data-tab="interface" id="tab-interface" aria-controls="pane-interface" aria-selected="false">
+      Interface</button>
+  </nav>
 
-  <div class="card">
-    <div class="hd"><h2>Active model</h2></div>
-    {% if selected_provider %}
-      <span class="tag location">{{ selected_provider }}</span>
-      <span class="mono">{{ selected_model }}</span>
-    {% else %}
-      <div class="empty">No model selected. Validate a provider, then pick one.</div>
-    {% endif %}
+  <div class="settings-panes">
+    <section class="cards" data-pane="keys" role="tabpanel" id="pane-keys" aria-labelledby="tab-keys" tabindex="0">
+    {% for status in statuses %}
+      <div class="card" data-provider="{{ status.provider }}">
+        <div class="hd">
+          <span class="status"><span class="dot {{ 'accepted' if status.configured
+            else 'needs_review' }}"></span></span>
+          <h2>{{ status.provider }}</h2>
+          <span class="meta">{{ status.credential_variable }} ·
+            {{ status.source.replace('_',' ') }}</span>
+        </div>
+        <div class="setrow">
+          <input type="password" class="field key" placeholder="Paste a key to validate"
+                 autocomplete="off" spellcheck="false">
+          <button class="btn validate">Validate</button>
+          <button class="btn pri save">Save</button>
+          {% if status.configured %}<button class="btn forget">Forget</button>{% endif %}
+        </div>
+        <div class="result tiny" aria-live="polite"></div>
+      </div>
+    {% endfor %}
+
+      <div class="card" id="models-card"
+           data-provider="{{ statuses[0].provider if statuses }}"
+           data-configured="{{ '1' if statuses and statuses[0].configured }}"
+           data-main="{{ selected_model or '' }}"
+           data-fallback="{{ fallback_model or '' }}">
+        <div class="hd"><h2>Models</h2>
+          <span class="meta">saved as soon as you pick</span></div>
+        {% if statuses and statuses[0].configured %}
+        <div class="tiny muted" style="margin-bottom:11px">
+          The main model handles every call. When it refuses for an
+          availability reason (dead on this key, provider outage, rate
+          limit), the fallback answers the same call, and the Traces page
+          records both attempts.</div>
+        <div class="setrow">
+          <label style="flex:0 0 110px" for="main-model">Main model</label>
+          <select class="field" id="main-model" disabled>
+            <option>Loading models…</option></select>
+        </div>
+        <div class="setrow" style="margin-top:9px">
+          <label style="flex:0 0 110px" for="fallback-model">Fallback</label>
+          <select class="field" id="fallback-model" disabled>
+            <option>Loading models…</option></select>
+        </div>
+        <div class="result tiny" aria-live="polite" id="models-result">
+          {% if selected_model %}Main: {{ selected_model }}{% if fallback_model %}
+            · fallback: {{ fallback_model }}{% else %} · no fallback set{% endif %}
+          {% else %}No model selected yet. Pick one to build graphs and judge
+            edits.{% endif %}</div>
+        {% else %}
+        <div class="empty">Enter your API key above, then pick a main and a
+          fallback model here.</div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="cards hide" data-pane="spend" role="tabpanel" id="pane-spend" aria-labelledby="tab-spend" tabindex="0">
+      <div class="card" id="budget-card">
+        <div class="hd"><h2>Spend</h2>
+          <span class="meta">
+            <a href="/traces">every call is in Traces</a></span></div>
+        <div class="tiny muted" id="ledger">
+          {{ ledger.calls }} recorded call(s) ·
+          {{ "{:,}".format(ledger.input_tokens) }} tokens in ·
+          {{ "{:,}".format(ledger.output_tokens) }} tokens out</div>
+        <div class="setrow" style="margin-top:11px">
+          <input type="text" class="field" id="budget-field" inputmode="numeric"
+                 placeholder="Token budget, blank for no cap"
+                 value="{{ budget if budget is not none else '' }}"
+                 autocomplete="off" spellcheck="false">
+          <button class="btn pri" id="budget-save">Set budget</button>
+        </div>
+        <div class="result tiny" aria-live="polite" id="budget-result">
+          {% if budget %}When the recorded total reaches the cap, every call is
+          refused before the provider is contacted, and the refusal is recorded.
+          {% else %}No cap set. Calls run whenever a model is selected.{% endif %}
+        </div>
+      </div>
+    </section>
+
+    <section class="cards hide" data-pane="interface" role="tabpanel" id="pane-interface" aria-labelledby="tab-interface" tabindex="0">
+      <div class="card" id="landing-card">
+        <div class="hd"><h2>Opening a script</h2>
+          <span class="meta">saved as soon as you pick</span></div>
+        <div class="tiny muted" style="margin-bottom:11px">
+          Where a script opens when you click it in the library. The other view
+          stays one click away either way.</div>
+        <label class="grow" style="cursor:pointer">
+          <input type="radio" name="landing" value="reader"
+                 {{ 'checked' if landing_view == 'reader' }}>
+          The script, ready to read and edit</label>
+        <label class="grow" style="cursor:pointer">
+          <input type="radio" name="landing" value="graph"
+                 {{ 'checked' if landing_view == 'graph' }}>
+          The production graph</label>
+        <div class="result tiny" aria-live="polite" id="landing-result"></div>
+      </div>
+    </section>
   </div>
 </div>
 {% endblock %}

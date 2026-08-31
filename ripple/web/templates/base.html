@@ -13,18 +13,19 @@
   <aside class="side">
     <div class="side-top">
       <div class="lights"><i class="l1"></i><i class="l2"></i><i class="l3"></i></div>
-      <a href="/" class="mark" title="Ripple"></a>
+      <a href="/" class="mark" data-tip="Library" aria-label="Ripple library"></a>
+      <span class="ver num" data-tip="Ripple version">v{{ app_version }}</span>
     </div>
     {% block sidebar %}{% endblock %}
   </aside>
 
   <div class="main">
     <div class="bar">
-      <button class="toggle" id="toggle-side" title="Show or hide the sidebar"
+      <button class="toggle" id="toggle-side" data-tip="Show or hide the sidebar"
               aria-label="Toggle sidebar">☰</button>
       <div class="nav">
-        <a href="javascript:history.back()" title="Back">‹</a>
-        <a href="javascript:history.forward()" title="Forward">›</a>
+        <a href="javascript:history.back()" data-tip="Back" aria-label="Back">‹</a>
+        <a href="javascript:history.forward()" data-tip="Forward" aria-label="Forward">›</a>
       </div>
       {% block toolbar %}{% endblock %}
     </div>

@@ -1,6 +1,6 @@
 """Does this document resemble a screenplay?
 
-PRD section 4 step 2 requires the importer to decide whether a document is a
+The importer decides whether a document is a
 screenplay at all and to explain the verdict. A parser will happily turn a
 novel, an invoice, or a mailing list archive into "action" units, so the check
 runs on the parse result rather than the raw text: structure is the evidence.

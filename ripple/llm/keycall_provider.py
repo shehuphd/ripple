@@ -45,21 +45,29 @@ class KeycallProvider:
         """True when a credential is in the environment."""
         return bool(os.environ.get(self.credential_variable, "").strip())
 
-    def _client(self) -> KeyCall:
-        """Build a client, or say which variable is missing."""
-        if not self.is_configured():
-            raise ProviderNotConfigured(self.name, self.credential_variable)
+    def _client(self, api_key: str | None = None) -> KeyCall:
+        """Build a client, or say which variable is missing.
+
+        `api_key` overrides the stored credential for this one client, which
+        is how a key under validation is checked without ever entering the
+        process environment: writing it to os.environ, even briefly, would
+        let a concurrent extraction read the wrong key.
+        """
+        if api_key is None:
+            if not self.is_configured():
+                raise ProviderNotConfigured(self.name, self.credential_variable)
+            api_key = os.environ[self.credential_variable]
         kwargs: dict[str, Any] = {
             "provider": self.name,
-            "api_key": os.environ[self.credential_variable],
+            "api_key": api_key,
         }
         if self.base_url:
             kwargs["base_url"] = self.base_url
         return KeyCall(**kwargs)
 
-    def list_models(self) -> list[ModelInfo]:
+    def list_models(self, *, api_key: str | None = None) -> list[ModelInfo]:
         """Text-generation models, read from the provider's own endpoint."""
-        with self._client() as client:
+        with self._client(api_key) as client:
             try:
                 discovery = client.list_models(refresh=True)
             except KeyCallError as error:
@@ -87,7 +95,7 @@ class KeycallProvider:
         max_output_tokens: int = 2048,
         json_schema: dict[str, Any] | None = None,
     ) -> GenerationResult:
-        """Generate text, using the provider's native structured output when a schema is given."""
+        """Generate text, with native structured output when a schema is given."""
         messages = []
         if system:
             messages.append(Message(role="system", content=[TextInput(text=system)]))

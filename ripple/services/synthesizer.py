@@ -1,6 +1,6 @@
 """The synthesizer and the grounded query, both constrained to retrieved data.
 
-PRD section 8: the synthesizer explains and prioritises a diff that application
+The synthesizer explains and prioritises a diff that application
 code already computed. It may not create operations the diff engine did not
 produce, so it never sees the screenplay, only the computed diff and the cited
 findings. Whatever it writes, the operations applied on acceptance are the ones
@@ -22,9 +22,87 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ripple.graph.diff import GraphDiff
-from ripple.llm.base import LLMProvider, ProviderError
+from ripple.llm.base import GenerationResult, LLMProvider, ProviderError
 
 logger = logging.getLogger(__name__)
+
+
+def _call_model(
+    provider: LLMProvider,
+    model_id: str,
+    prompt: str,
+    system: str,
+    max_output_tokens: int,
+    purpose: str,
+    prompt_version: str,
+    session=None,
+    script_id=None,
+) -> GenerationResult:
+    """One recorded generation, always audited and always budget-gated.
+
+    A session is required whenever a call is about to be made: a bare call
+    would be billed without an audit row and without the budget gate, and a
+    forgotten argument must not be able to produce that.
+    """
+    import time
+
+    if session is None:
+        raise ValueError(
+            "a model call needs a session for the audit row and the budget "
+            "gate; pass the request's session"
+        )
+
+    from ripple.db.models import ModelCall
+    from ripple.db.repository import get_fallback_model
+    from ripple.llm.base import AVAILABILITY_CODES
+    from ripple.services.spend import check_budget
+
+    call = ModelCall(
+        script_id=script_id,
+        purpose=purpose,
+        prompt_version=prompt_version,
+        model_id=model_id,
+        request_text=prompt,
+        outcome="ok",
+    )
+    check_budget(session, call)
+    started = time.perf_counter()
+    try:
+        result = provider.generate(
+            model_id, prompt, system=system, max_output_tokens=max_output_tokens
+        )
+    except ProviderError as error:
+        call.outcome = "provider_error"
+        call.error_message = error.message
+        call.duration_ms = int((time.perf_counter() - started) * 1000)
+        session.add(call)
+        session.flush()
+        _, fallback = get_fallback_model(session)
+        if (
+            fallback
+            and fallback != model_id
+            and error.code in AVAILABILITY_CODES
+        ):
+            logger.info("%s failing over to %s after %s", purpose, fallback, error.code)
+            return _call_model(
+                provider,
+                fallback,
+                prompt,
+                system,
+                max_output_tokens,
+                purpose,
+                prompt_version,
+                session,
+                script_id,
+            )
+        raise
+    call.response_text = result.text
+    call.input_tokens = result.input_tokens
+    call.output_tokens = result.output_tokens
+    call.duration_ms = int((time.perf_counter() - started) * 1000)
+    session.add(call)
+    session.flush()
+    return result
 
 SYNTHESIS_PROMPT_VERSION = "synthesize.v1"
 QUERY_PROMPT_VERSION = "query.v1"
@@ -65,6 +143,7 @@ class Synthesis:
     prompt_version: str = SYNTHESIS_PROMPT_VERSION
     grounded: bool = True
     generated: bool = False
+    error: str | None = None
 
     @property
     def source(self) -> str:
@@ -86,7 +165,7 @@ class GroundedAnswer:
 
 
 def severity_for(diff: GraphDiff, findings: list[Any]) -> str:
-    """Rank a proposal from what the diff and findings actually contain.
+    """Rank a proposal from what the diff and findings contain.
 
     Determined in code rather than asked of a model: severity drives whether a
     coordinator looks now or later, and it should not vary between two runs
@@ -134,6 +213,8 @@ def synthesize(
     findings: list[Any],
     provider: LLMProvider | None = None,
     model_id: str | None = None,
+    session=None,
+    script_id=None,
 ) -> Synthesis:
     """Explain a computed diff.
 
@@ -160,16 +241,32 @@ def synthesize(
         ],
     }
 
+    from ripple.services.spend import BudgetExceeded
+
     try:
-        result = provider.generate(
+        result = _call_model(
+            provider,
             model_id,
             json.dumps(payload, indent=2),
-            system=SYNTHESIS_SYSTEM,
-            max_output_tokens=400,
+            SYNTHESIS_SYSTEM,
+            400,
+            "synthesize",
+            SYNTHESIS_PROMPT_VERSION,
+            session,
+            script_id,
+        )
+    except BudgetExceeded as error:
+        return Synthesis(
+            summary=fallback, severity=severity, generated=False, error=error.message
         )
     except ProviderError as error:
         logger.info("synthesis failed, using the deterministic summary: %s", error.code)
-        return Synthesis(summary=fallback, severity=severity, generated=False)
+        message = error.message
+        if error.code == "model_not_available":
+            message += " Pick a different model in Settings."
+        return Synthesis(
+            summary=fallback, severity=severity, generated=False, error=message
+        )
 
     text = result.text.strip()
     if not text:
@@ -196,6 +293,8 @@ def answer_question(
     assertions: list[dict[str, Any]],
     provider: LLMProvider | None = None,
     model_id: str | None = None,
+    session=None,
+    script_id=None,
 ) -> GroundedAnswer:
     """Answer a question from accepted assertions only.
 
@@ -229,15 +328,23 @@ def answer_question(
             for a in assertions
         ],
     }
+    from ripple.services.spend import BudgetExceeded
+
     try:
-        result = provider.generate(
+        result = _call_model(
+            provider,
             model_id,
             json.dumps(payload, indent=2),
-            system=QUERY_SYSTEM,
-            max_output_tokens=600,
+            QUERY_SYSTEM,
+            600,
+            "query",
+            QUERY_PROMPT_VERSION,
+            session,
+            script_id,
         )
-    except ProviderError as error:
-        logger.info("query failed, using the deterministic answer: %s", error.code)
+    except (BudgetExceeded, ProviderError) as error:
+        code = getattr(error, "code", "budget_exceeded")
+        logger.info("query failed, using the deterministic answer: %s", code)
         return GroundedAnswer(
             answer=_deterministic_answer(assertions), cited_assertion_ids=cited_ids
         )

@@ -1,13 +1,13 @@
 """Continuity evidence retrieval, and the findings code can determine alone.
 
-ERD section 7: retrieval is deterministic. Given the entities a proposal
+Retrieval is deterministic. Given the entities a proposal
 changes, application code gathers earlier and later assertions, aliases, direct
 neighbours, and the units supporting them, ranks them, and hands a bounded
 packet to the continuity agent. The agent judges; it does not search.
 
 One finding needs no agent. If an edit removes the only `establishes` edge for
 an entity that later scenes still reference, that is arithmetic over the graph,
-not a judgement, and PRD section 4 step 9 requires the application to offer the
+not a judgement, and the application offers the
 user a choice about it. Determining it here means the warning survives a model
 being unavailable, slow, or wrong.
 """
@@ -23,12 +23,14 @@ from sqlalchemy.orm import Session
 
 from ripple.db.models import (
     Assertion,
+    ChangeSet,
     ContinuityFinding,
     Entity,
     EntityAlias,
     Scene,
     ScriptUnit,
 )
+from ripple.db.repository import graph_labels
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +95,9 @@ class EvidencePacket:
 
 def _item_payload(item: EvidenceItem) -> dict[str, Any]:
     return {
-        "scene": item.scene_number or str(item.scene_index + 1),
+        # An unnumbered scene is shown as unnumbered: substituting its
+        # position invents a number a numbered scene may already carry.
+        "scene": item.scene_number or "—",
         "unit_id": item.unit_id,
         "text": item.unit_text,
         "edge": f"{item.subject_label} {item.predicate} {item.object_label}",
@@ -164,7 +168,7 @@ def retrieve(
 ) -> EvidencePacket:
     """Gather bounded continuity evidence for a set of affected entities.
 
-    Ranking follows ERD section 7: exact entity match first, then a relevant
+    Ranking: exact entity match first, then a relevant
     predicate, then a direct graph neighbour, then script proximity. The cap
     removes the tail, so what survives is what a coordinator would look at
     first.
@@ -259,10 +263,17 @@ def retrieve(
     packet.later = [i for i in scored if i.scene_index >= origin_scene_index]
 
     packet.neighbours = _neighbours(session, script_id, entity_ids, labels)
+    # Findings hang off change sets, so scoping to this script goes through
+    # the change set's script_id: unscoped, another script's findings would
+    # enter this script's prompt.
     packet.open_findings = list(
         session.scalars(
             select(ContinuityFinding.message)
-            .where(ContinuityFinding.status == "open")
+            .join(ChangeSet, ContinuityFinding.change_set_id == ChangeSet.id)
+            .where(
+                ChangeSet.script_id == script_id,
+                ContinuityFinding.status == "open",
+            )
             .limit(10)
         )
     )
@@ -277,18 +288,7 @@ def _endpoint_key(assertion: Assertion, side: str) -> Any:
 
 def _label_map(session: Session, script_id) -> dict[Any, str]:
     """Display labels for every node in one script."""
-    labels: dict[Any, str] = {}
-    for entity_id, name in session.execute(
-        select(Entity.id, Entity.canonical_name).where(Entity.script_id == script_id)
-    ):
-        labels[entity_id] = name
-    for scene_id, number, index in session.execute(
-        select(Scene.id, Scene.display_scene_number, Scene.sequence_index).where(
-            Scene.script_id == script_id
-        )
-    ):
-        labels[scene_id] = f"Sc {number or index + 1}"
-    return labels
+    return graph_labels(session, script_id)
 
 
 def _neighbours(
@@ -321,6 +321,7 @@ def detect_orphaned_references(
     session: Session,
     script_id,
     removed_establishes: list[tuple[Any, str, Any]],
+    removed_assertion_ids: set[str] | None = None,
 ) -> list[OrphanedReference]:
     """Find entities a proposal would stop introducing but not stop using.
 
@@ -329,6 +330,14 @@ def detect_orphaned_references(
     convenience: a proposal is not applied yet, so the edge being removed is
     still in the table, and a check for "is it established elsewhere" that did
     not exclude it would always find it and never warn.
+
+    `removed_assertion_ids` is every assertion id the same diff removes,
+    across every predicate, not just `establishes`. A "use" this same edit
+    also removes is not a later reference: it's still `active` in the table
+    only because the proposal hasn't been applied yet, and without excluding
+    it here, an edit that drops an entity's only establishing line and its
+    only use in one unit warns about itself, citing the unit being edited as
+    if it were a surviving later reference.
 
     Deterministic on purpose. This is the warning the demo turns on, and it has
     to hold when the continuity agent is unavailable, slow, or wrong.
@@ -346,10 +355,19 @@ def detect_orphaned_references(
     removed_ids = {
         assertion_id for _, _, assertion_id in removed_establishes if assertion_id
     }
+    also_removed = {str(i) for i in (removed_assertion_ids or ())}
 
-    for entity_id, label, _ in removed_establishes:
-        surviving = list(
-            session.scalars(
+    # An entry with no assertion id claims a removal it cannot name, so the
+    # exclusion below cannot work for it: the still-present edge would be
+    # found as "established elsewhere" or not, on data the caller did not
+    # state. The contract in the docstring makes the id required; an entry
+    # without one is dropped rather than half-checked.
+    named = [entry for entry in removed_establishes if entry[2] is not None]
+
+    for entity_id, label, _ in named:
+        surviving = [
+            assertion
+            for assertion in session.scalars(
                 select(Assertion).where(
                     Assertion.script_id == script_id,
                     Assertion.active.is_(True),
@@ -360,7 +378,8 @@ def detect_orphaned_references(
                     ),
                 )
             )
-        )
+            if str(assertion.id) not in also_removed
+        ]
         # Another establishing edge, excluding the ones this proposal removes,
         # means the entity is still introduced and there is nothing to warn
         # about.
@@ -382,8 +401,9 @@ def detect_orphaned_references(
             scene_id = _assertion_scene(assertion, unit_scene)
             if scene_id not in scene_order:
                 continue
-            index, number = scene_order[scene_id]
-            display = number or str(index + 1)
+            _, number = scene_order[scene_id]
+            # Unnumbered scenes show as unnumbered rather than by position.
+            display = number or "—"
             if display not in numbers:
                 numbers.append(display)
             unit_ids.append(str(assertion.source_unit_id))

@@ -1,35 +1,202 @@
-# Ripple: usage
+# Ripple: Usage
 
-## The import contract
+Ripple treats a screenplay as a production database. You import a script, build a graph of production entities and evidence-backed assertions from it, then edit lines and see the downstream production and continuity impact before anything is applied. This manual walks through the application in the order you'll use it, then covers the import formats, the error codes, and the developer tools.
 
-Every format goes through one contract in `ripple/adapters/base.py`: detect, extract, parse, validate, return a shared typed result. Adapters return data and never write to the database.
+## Starting Ripple
 
-```
-SourcePayload(data: bytes, suggested_name: str)
-        │
-        ├─ detect_format() ──► DetectedFormat + confidence
-        │
-        ├─ adapter.parse() ──► list[ParsedScene], list[ImportWarning]
-        │
-        ├─ screenplay_check.assess() ──► ScreenplayVerdict
-        │
-        └─ ImportResult(outcome, scenes, warnings, rejection_code)
+```bash
+./launch.command
 ```
 
-### Types
+The launcher stops any Ripple server already running, verifies Python 3.11 or newer, creates or repairs its own virtual environment in `tools/.venv`, installs the package, starts the server on the first free port from 8420, and opens a browser. Run it again at any time; you always get one fresh instance.
 
-| Type | Holds |
+```bash
+./launch.command --test
+```
+
+runs the test suite instead of the server, forwarding any extra arguments to pytest.
+
+| Environment variable | Effect |
 |---|---|
-| `ParsedScene` | `sequence_index`, `heading`, `display_scene_number`, `int_ext`, `time_of_day`, `units` |
-| `ParsedUnit` | `unit_type`, `sequence_index`, `text`, `parser_method`, `parser_confidence`, `speaker_name`, `anchor` |
-| `SourceAnchor` | `extraction_method`, and whichever of `page_number`, `block_index`, `start_offset`, `end_offset`, `bounding_box` the adapter can supply |
-| `ImportWarning` | `code`, `message`, `scene_index` |
+| `RIPPLE_PORT` | First port to try instead of 8420. |
+| `DATABASE_URL` | PostgreSQL connection string instead of the local SQLite file. |
+| `RIPPLE_SECRETS_PATH` | Alternate location for the local credential file. |
+| `RIPPLE_TRACING=off` | Disables TraceAct trace writing. |
 
-`display_scene_number` is a string because production revisions produce lettered numbers such as `12A`. It is presentation state, never identity.
+On first run the library seeds three bundled demo screenplays, each with its ground-truth production graph already built, so every feature is explorable before you configure a model.
+
+## The library
+
+The library lists every imported script with its format, page count, scene count, estimated runtime, and import outcome. The sidebar filters to recently opened scripts and to imports that need review.
+
+**Import** accepts Fountain, Final Draft XML, PDF, and plain text. Detection reads the file's content; the extension only breaks ties between text formats. Every import ends in one of four outcomes:
+
+| Outcome | Meaning |
+|---|---|
+| `accepted` | Parsed with no findings. |
+| `accepted_with_warnings` | Parsed, with non-blocking findings recorded. |
+| `needs_review` | Parsed, but structure was inferred rather than read (OCR, no indentation, weak signal). |
+| `rejected` | Not importable; the rejection code says why. |
+
+A rejected import changes nothing. Deleting a script first shows a deletion preview counting everything that goes with it: scenes, units, entities, assertions, findings, and traces.
+
+## Settings
+
+Open **Settings** from the sidebar. It has three tabs.
+
+**API keys** holds the provider credential and the model choice. Paste a Google AI Studio key and press Validate; the key is checked against the provider's own models endpoint, never against a guessed format, so any key Google issues works. A valid key is stored in `data/secrets.env` (owner-only file permissions), never in the database and never sent back to the browser. Then pick a **main model** and, optionally, a **fallback model**. When the main model refuses for an availability reason (dead on this key, an outage, a rate limit, a timeout), the same call runs once against the fallback. A model recorded as unavailable on your key is disabled in the picker until a later call succeeds on it.
+
+**Spend** shows the recorded model spend (calls, tokens in, tokens out, by purpose) and takes one number: a cap on total recorded tokens. When the recorded total reaches the cap, every model call refuses before contacting the provider and tells you so. Raising or clearing the cap reopens the gate.
+
+**Interface** chooses what opening a script shows first: the production graph (the default) or the reader.
+
+## Building a graph
+
+Open a script and press **Build graph**. Extraction runs one scene per model call, in the browser's control: each scene commits independently, so a failure late in a run keeps everything before it, and re-running resumes from the unfinished scenes instead of restarting. A scene already extracted from identical input under the same prompt and model is served from the cache with no call and no spend.
+
+A run ends in one of three states:
+
+| Status | Meaning |
+|---|---|
+| `ready` | Every scene completed. |
+| `partially_ready` | Some scenes completed, some failed. Re-run to retry the failures. |
+| `failed` | No scene completed. |
+
+Extraction reads entities (cast, props, wardrobe, locations, and the other departments), their aliases, typed attributes (`color: emerald`, cited to the line that states it), and assertions: evidence-backed edges such as MARA `wears` the emerald gown in scene 12. Model output is validated before any row is written; an assertion citing a line the model was never shown, violating a predicate signature, or falling below the confidence floor is dropped with a recorded reason.
+
+## The graph views
+
+Opening a script shows its production graph: every scene on a two-row spine in script order, every entity in a fixed wedge for its department. Filters narrow by department and minimum confidence.
+
+- **Select** a node by clicking it or through the search box; everything unrelated dims, the node's edges draw, and the detail pane fills. Clicking the selected node again, or pressing Escape, deselects.
+- **Zoom and pan** with the mouse wheel, dragging, the on-canvas controls, or the keyboard (arrows pan, `+` and `-` zoom, `0` resets) when the canvas has focus.
+- **Search** filters live over every node label; picking a result selects it and centres the view on it.
+
+An entity's detail card shows its type, description, aliases, attributes with their evidence lines, every assertion it participates in, and the scenes it spans. The **expanded view** (`Open` from the detail pane) adds depth control, a removed-edge overlay, and per-department filters for one node's neighbourhood.
+
+Edges are drawn by predicate family, so the line style says the same thing the label does: solid for presence, dotted for handling, amber dashes for `requires`, an accent dash for `establishes`, and a wide band for `interacts_with`. The legend on the canvas shows each family.
+
+## Editing and the ripple preview
+
+In the reader, every line is editable in place. Typing marks the line "edited, not applied" in amber; the toolbar counts unapplied edits; Escape reverts a line and **Revert edits** discards them all. Drafts live only in the page. The accepted script does not change until you accept a ripple.
+
+**See ripple** sends every drafted line as one proposal. The engine judges each affected scene in one model call, plus one continuity call per preview: the model is shown the stored assertions and attributes those lines support, each with its evidence, and returns a verdict per item: `holds`, `changed`, or `removed`, plus any new items with cited evidence. Every verdict is verified in code before anything persists; a reply that skips a listed item fails the preview rather than guessing.
+
+The preview overlay shows the accepted and proposed text side by side with the changed words highlighted, the graph diff, attribute changes, continuity findings, per-stage timings, and a deterministic summary. **Explain** asks the model for prose on demand; the summary itself never costs a call. **Accept** applies the whole proposal atomically, with a base-version check so an edit made against stale text is refused as `stale` rather than applied. **Reject** discards it and changes nothing.
+
+A repeat of a pending proposal with the same lines and texts is rebuilt from the stored result with no model call, and the overlay says so. Undo (one level, latest change set only) restores the previous state through an inverse change set; the undone original is recorded as `reverted`.
+
+The preview refuses, before any model contact, with one of these codes:
+
+| Code | Cause | Fix |
+|---|---|---|
+| `no_change` | Nothing differs from the accepted text. | Edit a line first. |
+| `unknown_unit` | An edited line no longer exists. | Reload the reader. |
+| `cross_script` | One proposal spans two scripts. | Propose per script. |
+| `no_baseline` | No graph exists for this script. | Build the graph first. |
+| `no_model` | No model is selected. | Pick one in Settings. |
+| `budget_exceeded` | The token budget is spent. | Raise or clear it in Settings. |
+
+A preview that fails after model contact persists nothing except its audit record:
+
+| Code | Cause |
+|---|---|
+| `output_truncated` | The reply was cut off before it finished. |
+| `malformed_response` | The reply was not valid against the judgement schema. |
+| `incomplete_judgement` | The reply skipped listed items; treating them as unchanged would be a guess. |
+| `model_not_available` and other provider codes | The provider refused the call; the message carries the provider's reason and a next step. |
+
+Retryable provider errors are retried once, and a retried preview replays already-judged scenes from their recorded replies at no cost.
+
+## Continuity findings
+
+Findings are evidence-backed warnings about a proposal's effect on other scenes, and they come from two places. One is computed with no model at all: removing the only line that establishes an entity while later scenes still reference it. The rest come from a continuity judgement, one model call per preview: the model is handed the edit, the graph changes, and a bounded packet of earlier and later facts about the affected entities, each with the line that states it, and reports the conflicts the edit creates. A reported conflict is kept only when it cites evidence the model was shown, and it carries its own severity. The pass is advisory: when its call fails, the preview stands on the deterministic findings and a banner says so.
+
+Findings appear in the preview overlay, where Review units jumps to the cited lines and Dismiss records a dismissal, and on the **Continuity findings** page, filtered per script.
+
+## Ask the graph
+
+**Ask the graph** answers natural-language questions from accepted assertions only. Every answer records which assertion ids it was allowed to use, and with no model configured it falls back to listing the matching assertions.
+
+## Reports, entities, assertions, and traces
+
+- **Ripple reports** lists every preview's stored report.
+- **Entities** and **Assertions** list the graph row by row, with evidence.
+- **Traces** lists every model call, newest first: purpose, model, token counts, duration, and outcome, with the spend ledger in the header. Rows are application data, deleted with their script.
+
+| Trace outcome | Meaning |
+|---|---|
+| `ok` | The call completed and validated. |
+| `cached` | Replayed from an identical earlier call; zero tokens. |
+| `truncated` | The reply was cut off. |
+| `malformed` | The reply failed validation. |
+| `incomplete` | The reply skipped listed items. |
+| `provider_error` | The provider refused the call. |
+| `budget_refused` | Refused before contact; the budget was spent. No tokens. |
+
+## Import formats
+
+| | Fountain | Final Draft XML | PDF | Plain text |
+|---|---|---|---|---|
+| Element types | Read from markup | Read from `Paragraph Type` | Inferred from position | Inferred from indentation |
+| Scene numbers | `#N#` markers | `Number` attribute | Margin-printed numbers | Trailing `#N#` if present |
+| Provenance | Character offsets | Block index | Page, block index, bounding box | Character offsets |
+| Notes | Parsed as `note` units | Not present | Not present | Not present |
+
+### PDF
+
+Text-based PDFs are read locally with no network calls and no models. Layout rules measure the page's own left margin, then classify blocks by their offset from it, so a script typeset at any margin parses the same way. Blocks split on vertical space, a page break, or a horizontal shift; the shift rule is what separates a character cue, its parenthetical, and its dialogue, which fall on consecutive lines with only their left edge to tell them apart.
+
+A scanned PDF is rasterised with `pdftoppm` and read with `tesseract`, both as local subprocesses. No bytes leave the machine and nothing is written to disk. If either binary is absent the import is rejected with `ocr_unavailable`, naming what is missing. OCR-derived imports are always `needs_review`.
+
+### Security
+
+Final Draft XML is parsed through `defusedxml`; external entities and entity expansion are refused with `xml_unsafe`. Uploads over 8 MiB are rejected before any parser runs. Scene and unit counts are capped, and truncation is reported as a warning rather than applied silently.
+
+### Rejection codes
+
+| Code | Cause |
+|---|---|
+| `payload_too_large` | Over the 8 MiB upload ceiling. |
+| `undecodable_text` | Not UTF-8, UTF-16, UTF-32, or Windows-1252. |
+| `empty_document` | The file contains no text. |
+| `unsupported_format` | Not one of the four supported formats. |
+| `no_scenes` | Parsed, but no scene headings were found. |
+| `not_a_screenplay` | Parsed, but the structure is not a screenplay's. |
+| `xml_malformed` | Not well-formed XML. |
+| `xml_unsafe` | External entities or entity expansion. |
+| `fdx_wrong_root` | XML root is not `<FinalDraft>`. |
+| `fdx_no_content` | No `<Content>` element. |
+| `pdf_unreadable` | Encrypted or damaged PDF. |
+| `pdf_no_text` | No text extracted. |
+| `ocr_unavailable` | Scanned PDF with no local OCR toolchain. |
+| `ocr_timeout` / `ocr_failed` | OCR ran and did not finish, or failed. |
+| `pdf_backend_missing` | `pdf-inspector` not installed. |
+
+## Tracing and debugging
+
+Meaningful actions (import, extraction, preview, accept, undo, query) are traced with TraceAct to `data/traces/traces.jsonl`. Automatic argument capture is off and redaction presets cover prompts, keys, HTTP, paths, and environment variables, so screenplay text, filenames, and uploaded bytes never reach a trace. These operational traces are separate from the Traces page, which is the application's own model-call audit.
+
+In the browser, `ripple.debug()` in the console dumps the frontend decision log (API outcomes, preview results, draft transitions, settings changes), `ripple.debug('preview')` filters it, and `ripple.debug.table()` renders it as a table.
+
+## Developer reference
+
+### Programmatic import
+
+```python
+from ripple.adapters import import_screenplay
+
+result = import_screenplay(open("script.fountain", "rb").read(), "script.fountain")
+print(result.outcome, result.scene_count, result.unit_count)
+for warning in result.warnings:
+    print(warning.code, warning.message)
+```
+
+`import_screenplay` never raises for bad input; anything unparseable returns a rejected result with a stable code.
 
 ### Adding an adapter
 
-Implement the `ImportAdapter` protocol and register it in `ADAPTERS`:
+Implement the `ImportAdapter` protocol in `ripple/adapters/base.py` and register it in `ADAPTERS`:
 
 ```python
 class MyAdapter:
@@ -40,59 +207,18 @@ class MyAdapter:
     def parse(self, payload: SourcePayload) -> tuple[list[ParsedScene], list[ImportWarning]]: ...
 ```
 
-`parse` raises `ImportRejected(code, message)` for anything unparseable. The entry point converts it to a rejected result; nothing should propagate to the caller.
+`parse` raises `ImportRejected(code, message)` for anything unparseable; the entry point converts it to a rejected result.
 
-## Per-format behaviour
+### Demo corpus
 
-| | Fountain | Final Draft XML | PDF | Plain text |
-|---|---|---|---|---|
-| Element types | Read from markup | Read from `Paragraph Type` | Inferred from position | Inferred from indentation |
-| Scene numbers | `#N#` markers | `Number` attribute | Margin-printed numbers | Trailing `#N#` if present |
-| Provenance | Character offsets | Block index | Page, block index, bounding box | Character offsets |
-| Notes | Parsed as `note` units | Not present | Not present | Not present |
-| `parser_method` | `fountain` | `fdx` | `pdf_layout` or `ocr` | `rule` |
+`tools/render_screenplay.py` renders each authored Fountain source to Final Draft XML, PDF, and plain text. The renders diverge from the source in three documented ways: Fountain notes are stripped from every derivative, dual dialogue flattens to sequential dialogue, and shot lines type as action. Each script's `dependencies.md` records the expected extraction output and the expected divergence. `tools/seed_graph.py` writes a script's ground-truth graph by hand; the application runs the same builder at startup.
 
-### PDF
+### Tests
 
-`pdf-inspector` classifies text-based versus scanned and returns position-aware text items. It runs locally with no network calls and no models, and performs no OCR.
+```bash
+tools/.venv/bin/python -m pytest
+```
 
-Layout rules measure the page's own left margin as the modal left edge, then classify blocks by their offset from it, so a script typeset at any margin parses the same way. Blocks split on a vertical gap, a page break, or a horizontal shift; the last matters because a character cue, its parenthetical, and its dialogue sit on consecutive lines with only their left edge to separate them.
+Test-order randomisation is enabled. A failure that depends on order is a bug in shared state, not something to pin away.
 
-A block the layout rules cannot place gets a `parser_confidence` below 0.6 and an `ambiguous_blocks` warning. Only those blocks go to the structure repair agent.
-
-### Scanned PDFs
-
-A scanned PDF is rasterised with `pdftoppm` and read with `tesseract`, both as local subprocesses over stdin. No bytes leave the application and nothing is written to disk. If either binary is absent, the import is rejected with `ocr_unavailable` naming what is missing. OCR-derived imports are always `needs_review`.
-
-### Security
-
-Final Draft XML is parsed through `defusedxml`. External entities and entity expansion are refused with `xml_unsafe`, which the test suite pins with a billion-laughs payload and an XXE payload.
-
-Uploads over 8 MiB are rejected before any parser runs. Scene and unit counts are capped, and truncation is reported as a warning rather than applied silently.
-
-## Rejection codes
-
-| Code | Cause |
-|---|---|
-| `payload_too_large` | Over the 8 MiB upload ceiling |
-| `undecodable_text` | Not UTF-8, UTF-16, UTF-32, or Windows-1252 |
-| `unsupported_format` | Not one of the four supported formats |
-| `no_scenes` | Parsed, but no scene headings were found |
-| `not_a_screenplay` | Parsed, but the structure is not a screenplay's |
-| `xml_malformed` | Not well-formed XML |
-| `xml_unsafe` | External entities or entity expansion |
-| `fdx_wrong_root` | XML root is not `<FinalDraft>` |
-| `fdx_no_content` | No `<Content>` element |
-| `pdf_unreadable` | Encrypted or damaged PDF |
-| `pdf_no_text` | No text extracted |
-| `ocr_unavailable` | Scanned PDF with no local OCR toolchain |
-| `ocr_timeout` / `ocr_failed` | OCR ran and did not finish or failed |
-| `pdf_backend_missing` | `pdf-inspector` not installed |
-
-## Demo corpus
-
-`tools/render_screenplay.py` renders one authored Fountain file to Final Draft XML, PDF, and plain text. It reinjects `#N#` scene numbers into the FDX as `Number` attributes, which screenplain drops, and fails loudly when the heading count and the number count disagree.
-
-The renders diverge from the source in three documented ways: Fountain notes are stripped from every derivative, dual dialogue flattens to sequential dialogue, and shot lines type as action. A test asserting parity across all four formats would be wrong. Each script's `dependencies.md` records the expected divergence.
-
-Built by Mo Shehu — mohammedshehu.com
+By [Mo Shehu](https://mohammedshehu.com)

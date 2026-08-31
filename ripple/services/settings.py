@@ -13,7 +13,12 @@ from dataclasses import dataclass, field
 from sqlalchemy.orm import Session
 
 from ripple.config.secrets import SecretsError, SecretStore, timestamp
-from ripple.db.repository import get_active_model, set_active_model
+from ripple.db.repository import (
+    get_active_model,
+    get_fallback_model,
+    set_active_model,
+    set_fallback_model,
+)
 from ripple.llm import PROVIDERS, ProviderError, get_provider
 from ripple.llm.base import ModelInfo
 
@@ -57,7 +62,7 @@ def unusable_credential(value: object) -> str | None:
 # binary rather than text. Tab, carriage return, and newline are excluded: they
 # come from ordinary copying and are stripped rather than refused.
 _CONTROL_CHARACTERS = frozenset(
-    chr(code) for code in list(range(32)) + [127] if chr(code) not in "\t\r\n"
+    chr(code) for code in [*range(32), 127] if chr(code) not in "\t\r\n"
 )
 
 
@@ -69,7 +74,6 @@ class ProviderStatus:
     credential_variable: str
     configured: bool
     source: str
-    is_submission_provider: bool
 
 
 @dataclass(frozen=True)
@@ -92,8 +96,6 @@ class SettingsService:
 
     def provider_statuses(self) -> list[ProviderStatus]:
         """Every provider and whether it holds a credential."""
-        from ripple.llm import SUBMISSION_PROVIDER
-
         return [
             ProviderStatus(
                 provider=name,
@@ -102,7 +104,6 @@ class SettingsService:
                     name, provider.credential_variable
                 ).configured,
                 source=self.store.status(name, provider.credential_variable).source,
-                is_submission_provider=name == SUBMISSION_PROVIDER,
             )
             for name, provider in sorted(PROVIDERS.items())
         ]
@@ -117,21 +118,13 @@ class SettingsService:
         appears in the result or the logs.
         """
         provider = get_provider(provider_name)
-        restore: tuple[str, str | None] | None = None
 
+        # A submitted key is handed to the provider call directly and never
+        # enters the process environment: writing it to os.environ, even
+        # briefly, would let a concurrent model call read the wrong key.
+        candidate: str | None = None
         if api_key is not None:
-            import os
-
-            variable = provider.credential_variable
-            restore = (variable, os.environ.get(variable))
-            os.environ[variable] = api_key.strip() if isinstance(api_key, str) else ""
-
-        try:
-            # Only a value the user just submitted is checked. Re-validating
-            # what is already stored goes straight to the provider, and with
-            # nothing stored the provider's own "not configured" error names
-            # the variable to set.
-            unusable = unusable_credential(api_key) if api_key is not None else None
+            unusable = unusable_credential(api_key)
             if unusable:
                 return ValidationResult(
                     provider=provider_name,
@@ -139,7 +132,14 @@ class SettingsService:
                     error_code="unusable_credential",
                     error_message=unusable,
                 )
-            models = provider.list_models()
+            candidate = api_key.strip()
+
+        try:
+            # Only a value the user just submitted is checked. Re-validating
+            # what is already stored goes straight to the provider, and with
+            # nothing stored the provider's own "not configured" error names
+            # the variable to set.
+            models = provider.list_models(api_key=candidate)
             return ValidationResult(
                 provider=provider_name, valid=True, model_count=len(models)
             )
@@ -151,15 +151,6 @@ class SettingsService:
                 error_code=error.code,
                 error_message=error.message,
             )
-        finally:
-            if restore is not None:
-                import os
-
-                variable, previous = restore
-                if previous is None:
-                    os.environ.pop(variable, None)
-                else:
-                    os.environ[variable] = previous
 
     def save_credential(self, provider_name: str, api_key: str) -> ValidationResult:
         """Validate a credential, then store it only if it works.
@@ -213,6 +204,38 @@ class SettingsService:
     def selected_model(self, session: Session) -> tuple[str | None, str | None]:
         """The chosen provider and model, or (None, None) before a choice.
 
-        PRD section 11 defaults to no selection rather than guessing one.
+        The default is no selection rather than a guessed one.
         """
         return get_active_model(session)
+
+    def select_fallback(
+        self, session: Session, provider_name: str, model_id: str | None
+    ) -> None:
+        """Persist the fallback model, or clear it when model_id is None.
+
+        The fallback answers a call the main model refused for an availability
+        reason, so a fallback identical to the main would never help and is
+        refused rather than stored.
+        """
+        if model_id is None or not model_id.strip():
+            set_fallback_model(session, None, None)
+            return
+        provider = get_provider(provider_name)
+        available = {model.id for model in provider.list_models()}
+        if model_id not in available:
+            raise ProviderError(
+                "unknown_model",
+                f"{model_id!r} is not offered by {provider_name}.",
+            )
+        _, main = get_active_model(session)
+        if model_id == main:
+            raise ProviderError(
+                "fallback_is_main",
+                "The fallback must differ from the main model, or it can "
+                "never answer when the main model is unavailable.",
+            )
+        set_fallback_model(session, provider_name, model_id)
+
+    def fallback_model(self, session: Session) -> tuple[str | None, str | None]:
+        """The fallback provider and model, or (None, None) when none is set."""
+        return get_fallback_model(session)

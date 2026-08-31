@@ -1,6 +1,6 @@
 """Credential storage. Never the database, never the browser.
 
-PRD section 11 and ERD section 12 put provider credentials outside the schema.
+Provider credentials live outside the database schema.
 The settings screen still needs somewhere to put a key the user typed, so:
 
 - On Replit, Replit Secrets supplies them as environment variables and this
@@ -27,6 +27,11 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 DEFAULT_SECRETS_PATH = Path("data/secrets.env")
+# The variable that points the store somewhere else. The test suite sets it
+# to a throwaway file so a run never loads the live credential; without an
+# override, a web test's startup would repopulate the key the test fixture
+# just removed from the environment.
+SECRETS_PATH_VARIABLE = "RIPPLE_SECRETS_PATH"
 OWNER_READ_WRITE = stat.S_IRUSR | stat.S_IWUSR
 
 
@@ -63,7 +68,10 @@ class SecretStore:
     """Reads credentials from the environment; writes to a local file."""
 
     def __init__(self, path: Path | None = None) -> None:
-        self.path = Path(path) if path else DEFAULT_SECRETS_PATH
+        if path is None:
+            override = os.environ.get(SECRETS_PATH_VARIABLE, "").strip()
+            path = Path(override) if override else DEFAULT_SECRETS_PATH
+        self.path = Path(path)
 
     def load(self) -> int:
         """Load the local file into the environment. Returns how many were set.

@@ -1,11 +1,16 @@
 {% extends "base.html" %}
 {% from "_nav.html" import sidebar %}
-{% block title %}{{ heading }} — Ripple{% endblock %}
+{% block title %}{{ heading }} · Ripple{% endblock %}
 {% block sidebar %}{{ sidebar(counts, active) }}{% endblock %}
 
 {% block toolbar %}
 <h1>{{ heading }}</h1>
 <span class="sub">{{ subtitle }}</span>
+{% if items %}
+<div class="search"><span class="ic">⌕</span>
+  <input id="list-search" placeholder="Search" autocomplete="off"
+         aria-label="Search this list"></div>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -25,11 +30,85 @@
       <div>{{ item.title }}</div>
       {% if item.sub %}<div class="sub">{{ item.sub }}</div>{% endif %}
     </div>
+    {% if item.actions %}<span class="acts">
+      {% for act in item.actions %}
+      {% if act.href %}<a class="btn sm" href="{{ act.href }}">{{ act.label }}</a>
+      {% else %}<button class="btn sm" data-post="{{ act.url }}">{{ act.label }}</button>
+      {% endif %}
+      {% endfor %}
+    </span>{% endif %}
     {% if item.right %}<span class="r">{{ item.right }}</span>{% endif %}
   </div>
   {% endfor %}
 </div>
+<div class="pager hide" id="pager">
+  <button class="btn sm" id="pager-prev">‹ Previous</button>
+  <span class="pager-status" id="pager-status" aria-live="polite"></span>
+  <button class="btn sm" id="pager-next">Next ›</button>
+</div>
+<div class="empty hide" id="list-no-match">Nothing matches the search.</div>
 {% else %}
 <div class="empty">{{ empty }}</div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-post]').forEach((button) => {
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      await api(button.dataset.post, { method: 'POST', body: form({}) });
+    } catch (error) {
+      toast(error.message, true);
+      button.disabled = false;
+      return;
+    }
+    window.location.reload();
+  });
+});
+
+/* Instant search and pagination over the rendered rows. The rows are all on
+   the page already, so both are display toggles: no request, no reload. */
+(() => {
+  const rows = [...document.querySelectorAll('.list .item')];
+  if (!rows.length) return;
+  const PAGE_SIZE = 50;
+  const search = document.getElementById('list-search');
+  const pager = document.getElementById('pager');
+  const status = document.getElementById('pager-status');
+  const prev = document.getElementById('pager-prev');
+  const next = document.getElementById('pager-next');
+  const noMatch = document.getElementById('list-no-match');
+  let page = 0;
+
+  function matches(row, needle) {
+    return !needle || row.textContent.toLowerCase().includes(needle);
+  }
+
+  function render() {
+    const needle = search.value.trim().toLowerCase();
+    const hits = rows.filter((row) => matches(row, needle));
+    rows.forEach((row) => { row.style.display = 'none'; });
+    const pages = Math.max(1, Math.ceil(hits.length / PAGE_SIZE));
+    if (page >= pages) page = pages - 1;
+    hits.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+      .forEach((row) => { row.style.display = ''; });
+    noMatch.classList.toggle('hide', hits.length > 0);
+    pager.classList.toggle('hide', hits.length <= PAGE_SIZE);
+    if (hits.length > PAGE_SIZE) {
+      const from = page * PAGE_SIZE + 1;
+      const to = Math.min(hits.length, (page + 1) * PAGE_SIZE);
+      status.textContent = `${from}–${to} of ${hits.length}`;
+      prev.disabled = page === 0;
+      next.disabled = page === pages - 1;
+    }
+  }
+
+  search.addEventListener('input', () => { page = 0; render(); });
+  prev.addEventListener('click', () => { page -= 1; render(); });
+  next.addEventListener('click', () => { page += 1; render(); });
+  render();
+})();
+</script>
 {% endblock %}

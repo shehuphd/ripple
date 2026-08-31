@@ -57,7 +57,7 @@ class TestDegenerateInput:
 
 class TestNameNormalization:
     def test_a_casing_difference_is_not_a_change(self):
-        """THE BLUE SEDAN and the blue sedan are one entity, Schema Lock v1 §5."""
+        """THE BLUE SEDAN and the blue sedan are one entity under name normalization."""
         diff = diff_edges(
             [
                 edge(
@@ -246,3 +246,22 @@ class TestDeterminism:
         assert to_operations(diff_edges(accepted, proposed)) == to_operations(
             diff_edges(accepted, proposed)
         )
+
+
+class TestPayloadNames:
+    def test_an_entity_payload_carries_the_display_name(self):
+        """Regression: payloads used to carry the normalized ref, so an entity
+        created on acceptance was named "brass key" instead of "The Brass
+        Key". Lookup normalizes either way; creation must not."""
+        from ripple.graph.diff import GraphDiff
+
+        edge = Edge(
+            subject=EdgeRef.entity("The Brass Key", "prop"),
+            predicate="appears_in",
+            obj=EdgeRef.scene("00000000-0000-0000-0000-000000000001"),
+            source_unit_id="00000000-0000-0000-0000-000000000002",
+            display_subject="The Brass Key",
+        )
+        diff = GraphDiff(added=[edge])
+        operations = to_operations(diff)
+        assert operations[0]["after_json"]["subject_ref"] == "The Brass Key"

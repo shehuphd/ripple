@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "_nav.html" import sidebar %}
+{% block title %}{{ heading }} · Ripple{% endblock %}
+{% block sidebar %}{% if counts %}{{ sidebar(counts, '') }}{% endif %}{% endblock %}
+
+{% block toolbar %}
+<h1>{{ heading }}</h1>
+<span class="sub">HTTP {{ status_code }}</span>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:560px">
+  <div class="hd"><h2>{{ message }}</h2></div>
+  <p class="muted" style="margin:0 0 14px">{{ hint }}</p>
+  <div class="btns" style="display:flex;gap:10px">
+    <a class="btn pri" href="/">Open the library</a>
+    <a class="btn" href="javascript:history.back()">Go back</a>
+  </div>
+</div>
+{% endblock %}

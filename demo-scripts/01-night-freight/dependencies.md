@@ -2,7 +2,7 @@
 
 Original work written for the Ripple demo corpus. No third-party rights attach; it ships under the repository licence.
 
-44 scenes, 10 script pages plus a title page. Written against Schema Lock v1. This file is the extraction oracle: the entities and assertions below are what a correct run must produce, so parser and extraction regressions have something to fail against.
+44 scenes, 10 script pages plus a title page. This file is the extraction oracle: the entities and assertions below are what a correct run must produce, so parser and extraction regressions have something to fail against.
 
 ## 1. Planted dependency chains
 
@@ -45,9 +45,20 @@ Chain 1 is the demo edit. Chain 4 is the longest span and the hardest continuity
 
 Cast count is deliberately low so a full-script extraction stays inside the cost cap while still producing a graph dense enough to render.
 
+## 2b. Expected attributes
+
+Structured facts the text states about an entity. The
+evidence scene is where the stating line lives.
+
+| Entity | Key | Value | Evidence scene |
+|---|---|---|---|
+| Blue sedan | color | blue | 14 |
+| Grey parka | color | grey | 3 |
+| Dead forklift | condition | dead | 14 |
+
 ## 3. Expected assertions for scene 14
 
-Scene 14 is the demo target. A correct extraction produces at least these, following the predicate signatures in Schema Lock v1 §4.
+Scene 14 is the demo target. A correct extraction produces at least these, following the defined predicate signatures.
 
 | Subject | Predicate | Object | Confidence band |
 |---|---|---|---|
@@ -85,14 +96,14 @@ Expected continuity findings:
 1. **High.** Removing the sole `establishes` edge for Blue sedan while `appears_in` edges survive in scenes 22, 31, and 44. Cites three units.
 2. **Medium.** Transport loses its only picture vehicle at the dock, so scene 14 drops off the transport schedule.
 
-This reproduces the ripple preview mockup at `project/design/screenshots/03-ripple-preview.png`. Keep the two in sync: if the script changes, the screenshot is stale.
+This reproduces the ripple preview design mockup. Keep the two in sync: if the script changes, the mockup is stale.
 
 ## 5. Adversarial value
 
 What this script is built to break:
 
 - **Duplicate seal numbers** in scenes 10 and 11 give two entities with near-identical descriptions and distinct identity. Alias resolution must keep them apart.
-- **`(O.S.)` and `(V.O.)` speaker suffixes** in scenes 5, 42, and the radio scenes must normalize away before entity resolution, per Schema Lock v1 §5.
+- **`(O.S.)` and `(V.O.)` speaker suffixes** in scenes 5, 42, and the radio scenes must normalize away before entity resolution.
 - **`(CONT'D)` on a repeated character cue** in scenes 28 and 42 must not create a second cast entity.
 - **CONTINUOUS and LATER time-of-day values** in headings are not `DAY` or `NIGHT`. The scene parser must accept them without falling back to the repair agent.
 - **Dev's scar** is introduced in an action block, referenced obliquely in dialogue in scene 26 ("Yeah."), and referenced visually in scene 44. Only the first and third are extractable. The middle one should not be invented.

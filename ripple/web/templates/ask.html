@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_nav.html" import sidebar %}
-{% block title %}Ask the graph — Ripple{% endblock %}
+{% block title %}Ask the graph · Ripple{% endblock %}
 {% block sidebar %}{{ sidebar(counts, 'ask', script.id if script else None) }}{% endblock %}
 
 {% block toolbar %}
@@ -33,7 +33,7 @@
     </div>
   </div>
 
-  <div id="out"><div class="empty">
+  <div id="out" aria-live="polite"><div class="empty">
     Answers come from accepted assertions only. Nothing is generated from the
     screenplay text.</div></div>
 {% endif %}

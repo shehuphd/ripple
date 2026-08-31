@@ -6,8 +6,8 @@ requires-python = ">=3.11"
 dependencies = [
     "defusedxml>=0.7.1",
     "pdf-inspector>=0.2.6",
-    "traceact==0.14.0",
-    "keycall[traceact]==0.8.0",
+    "traceact==1.0.0",
+    "keycall[traceact]==1.7.0",
     "sqlalchemy>=2.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -31,22 +31,41 @@ dev = [
 Changelog = "https://github.com/shehuphd/ripple/blob/main/CHANGELOG.md"
 
 # Without this, setuptools' flat-layout discovery treats every top-level
-# directory as a package and fails on data/, project/, tests/, and tools/.
+# directory as a package and fails on the data, planning, tests, and tools
+# directories.
 [tool.setuptools.packages.find]
 include = ["ripple*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# pytest-randomly stays enabled: a failure caused by test order is a real bug.
+# pytest-randomly stays enabled: a failure caused by test order is a bug.
+# Declared required so a run without the plugin fails loudly instead of
+# silently going sequential.
+required_plugins = ["pytest-randomly"]
 addopts = "-ra --strict-markers"
 
 [tool.ruff]
 line-length = 90
 target-version = "py311"
 
+[tool.ruff.lint]
+# Beyond the defaults: import order (I), bugbear (B), modern syntax (UP),
+# and ruff's own checks (RUF). W for whitespace, E/F are the defaults.
+select = ["E", "F", "W", "I", "B", "UP", "RUF"]
+# UP042 wants StrEnum over (str, Enum). The mixin classes here predate that
+# and their string behaviour is load-bearing in JSON and the database, so
+# the churn buys nothing.
+ignore = ["UP042"]
+
 [tool.ruff.lint.per-file-ignores]
 # B008 forbids a function call in an argument default. FastAPI's dependency
-# injection is expressed exactly that way (Depends, File, Form), so the rule
-# does not apply to route handlers. Scoped to the web module rather than
+# injection is expressed that way (Depends, File, Form), so the rule does
+# not apply to route handlers. Scoped to the web module rather than
 # disabled globally, where it would still catch a genuine mutable default.
 "ripple/web/app.py" = ["B008"]
+# The XML attack payloads are byte-precise test data; wrapping their lines
+# would change the bytes under test.
+"tests/conftest.py" = ["E501"]
+# The adversarial fixtures deliberately carry curly quotes and en-dashes,
+# because uploaded screenplays do.
+"tests/test_adversarial.py" = ["RUF001"]

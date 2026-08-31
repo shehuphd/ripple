@@ -1,0 +1,171 @@
+# Manifest
+
+Last updated: 2026-08-31 15:22:30 UTC
+
+Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
+
+## Root
+
+| File | Purpose |
+|---|---|
+| `README.md` | What Ripple is, what it does, and how to run it. |
+| `USAGE.md` | The full manual: every screen, control, and error code. |
+| `ARCHITECTURE.md` | System structure, data stores, integrations, and the domain glossary. |
+| `CHANGELOG.md` | Release history, newest first. |
+| `MANIFEST.md` | This file. |
+| `LICENSE` | AGPL-3.0. |
+| `launch.command` | macOS launcher: stops any running instance, builds or repairs the venv, starts the server, opens a browser. `--test` runs the suite instead. |
+| `pyproject.toml` | Package metadata, dependencies, pytest and ruff configuration. |
+| `uv.lock` | Locked dependency versions for `uv`. |
+| `.gitignore` | Excludes runtime state, virtual environments, and local tool settings. |
+| `.github/dependabot.yml` | Weekly dependency update checks. |
+
+## Application (`ripple/`)
+
+| File | Purpose |
+|---|---|
+| `ripple/__init__.py` | Package marker and version lookup. |
+| `ripple/tracing.py` | TraceAct configuration: no automatic input capture, redaction presets. |
+
+### Import (`ripple/adapters/`)
+
+| File | Purpose |
+|---|---|
+| `adapters/__init__.py` | The `import_screenplay` entry point: detect, parse, validate, return a typed result. |
+| `adapters/base.py` | The adapter contract and shared types: `ParsedScene`, `ParsedUnit`, `ImportResult`, limits. |
+| `adapters/detect.py` | Content-based format detection; the filename is only a hint. |
+| `adapters/fountain.py` | Fountain parser. |
+| `adapters/fdx.py` | Final Draft XML parser, via defusedxml. |
+| `adapters/pdf.py` | PDF parser with OCR fallback for scanned documents. |
+| `adapters/plaintext.py` | Plain-text screenplay parser. |
+| `adapters/screenplay_check.py` | Post-parse assessment: is this a screenplay at all? |
+
+### Configuration (`ripple/config/`)
+
+| File | Purpose |
+|---|---|
+| `config/__init__.py` | Package marker. |
+| `config/secrets.py` | Owner-only local credential file (`data/secrets.env`, mode 0600); refuses to write on Replit. |
+
+### Database (`ripple/db/`)
+
+| File | Purpose |
+|---|---|
+| `db/__init__.py` | Package marker. |
+| `db/models.py` | SQLAlchemy models for all 22 tables, with CHECK constraints for every vocabulary. |
+| `db/naming.py` | Entity name normalization, shared by extraction and the change-set service. |
+| `db/repository.py` | Query helpers: persistence, deletion previews, counts, shared graph labels. |
+| `db/session.py` | Engine and session setup, SQLite foreign-key pragma, the outcome-vocabulary migration. |
+
+### Extraction (`ripple/extraction/`)
+
+| File | Purpose |
+|---|---|
+| `extraction/__init__.py` | Package marker. |
+| `extraction/prompt.py` | Per-scene prompt, `OUTPUT_SCHEMA`, and the cache-key fingerprint. |
+| `extraction/service.py` | Resumable per-scene extraction runs with atomic scene claiming. |
+| `extraction/validate.py` | Schema and predicate-rule validation of model output before any row is written. |
+| `extraction/judge.py` | Code-side verification of preview verdicts: unlisted ids dropped, deleted evidence downgrades a hold, missing verdicts fail the preview. |
+| `extraction/continuity_judge.py` | The continuity judgement contract: prompt, schema, and verification, every claim cited to listed evidence. |
+
+### Graph (`ripple/graph/`)
+
+| File | Purpose |
+|---|---|
+| `graph/__init__.py` | Package marker. |
+| `graph/predicates.py` | The predicate vocabulary and signatures, one source of truth. |
+| `graph/diff.py` | Deterministic diff of two assertion sets by edge identity. |
+| `graph/continuity.py` | Bounded continuity evidence retrieval and the model-free orphaned-reference finding. |
+| `graph/layout.py` | Deterministic 2D layout: scenes on a spine, entities in department wedges. |
+| `graph/fixtures.py` | Judge-visible scene context assembly for the preview prompt. |
+
+### Providers (`ripple/llm/`)
+
+| File | Purpose |
+|---|---|
+| `llm/__init__.py` | The provider registry; Google Gemini is the only entry. |
+| `llm/base.py` | The provider contract and shared types (`ModelInfo`, `GenerationResult`, `ProviderError`). |
+| `llm/keycall_provider.py` | The KeyCall-backed adapter every registered provider uses. |
+| `llm/fixture.py` | Deterministic no-network test double. |
+
+### Services (`ripple/services/`)
+
+| File | Purpose |
+|---|---|
+| `services/__init__.py` | Package marker. |
+| `services/preview.py` | The judgement engine: one proposal across many lines, verdicts validated, calls audited and replayed. |
+| `services/changeset.py` | Atomic accept, reject, and latest-only undo of a proposal. |
+| `services/spend.py` | Token ledger and the hard budget gate every call site checks. |
+| `services/settings.py` | Credential entry and validation, main and fallback model selection. |
+| `services/synthesizer.py` | Plain-language ripple explanation, with a deterministic no-model fallback. |
+
+### Web (`ripple/web/`)
+
+| File | Purpose |
+|---|---|
+| `web/app.py` | All FastAPI routes: pages, JSON API, error handling. |
+| `web/stats.py` | Sidebar counts and page/runtime estimates. |
+| `web/templates/base.html` | Shared page shell: sidebar, toolbar, version mark. |
+| `web/templates/_nav.html` | Sidebar navigation with live counts. |
+| `web/templates/library.html` | Script library and import. |
+| `web/templates/reader.html` | Screenplay reader, editing, and the ripple preview overlay. |
+| `web/templates/script_graph.html` | The script-level production graph, the opening view. |
+| `web/templates/graph.html` | The expanded per-node graph view. |
+| `web/templates/ask.html` | Grounded query page. |
+| `web/templates/list.html` | Shared listing page: entities, assertions, reports, findings, traces. |
+| `web/templates/settings.html` | Tabbed settings: API keys, spend, interface. |
+| `web/templates/error.html` | In-app error page for page routes. |
+| `web/static/css/ripple-tokens.css` | Design tokens. |
+| `web/static/css/ripple-fonts.css` | Font faces. |
+| `web/static/css/ripple-components.css` | Shared components. |
+| `web/static/css/app.css` | Per-screen styles. |
+| `web/static/js/app.js` | Shared helpers: `api()`, escaping, dialogs, the decision log. |
+| `web/static/js/library.js` | Library page behaviour. |
+| `web/static/js/reader.js` | Reader editing, drafts, and the preview overlay. |
+| `web/static/js/graph.js` | Both graph views: rendering, selection, zoom, search. |
+| `web/static/js/ask.js` | Grounded query page behaviour. |
+| `web/static/js/settings.js` | Settings page behaviour. |
+| `web/static/ripple-mark.svg` | The product mark. |
+
+## Tests (`tests/`)
+
+| File | Purpose |
+|---|---|
+| `tests/__init__.py` | Package marker. |
+| `tests/conftest.py` | Shared fixtures, including byte-precise XML attack payloads. |
+| `tests/test_adapters.py` | Import pipeline across all four formats. |
+| `tests/test_adversarial.py` | Hostile inputs: malformed files, encoding traps, oversized documents. |
+| `tests/test_changeset.py` | Accept, reject, undo, and inverse operations. |
+| `tests/test_continuity.py` | Evidence retrieval and orphaned-reference detection. |
+| `tests/test_continuity_judge.py` | Continuity reply verification and prompt assembly. |
+| `tests/test_diff.py` | Diff engine identity and grouping rules. |
+| `tests/test_docs.py` | Docs hygiene: no internal references in public docs or shipped source, absolute README links, this manifest present. |
+| `tests/test_extraction.py` | Extraction service, validation, caching, and run status. |
+| `tests/test_fixtures.py` | Judge-visible scene context assembly. |
+| `tests/test_judge.py` | Verdict verification rules. |
+| `tests/test_layout.py` | Layout determinism. |
+| `tests/test_llm.py` | Provider contract and the KeyCall adapter. |
+| `tests/test_models.py` | Schema constraints and the outcome-vocabulary migration. |
+| `tests/test_preview.py` | The judgement engine end to end against the fixture provider. |
+| `tests/test_settings.py` | Credential validation and model selection. |
+| `tests/test_spend.py` | Budget gate and refusal auditing. |
+| `tests/test_tracing.py` | TraceAct configuration and redaction. |
+| `tests/test_web.py` | Routes, pages, and API behaviour. |
+
+## Developer tools (`tools/`)
+
+| File | Purpose |
+|---|---|
+| `tools/render_screenplay.py` | Renders a Fountain source to PDF for calibration. |
+| `tools/seed_graph.py` | Writes a demo script's ground-truth graph by hand. |
+| `tools/requirements.txt` | The tools' own dependencies. |
+
+## Demo corpus (`demo-scripts/`)
+
+Three screenplays, each in four formats (`.fountain`, `.fdx`, `.pdf`, `.txt`) with a `dependencies.md` recording the entities, aliases, attributes, and assertions a correct extraction must produce:
+
+| Directory | Screenplay |
+|---|---|
+| `demo-scripts/01-night-freight/` | NIGHT FREIGHT. |
+| `demo-scripts/02-the-understudy/` | THE UNDERSTUDY. |
+| `demo-scripts/03-seven-minutes/` | SEVEN MINUTES, written to carry parser traps: accented names, an omitted scene, an intercut. |

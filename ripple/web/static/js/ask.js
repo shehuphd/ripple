@@ -7,19 +7,25 @@ if (ask) {
   // absent parameter sent "null" to the API.
   const scriptId = document.getElementById('askform').dataset.script;
 
+  // One question in flight at a time: a second Enter while the first is
+  // running would bill a second model call for the same question.
+  let running = false;
+
   async function run() {
-    if (!question.value.trim()) return;
+    if (!question.value.trim() || running) return;
+    running = true;
+    ask.disabled = true;
     out.innerHTML = '<div class="empty">Asking…</div>';
     try {
       const body = await api(`/api/scripts/${scriptId}/ask`, {
         method: 'POST', body: form({ question: question.value }),
       });
       const chips = body.entities
-        .map((e) => `<span class="tag">${e}</span>`).join(' ');
+        .map((e) => `<span class="tag">${esc(e)}</span>`).join(' ');
       const cited = body.cited_units.map((u) => `
         <div class="cited">
-          <span class="no">${u.scene ?? ''}</span>
-          <span class="bd">${u.text}</span>
+          <span class="no">${esc(u.scene ?? '')}</span>
+          <span class="bd">${esc(u.text)}</span>
         </div>`).join('');
       out.innerHTML = `
         <div class="tiny muted" style="margin-bottom:12px">
@@ -28,7 +34,7 @@ if (ask) {
           ${body.generated ? '' : ' · deterministic answer, no model configured'}
         </div>
         <div class="card">
-          <div class="answer">${body.answer}</div>
+          <div class="answer">${esc(body.answer)}</div>
           <div class="chips" style="margin:14px 0 0">${chips}</div>
           <div class="tiny muted" style="margin-top:12px">
             Answers come from accepted assertions only. Nothing here is generated
@@ -40,7 +46,10 @@ if (ask) {
           ${cited || '<div class="empty">None.</div>'}
         </div>`;
     } catch (error) {
-      out.innerHTML = `<div class="empty">${error.message}</div>`;
+      out.innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+    } finally {
+      running = false;
+      ask.disabled = false;
     }
   }
 

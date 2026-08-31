@@ -1,6 +1,6 @@
 """The deterministic diff engine.
 
-PRD section 8: application code computes the exact graph diff. No model is
+Application code computes the exact graph diff. No model is
 involved here and none may be. The synthesizer explains what this produces and
 cannot add to it.
 
@@ -270,14 +270,26 @@ def to_operations(diff: GraphDiff) -> list[dict[str, Any]]:
 
 
 def _payload(edge: Edge) -> dict[str, Any]:
-    """A snapshot sufficient to validate and invert an operation."""
+    """A snapshot sufficient to validate and invert an operation.
+
+    Entity refs carry the display name when one is known, because acceptance
+    creates a missing entity from this ref: created from the normalized key,
+    the entity would be named "brass key" rather than "Brass key". Lookup
+    still normalizes, so an existing entity resolves the same either way.
+    """
+    subject_ref = edge.subject.ref
+    if edge.subject.kind == "entity" and edge.display_subject:
+        subject_ref = edge.display_subject
+    object_ref = edge.obj.ref
+    if edge.obj.kind == "entity" and edge.display_object:
+        object_ref = edge.display_object
     return {
         "subject_kind": edge.subject.kind,
-        "subject_ref": edge.subject.ref,
+        "subject_ref": subject_ref,
         "subject_entity_type": edge.subject.entity_type,
         "predicate": edge.predicate,
         "object_kind": edge.obj.kind,
-        "object_ref": edge.obj.ref,
+        "object_ref": object_ref,
         "object_entity_type": edge.obj.entity_type,
         "confidence": edge.confidence,
         "source_unit_id": edge.source_unit_id,

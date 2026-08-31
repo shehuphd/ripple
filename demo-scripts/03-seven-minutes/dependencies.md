@@ -2,7 +2,7 @@
 
 Original work written for the Ripple demo corpus. No third-party rights attach; it ships under the repository licence.
 
-32 scene headings across 30 numbered scenes, with scene 12 omitted and two unnumbered headings inside an intercut. 7 script pages plus a title page. Written against Schema Lock v1.
+32 scene headings across 30 numbered scenes, with scene 12 omitted and two unnumbered headings inside an intercut. 7 script pages plus a title page.
 
 Scripts 01 and 02 stress the parsers. This one stresses the graph: entities that change state, an identity that resolves late, and a numbering scheme that is not a clean sequence.
 
@@ -10,7 +10,7 @@ Scripts 01 and 02 stress the parsers. This one stresses the graph: entities that
 
 | Feature | Where | Why it's here |
 |---|---|---|
-| Non-ASCII names | MATÍAS, BÉLA | Schema Lock v1 §5 normalises with NFKC; nothing tested it |
+| Non-ASCII names | MATÍAS, BÉLA | Name normalisation applies NFKC; nothing tested it |
 | Omitted scene | 12 | Production numbering has holes; `display_scene_number` must not be inferred from position |
 | Intercut with inner headings | 8 | Two unnumbered scenes nest inside one numbered sequence |
 | Entity that changes state | White van, scenes 2 → 11 → 18 → 29 | Drives `update_assertion`, which no other script exercises |
@@ -31,6 +31,38 @@ Scripts 01 and 02 stress the parsers. This one stresses the graph: entities that
 Chain 1 is the one to demo for `update_assertion`. Scene 2 establishes the van with an old dent. Scene 11 replaces that with new damage. Scene 18 destroys the tyre. Scene 29 shows the wreck. An edit to scene 11 has to change the van's condition without creating a second van entity.
 
 Chain 4 is the extraction trap. `THE PASSENGER` is a cast entity from scene 5. `ILONA` speaks at scene 28. A correct extraction produces one entity with both as aliases; a naive one produces two, and the dialogue at 28 is the only evidence that links them.
+
+## 2a. Expected entities
+
+| Canonical name | Type | Aliases in text |
+|---|---|---|
+| Matías | `cast` | MATÍAS |
+| Béla | `cast` | BÉLA |
+| Ilona Nagy | `cast` | THE PASSENGER, ILONA, a woman |
+| Dispatch | `cast` | DISPATCH |
+| Surgeon | `cast` | SURGEON |
+| White van | `transportation` | the van |
+| Transplant case | `prop` | the case |
+| Offside wing damage | `set_design` | the dent, the offside wing |
+| Canal path | `location` | the canal |
+| Canal Steps | `location` | |
+| Hospital Approach | `location` | |
+| Market Street | `location` | |
+| River Road | `location` | |
+| Underpass | `location` | |
+| Ambulance Control Room | `location` | control room |
+| Hospital Corridor | `location` | |
+| Hospital Entrance | `location` | |
+| Transplant Suite | `location` | |
+| Hospital Loading Bay | `location` | the loading bay |
+
+## 2b. Expected attributes
+
+| Entity | Key | Value | Evidence scene |
+|---|---|---|---|
+| White van | color | white | 2 |
+| White van | livery | magnetic decal on the door | 2 |
+| Canal path | lighting | gas-lit | 13 |
 
 ## 3. Known parser behaviour
 

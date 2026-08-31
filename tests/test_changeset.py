@@ -259,7 +259,7 @@ class TestAcceptance:
         assert session.get(Entity, world["sedan"].id) is not None
 
     def test_an_added_entity_reuses_an_existing_canonical_match(self, session, world):
-        """THE BLUE SEDAN and Blue sedan are one entity, Schema Lock v1 §5."""
+        """THE BLUE SEDAN and Blue sedan are one entity under name normalization."""
         proposal = create_proposal(
             session,
             world["unit"].id,
@@ -340,3 +340,148 @@ class TestUndo:
         undo_latest(session, world["unit"].id)
         assert second.status == "reverted"
         assert world["unit"].current_text == "A bicycle leans against the gate."
+
+
+def update_op(world, new_name="Grey van", index=0):
+    """An update that swaps the existing edge's subject for a new entity."""
+    return {
+        "sequence_index": index,
+        "operation_type": "update_assertion",
+        "target_type": "assertion",
+        "target_id": str(world["existing"].id),
+        "before_json": {
+            "subject_kind": "entity",
+            "subject_ref": "Blue sedan",
+            "subject_entity_type": "transportation",
+            "predicate": "appears_in",
+            "object_kind": "scene",
+            "object_ref": str(world["scene"].id),
+            "object_entity_type": None,
+            "source_unit_id": str(world["unit"].id),
+            "confidence": 0.9,
+        },
+        "after_json": {
+            "subject_kind": "entity",
+            "subject_ref": new_name,
+            "subject_entity_type": "transportation",
+            "predicate": "appears_in",
+            "object_kind": "scene",
+            "object_ref": str(world["scene"].id),
+            "object_entity_type": None,
+            "source_unit_id": str(world["unit"].id),
+            "confidence": 0.85,
+        },
+    }
+
+
+class TestUpdateAssertion:
+    """Regression tests for the update that used to apply nothing.
+
+    The update handler once routed through the addition's reactivation fast
+    path, which re-activated the row it had just deactivated and returned
+    without reading after_json, so every accepted "changed" pair kept the old
+    edge while reporting success.
+    """
+
+    def test_an_accepted_update_applies_the_new_edge(self, session, world):
+        proposal = create_proposal(
+            session,
+            world["unit"].id,
+            "The grey van idles by the gate.",
+            [update_op(world)],
+        )
+        accept(session, proposal.id)
+
+        assert session.get(Assertion, world["existing"].id).active is False
+        van = session.scalar(
+            select(Entity).where(Entity.normalized_name == normalize("Grey van"))
+        )
+        assert van is not None
+        replacement = session.scalar(
+            select(Assertion).where(
+                Assertion.subject_entity_id == van.id, Assertion.active.is_(True)
+            )
+        )
+        assert replacement is not None
+        assert replacement.predicate == "appears_in"
+
+    def test_undoing_an_update_restores_the_old_edge(self, session, world):
+        proposal = create_proposal(
+            session,
+            world["unit"].id,
+            "The grey van idles by the gate.",
+            [update_op(world)],
+        )
+        accept(session, proposal.id)
+        undo_latest(session, world["unit"].id)
+
+        assert session.get(Assertion, world["existing"].id).active is True
+        van = session.scalar(
+            select(Entity).where(Entity.normalized_name == normalize("Grey van"))
+        )
+        replacement = session.scalar(
+            select(Assertion).where(Assertion.subject_entity_id == van.id)
+        )
+        assert replacement is not None and replacement.active is False
+        assert proposal.status == "reverted"
+
+
+class TestEntityNaming:
+    def test_a_created_entity_keeps_its_cased_name(self, session, world):
+        proposal = create_proposal(
+            session,
+            world["unit"].id,
+            "MAYA slides The Brass Key across the counter.",
+            [add_op(world, name="The Brass Key", kind="prop")],
+        )
+        accept(session, proposal.id)
+        created = session.scalar(
+            select(Entity).where(
+                Entity.normalized_name == normalize("The Brass Key")
+            )
+        )
+        assert created is not None
+        assert created.canonical_name == "The Brass Key"
+
+
+class TestUndoOfEntityOperations:
+    def test_undo_of_a_change_holding_create_entity_works(self, session, world):
+        """Regression: create_entity had no inverse and undo raised KeyError."""
+        operations = [
+            {
+                "sequence_index": 0,
+                "operation_type": "create_entity",
+                "target_type": "entity",
+                "target_id": None,
+                "before_json": None,
+                "after_json": {
+                    "canonical_name": "Chain rattle",
+                    "entity_type": "sound",
+                },
+            }
+        ]
+        proposal = create_proposal(
+            session, world["unit"].id, "A chain rattles.", operations
+        )
+        accept(session, proposal.id)
+        undo_latest(session, world["unit"].id)
+        # Entities survive an undo by design (ERD section 3); the point is
+        # that the undo completes rather than crashing.
+        assert proposal.status == "reverted"
+
+
+class TestDurableStatusCarriers:
+    def test_a_stale_proposal_names_itself_for_the_durable_write(
+        self, session, world
+    ):
+        """The raise unwinds the status write, so the exception carries what
+        the web layer needs to re-apply it in a fresh session."""
+        proposal = create_proposal(
+            session, world["unit"].id, "x", [remove_op(world)]
+        )
+        world["script"].current_version = 2
+        session.flush()
+        with pytest.raises(StaleProposal) as caught:
+            accept(session, proposal.id)
+        assert caught.value.change_set_id == str(proposal.id)
+        assert caught.value.durable_status == "stale"

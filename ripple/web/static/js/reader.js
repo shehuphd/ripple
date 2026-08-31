@@ -9,13 +9,19 @@ const state = {
 const draftCount = document.getElementById('draft-count');
 const revertAll = document.getElementById('revert-all');
 
+// A person is looking at the script, which is what "Recently opened" means.
+// A POST from the page rather than a side effect of the GET, so a prefetch
+// or a crawler cannot reorder the list. Failure only loses the ordering.
+api(`/api/scripts/${window.location.pathname.split('/').pop()}/opened`, {
+  method: 'POST',
+}).catch(() => {});
+
 const acceptedTextOf = (node) => node.dataset.accepted;
 
-function currentTextOf(unitId) {
-  if (state.drafts.has(unitId)) return state.drafts.get(unitId);
-  const node = document.querySelector(`.u[data-unit="${unitId}"]`);
-  return node ? acceptedTextOf(node) : '';
-}
+// contentEditable inserts non-breaking spaces where the user typed plain
+// ones, so an edit typed and then retyped back would compare unequal and
+// stay marked as a draft forever. All draft text flows through this.
+const flatten = (text) => text.replace(/ /g, ' ');
 
 function refreshDraftIndicator() {
   const count = state.drafts.size;
@@ -23,16 +29,24 @@ function refreshDraftIndicator() {
   draftCount.querySelector('span').textContent =
     `${count} line${count === 1 ? '' : 's'} edited`;
   revertAll.disabled = count === 0;
+  // The preview reads drafts, so the button follows their existence in both
+  // directions: enabling without a draft offers a preview of nothing.
+  seeRipple.disabled = count === 0;
 }
 
 function noteDraft(node) {
   const unitId = node.dataset.unit;
-  if (node.textContent === acceptedTextOf(node)) {
+  const wasDraft = state.drafts.has(unitId);
+  if (flatten(node.textContent) === acceptedTextOf(node)) {
     state.drafts.delete(unitId);
     node.classList.remove('edited');
+    // Trace the transition, not every keystroke: the decision is a line
+    // becoming a draft or ceasing to be one.
+    if (wasDraft) ripple.trace('draft.cleared', { unit: unitId });
   } else {
-    state.drafts.set(unitId, node.textContent);
+    state.drafts.set(unitId, flatten(node.textContent));
     node.classList.add('edited');
+    if (!wasDraft) ripple.trace('draft.started', { unit: unitId });
   }
   refreshDraftIndicator();
 }
@@ -56,10 +70,10 @@ const preview = document.getElementById('preview');
 function edgeRow(edge, cls, sign) {
   return `<div class="edge ${cls || ''}">
     ${sign ? `<span class="sign">${sign}</span>` : ''}
-    <span>${edge.subject}</span>
-    <span class="p">${edge.predicate}</span>
-    <span>${edge.object}</span>
-    <span class="c">${edge.confidence ?? ''}</span></div>`;
+    <span>${esc(edge.subject)}</span>
+    <span class="p">${esc(edge.predicate).replace(/_/g, ' ')}</span>
+    <span>${esc(edge.object)}</span>
+    <span class="c">${esc(edge.confidence ?? '')}</span></div>`;
 }
 
 /* Scene list selection scrolls the page rather than filtering it, so the
@@ -71,44 +85,66 @@ document.querySelectorAll('.scene-row').forEach((row) => {
     const target = document.querySelector(`[data-scene-body="${row.dataset.scene}"]`);
     if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
+  row.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      row.click();
+    }
+  });
 });
+
+// Focusing line B while line A's requests are in flight must not let A's
+// late replies overwrite B's panes. Each selection takes a ticket; replies
+// for an outdated ticket are dropped.
+let selectionTicket = 0;
 
 async function selectUnit(node) {
     document.querySelectorAll('.u.sel').forEach((n) => n.classList.remove('sel'));
     document.querySelectorAll('.ucap').forEach((n) => n.remove());
     node.classList.add('sel');
     state.unit = node.dataset.unit;
-    state.text = node.textContent;
+    state.text = flatten(node.textContent);
     state.sceneNo = node.dataset.sceneNo;
-    seeRipple.disabled = false;
+    const ticket = ++selectionTicket;
 
-    const detail = await api(`/api/units/${state.unit}/requirements`);
-    const caption = document.createElement('div');
-    caption.className = 'ucap';
-    caption.textContent =
-      `unit ${state.unit.slice(0, 8)} · ${detail.unit.type} · ` +
-      `${detail.assertions.length} assertions`;
-    node.after(caption);
+    try {
+      const detail = await api(`/api/units/${state.unit}/requirements`);
+      if (ticket !== selectionTicket) return;
+      const caption = document.createElement('div');
+      caption.className = 'ucap';
+      caption.textContent =
+        `unit ${state.unit.slice(0, 8)} · ${detail.unit.type} · ` +
+        `${detail.assertions.length} assertions`;
+      node.after(caption);
 
-    crumb.textContent = `Scene ${state.sceneNo} · ${detail.assertions.length} assertions`;
-    reqMeta.textContent = `unit ${state.unit.slice(0, 8)}`;
-    reqChips.innerHTML = detail.entities
-      .map((e) => `<span class="tag ${e.type}">${e.name}</span>`).join('');
-    requirements.innerHTML = detail.assertions.length
-      ? detail.assertions.map((a) => edgeRow(a)).join('')
-      : '<div class="empty">No assertions yet. Build the graph to extract them.</div>';
+      crumb.textContent =
+        `Scene ${state.sceneNo} · ${detail.assertions.length} assertions`;
+      reqMeta.textContent = `unit ${state.unit.slice(0, 8)}`;
+      reqChips.innerHTML = detail.entities
+        .map((e) => `<span class="tag ${esc(e.type)}">${esc(e.name)}</span>`).join('');
+      requirements.innerHTML = detail.assertions.length
+        ? detail.assertions.map((a) => edgeRow(a)).join('')
+        : '<div class="empty">No assertions yet. Build the graph to extract them.</div>';
 
-    const local = await api(`/api/units/${state.unit}/graph`);
-    graphMeta.textContent = `${local.nodes.length} nodes · ${local.links.length} edges`;
-    document.getElementById('expand').href = `/graph/${state.unit}`;
-    if (local.links.length) {
-      graph.innerHTML = '<div class="gcanvas mini"></div>';
-      // Draw after layout so the canvas has measurable dimensions.
-      requestAnimationFrame(() =>
-        draw(graph.querySelector('.gcanvas'), local, () => {}));
-    } else {
-      graph.innerHTML =
-        '<div class="empty">Nothing in the graph yet. Build it to see edges.</div>';
+      const local = await api(`/api/units/${state.unit}/graph`);
+      if (ticket !== selectionTicket) return;
+      graphMeta.textContent =
+        `${local.nodes.length} nodes · ${local.links.length} edges`;
+      document.getElementById('expand').href = `/graph/${state.unit}`;
+      if (local.links.length) {
+        graph.innerHTML = '<div class="gcanvas mini"></div>';
+        // Draw after layout so the canvas has measurable dimensions.
+        requestAnimationFrame(() =>
+          draw(graph.querySelector('.gcanvas'), local, () => {}));
+      } else {
+        graph.innerHTML =
+          '<div class="empty">Nothing in the graph yet. Build it to see edges.</div>';
+      }
+    } catch (error) {
+      if (ticket !== selectionTicket) return;
+      ripple.trace('unit.select_failed', { unit: state.unit, error: error.message });
+      requirements.innerHTML =
+        `<div class="empty">${esc(error.message)}</div>`;
     }
 }
 
@@ -118,7 +154,7 @@ document.querySelectorAll('.u').forEach((node) => {
   node.addEventListener('focus', () => selectUnit(node));
   node.addEventListener('input', () => {
     noteDraft(node);
-    state.text = node.textContent;
+    state.text = flatten(node.textContent);
   });
   node.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
@@ -142,8 +178,11 @@ document.querySelectorAll('.u').forEach((node) => {
   });
 });
 
-revertAll.addEventListener('click', () => {
-  if (!window.confirm(`Discard ${state.drafts.size} unapplied edit(s)?`)) return;
+revertAll.addEventListener('click', async () => {
+  const count = state.drafts.size;
+  if (!(await confirmDialog(
+    `Discard ${count} unapplied edit(s)?`, 'Discard'))) return;
+  ripple.trace('drafts.revert_all', { count });
   document.querySelectorAll('.u.edited').forEach(revertLine);
 });
 
@@ -155,37 +194,105 @@ window.addEventListener('beforeunload', (event) => {
   }
 });
 
-/* Ripple preview */
+/* Ripple preview. esc() comes from app.js. */
+
+// Every draft rides along: the judge reads whole scenes, so a preview that
+// silently dropped the other edited lines would judge a scene that nobody
+// proposed.
+function draftEdits() {
+  return Array.from(state.drafts, ([unitId, text]) => ({
+    unit_id: unitId, proposed_text: text,
+  }));
+}
+
+function segmentHtml(segments) {
+  return segments.map((s) => {
+    if (s.op === 'del') return `<del>${esc(s.text)}</del>`;
+    if (s.op === 'ins') return `<mark>${esc(s.text)}</mark>`;
+    return esc(s.text);
+  }).join(' ');
+}
+
 function openPreview() {
-  if (!state.unit) return;
-  const node = document.querySelector(`.u[data-unit="${state.unit}"]`);
+  if (!state.drafts.size) {
+    toast('Edit a line first. The preview reads your drafts.');
+    return;
+  }
   preview.classList.remove('hide');
-  document.getElementById('pv-accepted').textContent = acceptedTextOf(node);
-  document.getElementById('pv-proposed').value = currentTextOf(state.unit);
+  const count = state.drafts.size;
   document.getElementById('pv-crumb').textContent =
-    `unit ${state.unit.slice(0, 8)} · scene ${state.sceneNo} · nothing is applied until you accept`;
+    `${count} edited line${count === 1 ? '' : 's'} · nothing is applied until you accept`;
   runPreview();
 }
 
 async function runPreview() {
+  // A failed run must not leave the previous proposal acceptable.
+  state.changeSet = null;
+  const acceptBtn = document.getElementById('pv-accept');
+  const rejectBtn = document.getElementById('pv-reject');
+  acceptBtn.disabled = true;
+  rejectBtn.disabled = true;
   const summary = document.getElementById('pv-summary');
   summary.textContent = 'Computing…';
   document.getElementById('pv-diff').innerHTML = '';
+  document.getElementById('pv-edits').innerHTML =
+    '<div class="empty">Computing…</div>';
+  document.getElementById('pv-warning').classList.add('hide');
+  const scriptId = window.location.pathname.split('/').pop();
   try {
-    const body = await api(`/api/units/${state.unit}/preview`, {
+    const body = await api(`/api/scripts/${scriptId}/preview`, {
       method: 'POST',
-      body: form({ proposed_text: document.getElementById('pv-proposed').value }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ edits: draftEdits() }),
     });
     state.changeSet = body.change_set_id;
+    acceptBtn.disabled = false;
+    rejectBtn.disabled = false;
+
+    // The continuity pass is advisory: when its call failed, the preview
+    // stands on the deterministic findings and says so.
+    if (body.continuity_error) {
+      document.getElementById('pv-warning-text').textContent =
+        body.continuity_error;
+      document.getElementById('pv-warning').classList.remove('hide');
+    }
 
     const sev = document.getElementById('pv-sev');
     sev.querySelector('.dot').className = `dot ${body.severity}`;
     sev.querySelector('span:last-child').textContent = `${body.severity} severity`;
 
+    document.getElementById('pv-edits').innerHTML = body.edits.map((e) => `
+      <div class="pv-edit">
+        <div class="tiny muted">Scene ${e.scene_number} · unit ${e.unit_id.slice(0, 8)}</div>
+        <p class="wdiff">${segmentHtml(e.segments)}</p>
+      </div>`).join('');
+    document.getElementById('pv-editmeta').textContent =
+      `${body.edits.length} line${body.edits.length === 1 ? '' : 's'}` +
+      (body.cached ? ' · cached, no model call' : '');
+
+    document.getElementById('pv-attrs').innerHTML = body.attribute_changes.length
+      ? body.attribute_changes.map((a) => `
+        <div class="edge chg"><span class="sign">~</span>
+          <span>${esc(a.entity)}</span>
+          <span class="p">${esc(a.key)}</span>
+          <span>${esc(a.before ?? '—')} → ${esc(a.after ?? '—')}</span>
+          <span class="c">${a.confidence}</span></div>`).join('')
+      : '<div class="empty">No attribute changes.</div>';
+
+    ripple.trace('preview.result', {
+      edits: body.edits.length,
+      changeSet: body.change_set_id,
+      ops: body.diff.operations,
+      attributes: body.attribute_changes.length,
+      findings: body.findings.length,
+      severity: body.severity,
+      cached: body.cached,
+    });
+
     summary.textContent = body.summary;
     document.getElementById('pv-meta').textContent =
       `${body.diff.operations} graph operations · ${body.findings.length} findings · ` +
-      (body.model_id || body.summary_source);
+      (body.cached ? 'cached' : body.model_id || body.summary_source);
 
     const d = body.diff;
     document.getElementById('pv-diffmeta').textContent =
@@ -197,16 +304,39 @@ async function runPreview() {
         { ...c.before, object: `${c.before.object} → ${c.after.object}` }, 'chg', '~')),
     ].join('') || '<div class="empty">No graph change.</div>';
 
-    document.getElementById('pv-findings').innerHTML = body.findings.length
-      ? body.findings.map((f) => `
-        <div class="finding">
-          <div class="ttl"><i class="dot ${f.severity}"></i>${f.title}</div>
-          <p>${f.message}</p>
+    const findingsPane = document.getElementById('pv-findings');
+    findingsPane.innerHTML = body.findings.length
+      ? body.findings.map((f, index) => `
+        <div class="finding${f.status === 'dismissed' ? ' dismissed' : ''}">
+          <div class="ttl"><i class="dot ${esc(f.severity)}"></i>${esc(f.title)}</div>
+          <p>${esc(f.message)}</p>
           <div class="acts"><span class="cited-link">${f.cited_units.length} cited units</span>
-            <button class="btn sm">Review units</button>
-            <button class="btn sm">Dismiss</button></div>
+            <button class="btn sm" data-review="${index}"
+              ${f.cited_units.length ? '' : 'disabled'}>Review units</button>
+            <button class="btn sm" data-dismiss="${esc(f.id || '')}"
+              ${f.id && f.status === 'open' ? '' : 'disabled'}>Dismiss</button></div>
         </div>`).join('')
       : '<div class="empty">No continuity findings.</div>';
+    findingsPane.querySelectorAll('[data-review]').forEach((button) => {
+      button.addEventListener('click', () => {
+        preview.classList.add('hide');
+        reviewUnits(body.findings[Number(button.dataset.review)].cited_units);
+      });
+    });
+    findingsPane.querySelectorAll('[data-dismiss]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        try {
+          await api(`/api/findings/${button.dataset.dismiss}/dismiss`,
+            { method: 'POST', body: form({}) });
+        } catch (error) {
+          toast(error.message, true);
+          return;
+        }
+        button.disabled = true;
+        button.closest('.finding').classList.add('dismissed');
+        ripple.trace('finding.dismissed', { finding: button.dataset.dismiss });
+      });
+    });
 
     document.getElementById('pv-pipemeta').textContent =
       `${body.pipeline.length} stages · ` +
@@ -216,7 +346,7 @@ async function runPreview() {
         <span class="ms">${s.seconds.toFixed(2)}s</span></div>`).join('');
 
     document.getElementById('pv-origin').innerHTML =
-      `<mark>${body.origin.text}</mark>`;
+      `<mark>${esc(body.origin.text)}</mark>`;
     document.getElementById('pv-prov').textContent = [
       body.origin.page ? `source p. ${body.origin.page}` : null,
       body.origin.start !== null && body.origin.start !== undefined
@@ -227,44 +357,130 @@ async function runPreview() {
     document.getElementById('pv-foot').textContent =
       `${d.operations} graph operations · ${body.findings.length} continuity warnings`;
   } catch (error) {
-    summary.textContent = error.message;
+    ripple.trace('preview.failed', {
+      edits: state.drafts.size, error: error.message,
+    });
+    summary.textContent = 'The preview did not run. Nothing was recorded.';
+    document.getElementById('pv-warning-text').textContent = error.message;
+    document.getElementById('pv-warning').classList.remove('hide');
+    document.getElementById('pv-edits').innerHTML =
+      '<div class="empty">The preview did not run. Nothing was recorded.</div>';
   }
+}
+
+/* Scroll to the units a finding cites and mark them for a moment. */
+function reviewUnits(unitIds) {
+  const nodes = unitIds
+    .map((id) => document.querySelector(`.u[data-unit="${id}"]`))
+    .filter(Boolean);
+  if (!nodes.length) {
+    toast('The cited units are not on this page.');
+    return;
+  }
+  nodes[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+  nodes.forEach((node) => {
+    node.classList.add('cited');
+    setTimeout(() => node.classList.remove('cited'), 4000);
+  });
 }
 
 seeRipple.addEventListener('click', openPreview);
 document.getElementById('pv-close').addEventListener('click',
   () => preview.classList.add('hide'));
-// Keep editing writes the overlay's text back to the line, so the script and
-// the preview never disagree about what the proposal is.
+// The drafts stay on the lines themselves, so keep-editing only returns focus.
 document.getElementById('pv-keep').addEventListener('click', () => {
-  const node = document.querySelector(`.u[data-unit="${state.unit}"]`);
-  if (node) {
-    node.textContent = document.getElementById('pv-proposed').value;
-    noteDraft(node);
-  }
   preview.classList.add('hide');
+  const node = document.querySelector('.u.edited');
   if (node) node.focus();
 });
 
 document.getElementById('pv-reject').addEventListener('click', async () => {
   if (!state.changeSet) return;
-  await api(`/api/changes/${state.changeSet}/reject`, { method: 'POST', body: form({}) });
+  const rejected = state.changeSet;
+  try {
+    await api(`/api/changes/${rejected}/reject`, { method: 'POST', body: form({}) });
+  } catch (error) {
+    ripple.trace('ripple.reject_failed', { changeSet: rejected, error: error.message });
+    toast(error.message, true);
+    return;
+  }
+  // The proposal is now rejected on the server, so it must stop being
+  // acceptable in the page: a later Accept against it would 400.
+  state.changeSet = null;
+  document.getElementById('pv-accept').disabled = true;
+  document.getElementById('pv-reject').disabled = true;
+  ripple.trace('ripple.rejected', { changeSet: rejected });
   preview.classList.add('hide');
   toast('Rejected. Nothing changed.');
 });
 
 document.getElementById('pv-accept').addEventListener('click', async () => {
   if (!state.changeSet) return;
+  const accepted = state.changeSet;
+  const editedUnits = [...state.drafts.keys()];
   try {
-    const body = await api(`/api/changes/${state.changeSet}/accept`, { method: 'POST' });
-    state.drafts.delete(state.unit);
+    const body = await api(`/api/changes/${accepted}/accept`, { method: 'POST' });
+    ripple.trace('ripple.accepted', {
+      changeSet: accepted,
+      operations: body.operations_applied,
+      scriptVersion: body.script_version,
+    });
+    // Undo is latest-only, so the page after the reload only needs one unit
+    // of the change it may undo.
+    try {
+      if (editedUnits.length) {
+        sessionStorage.setItem(undoStashKey(), editedUnits[0]);
+      }
+    } catch (error) { /* no storage, the Undo button stays disabled */ }
+    state.changeSet = null;
+    state.drafts.clear();
     state.applying = true;
     toast(`Accepted · ${body.operations_applied} operations · now v${body.script_version}`);
     setTimeout(() => window.location.reload(), 900);
   } catch (error) {
+    ripple.trace('ripple.accept_failed', {
+      changeSet: accepted, error: error.message,
+    });
     toast(error.message, true);
   }
 });
+
+/* Undo of the latest accepted change. The server allows one level of undo,
+   so the button only knows about the change this page accepted: a unit id
+   stashed across the accept's reload. */
+function undoStashKey() {
+  return `ripple.undo.${window.location.pathname.split('/').pop()}`;
+}
+
+const undoLast = document.getElementById('undo-last');
+if (undoLast) {
+  let stashedUnit = null;
+  try {
+    stashedUnit = sessionStorage.getItem(undoStashKey());
+  } catch (error) { /* no storage */ }
+  undoLast.disabled = !stashedUnit;
+  undoLast.addEventListener('click', async () => {
+    if (!stashedUnit) return;
+    if (!(await confirmDialog(
+      'Undo the last accepted change? The previous text and graph state '
+      + 'come back.', 'Undo'))) return;
+    try {
+      await api(`/api/units/${stashedUnit}/undo`, { method: 'POST', body: form({}) });
+    } catch (error) {
+      ripple.trace('ripple.undo_failed', { unit: stashedUnit, error: error.message });
+      toast(error.message, true);
+      // Whatever refused it (a later change, a vanished unit) will refuse
+      // it again; the stash is spent.
+      try { sessionStorage.removeItem(undoStashKey()); } catch (removeError) { /* gone */ }
+      undoLast.disabled = true;
+      return;
+    }
+    ripple.trace('ripple.undone', { unit: stashedUnit });
+    try { sessionStorage.removeItem(undoStashKey()); } catch (removeError) { /* gone */ }
+    toast('Undone. The previous text is back.');
+    setTimeout(() => window.location.reload(), 900);
+  });
+}
 
 /* Browser-driven extraction: one scene per request, each committed on its own,
    so a reload resumes rather than restarting. */
@@ -280,17 +496,27 @@ if (extract) {
     extract.disabled = true;
     try {
       const started = await api(`/api/scripts/${scriptId}/extract`, { method: 'POST' });
+      ripple.trace('extract.started', { run: started.run_id });
+      let progress = null;
       for (;;) {
         const step = await api(`/api/extract/${started.run_id}/next`, { method: 'POST' });
-        const p = step.progress;
-        const done = p.completed + p.failed;
-        bar.style.width = `${Math.round((done / Math.max(p.total, 1)) * 100)}%`;
-        count.textContent = `${done} of ${p.total} · ${p.failed} failed`;
-        if (step.done || p.pending === 0) break;
+        progress = step.progress;
+        const done = progress.completed + progress.failed;
+        bar.style.width =
+          `${Math.round((done / Math.max(progress.total, 1)) * 100)}%`;
+        count.textContent =
+          `${done} of ${progress.total} · ${progress.failed} failed`;
+        if (step.done || progress.pending === 0) break;
       }
+      ripple.trace('extract.finished', {
+        run: started.run_id,
+        completed: progress ? progress.completed : null,
+        failed: progress ? progress.failed : null,
+      });
       label.textContent = 'Extraction finished';
       setTimeout(() => window.location.reload(), 900);
     } catch (error) {
+      ripple.trace('extract.stopped', { error: error.message });
       label.textContent = 'Extraction stopped';
       toast(error.message, true);
       extract.disabled = false;

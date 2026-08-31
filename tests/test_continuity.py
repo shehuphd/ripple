@@ -69,7 +69,13 @@ def world(session):
         canonical_name="Grey parka",
         normalized_name=normalize("Grey parka"),
     )
-    session.add_all([sedan, parka])
+    forklift = Entity(
+        script_id=script.id,
+        entity_type="set_design",
+        canonical_name="Dead forklift",
+        normalized_name=normalize("Dead forklift"),
+    )
+    session.add_all([sedan, parka, forklift])
     session.flush()
 
     establishes = Assertion(
@@ -83,6 +89,31 @@ def world(session):
         confidence=0.9,
     )
     session.add(establishes)
+    session.flush()
+
+    # Established and used in the same unit, and nowhere else: an edit that
+    # removes both belongs to one proposal, not a later scene.
+    forklift_establishes = Assertion(
+        script_id=script.id,
+        subject_kind="scene",
+        subject_scene_id=scenes["14"].id,
+        predicate="establishes",
+        object_kind="entity",
+        object_entity_id=forklift.id,
+        source_unit_id=units["14"].id,
+        confidence=0.88,
+    )
+    forklift_appears_in = Assertion(
+        script_id=script.id,
+        subject_kind="entity",
+        subject_entity_id=forklift.id,
+        predicate="appears_in",
+        object_kind="scene",
+        object_scene_id=scenes["14"].id,
+        source_unit_id=units["14"].id,
+        confidence=0.87,
+    )
+    session.add_all([forklift_establishes, forklift_appears_in])
     session.flush()
     for number in ("22", "31", "44"):
         session.add(
@@ -118,6 +149,9 @@ def world(session):
         "sedan": sedan,
         "parka": parka,
         "establishes": establishes,
+        "forklift": forklift,
+        "forklift_establishes": forklift_establishes,
+        "forklift_appears_in": forklift_appears_in,
     }
 
 
@@ -135,13 +169,17 @@ class TestOrphanedReferences:
         assert len(finding.later_unit_ids) == 3
         assert "22, 31, 44" in finding.message
 
-    def test_an_entity_with_no_later_use_produces_no_finding(self, session, world):
+    def test_an_entry_without_an_assertion_id_is_dropped(self, session, world):
+        """The contract requires the removed edge's id; None cannot be checked.
+
+        Without the id, the "established elsewhere" exclusion has nothing to
+        exclude, so the check would answer from data the caller did not
+        state. The entry is dropped rather than half-checked.
+        """
         findings = detect_orphaned_references(
             session, world["script"].id, [(world["parka"].id, "Grey parka", None)]
         )
-        # The parka has a use but no establishes was removed for it, and its
-        # single use is what remains, so a finding here would be noise.
-        assert [f.entity_label for f in findings] == ["Grey parka"]
+        assert findings == []
 
     def test_a_second_establishing_edge_suppresses_the_finding(self, session, world):
         """Still introduced elsewhere means there is nothing to warn about."""
@@ -167,6 +205,36 @@ class TestOrphanedReferences:
 
     def test_nothing_removed_means_nothing_found(self, session, world):
         assert detect_orphaned_references(session, world["script"].id, []) == []
+
+    def test_a_use_removed_by_the_same_edit_does_not_count_as_surviving(
+        self, session, world
+    ):
+        """An edit removing both an entity's only establishes and its only use
+        must not warn about itself: that use is not later, it's the same edit.
+
+        Caught live: a ripple preview removing "Dead forklift" from the one
+        unit that both established and used it flagged "Later units still
+        reference Dead forklift", citing the very unit being edited. The
+        assertion was still `active` in the database, since the proposal isn't
+        applied yet, so a check that only excluded removed `establishes`
+        edges, not every edge this same diff removes, always found it.
+        """
+        findings = detect_orphaned_references(
+            session,
+            world["script"].id,
+            [
+                (
+                    world["forklift"].id,
+                    "Dead forklift",
+                    world["forklift_establishes"].id,
+                )
+            ],
+            removed_assertion_ids={
+                str(world["forklift_establishes"].id),
+                str(world["forklift_appears_in"].id),
+            },
+        )
+        assert findings == []
 
     def test_it_needs_no_model(self, session, world):
         """No provider is constructed, so the warning survives an outage."""
@@ -283,3 +351,40 @@ class TestRetrieval:
             "existing_open_findings",
             "truncated",
         }
+
+
+class TestOpenFindingsScoping:
+    def test_another_scripts_findings_stay_out_of_the_packet(self, session, world):
+        """Regression: the open-findings query had no script scoping, so
+        another script's warnings entered this script's evidence packet."""
+        from ripple.db.models import ChangeSet, ContinuityFinding, Script
+
+        def finding_for(script, message):
+            change_set = ChangeSet(
+                script_id=script.id,
+                kind="edit",
+                status="pending",
+                base_script_version=1,
+            )
+            session.add(change_set)
+            session.flush()
+            session.add(
+                ContinuityFinding(
+                    change_set_id=change_set.id,
+                    finding_type="orphaned_reference",
+                    severity="high",
+                    message=message,
+                    status="open",
+                )
+            )
+            session.flush()
+
+        other = Script(title="The Understudy", import_status="accepted")
+        session.add(other)
+        session.flush()
+        finding_for(world["script"], "sedan finding")
+        finding_for(other, "gown finding")
+
+        packet = retrieve(session, world["script"].id, [world["sedan"].id], 1)
+        assert "sedan finding" in packet.open_findings
+        assert "gown finding" not in packet.open_findings

@@ -23,10 +23,10 @@
     <th>Title</th><th>Format</th><th>Pages</th><th>Scenes</th>
     <th>Runtime</th><th>Import outcome</th><th></th>
   </tr></thead>
-  <tbody id="rows">
+  <tbody id="rows" data-landing="{{ landing_view }}">
   {% for row in rows %}
     <tr data-id="{{ row.id }}" data-title="{{ row.title }}">
-      <td><span class="title"><span class="ic">▤</span>{{ row.title }}</span></td>
+      <td><a class="title" href="{{ '/scripts/' ~ row.id ~ '/graph' if landing_view == 'graph' else '/scripts/' ~ row.id }}"><span class="ic">▤</span>{{ row.title }}</a></td>
       <td>{{ row.format }}</td>
       <td class="num">{{ row.pages }}</td>
       <td class="num">{{ row.scenes }}</td>
@@ -57,7 +57,7 @@
       .fountain, .fdx, .pdf with a text layer, .txt<br>
       <span class="tiny">Scanned PDFs are rejected when OCR is unavailable</span>
     </div>
-    <div id="upload-result" class="tiny" style="margin-top:11px"></div>
+    <div id="upload-result" aria-live="polite" class="tiny" style="margin-top:11px"></div>
   </div>
 </div>
 {% endblock %}

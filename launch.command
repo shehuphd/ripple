@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Ripple launcher. Double-click in Finder, or run from a terminal.
 #
-#   ./launch.command          start the app and open a browser
-#   ./launch.command --test   run the test suite instead
+#   ./launch.command                 start the app and open a browser
+#   ./launch.command --test [args]   run the test suite instead, passing any
+#                                    further arguments to pytest
 #
 # Path-safe: resolves its own directory through symlinks and quotes every
 # expansion, so it works from a path containing spaces and does not depend on
@@ -28,13 +29,61 @@ BASE_PORT="${RIPPLE_PORT:-8420}"
 echo "Ripple  ·  $REPO_ROOT"
 echo
 
-if [ ! -x "$PYTHON" ]; then
+# Stop any instance already running, before anything else. A leftover server
+# from an earlier session keeps serving stale code indefinitely; replacing it
+# is the only way to be sure the code on disk is the code being served. The
+# match is on the server's own command line, not on a port, so a process
+# started by hand on another port is found too. SIGTERM first, a short grace
+# period, then SIGKILL for stragglers.
+running="$(pgrep -f "uvicorn ripple\.web\.app" 2>/dev/null || true)"
+if [ -n "$running" ]; then
+  echo "Stopping the running Ripple instance..."
+  for pid in $running; do
+    kill "$pid" 2>/dev/null || true
+  done
+  for _ in $(seq 1 20); do
+    pgrep -f "uvicorn ripple\.web\.app" >/dev/null 2>&1 || break
+    sleep 0.25
+  done
+  for pid in $(pgrep -f "uvicorn ripple\.web\.app" 2>/dev/null || true); do
+    kill -9 "$pid" 2>/dev/null || true
+  done
+fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 was not found on PATH. Install Python 3.11 or newer from" >&2
+  echo "https://www.python.org/downloads/ and run this script again." >&2
+  exit 1
+fi
+
+# The project needs 3.11+; saying so here beats a syntax error later.
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'; then
+  echo "Ripple needs Python 3.11 or newer; python3 here is $(python3 -V 2>&1)." >&2
+  echo "Install a newer Python from https://www.python.org/downloads/ and" >&2
+  echo "run this script again." >&2
+  exit 1
+fi
+
+# An existing venv is validated by running its interpreter, not by the
+# directory existing: a half-created or broken venv would otherwise be
+# trusted forever.
+if ! "$PYTHON" -c 'import sys' >/dev/null 2>&1; then
   echo "Creating the virtual environment..."
-  command -v python3 >/dev/null 2>&1 || {
-    echo "python3 was not found on PATH. Install Python 3.11 or newer." >&2
-    exit 1
-  }
+  rm -rf "$VENV"
   python3 -m venv "$VENV"
+  "$PYTHON" -m ensurepip --upgrade >/dev/null 2>&1 || true
+fi
+
+# Keep sync clients away from compiled extensions and the credential file.
+# Dropbox churn invalidates .so code signatures on macOS, and the secrets
+# file must not replicate off this machine. Setting the attribute is
+# idempotent, so it runs on every launch rather than only on creation.
+if command -v xattr >/dev/null 2>&1; then
+  for synced_path in "$VENV" "$REPO_ROOT/.venv" "$REPO_ROOT/data"; do
+    if [ -e "$synced_path" ]; then
+      xattr -w com.dropbox.ignored 1 "$synced_path" 2>/dev/null || true
+    fi
+  done
 fi
 
 echo "Installing dependencies..."
@@ -42,30 +91,45 @@ echo "Installing dependencies..."
 "$PYTHON" -m pip install --quiet -e ".[dev]"
 
 if [ "${1:-}" = "--test" ]; then
+  shift
   echo "Running the test suite..."
   echo
-  exec "$PYTHON" -m pytest
+  exec "$PYTHON" -m pytest "$@"
 fi
 
 # Find a free port, starting at the default and trying up to twenty above it.
-# An instance of Ripple already listening is reused rather than duplicated.
+# The kill above normally clears any same-app holder; one found here anyway
+# (a race, a kill that did not take) is killed and its port taken, never
+# reused, so a stale instance cannot keep serving unnoticed.
 PORT=""
 for offset in $(seq 0 20); do
   candidate=$((BASE_PORT + offset))
-  holder="$(lsof -ti ":$candidate" -sTCP:LISTEN 2>/dev/null || true)"
-  if [ -z "$holder" ]; then
+  holders="$(lsof -ti ":$candidate" -sTCP:LISTEN 2>/dev/null || true)"
+  if [ -z "$holders" ]; then
     PORT="$candidate"
     break
   fi
-  if ps -p "$holder" -o command= 2>/dev/null | grep -q "ripple.web.app"; then
-    echo "Ripple is already running on port $candidate. Opening it."
-    open "http://127.0.0.1:$candidate" 2>/dev/null || true
-    exit 0
+  same_app=""
+  for pid in $holders; do
+    if ps -p "$pid" -o command= 2>/dev/null | grep -q "ripple\.web\.app"; then
+      same_app="yes"
+      kill "$pid" 2>/dev/null || true
+    fi
+  done
+  if [ -n "$same_app" ]; then
+    sleep 1
+    for pid in $(lsof -ti ":$candidate" -sTCP:LISTEN 2>/dev/null || true); do
+      kill -9 "$pid" 2>/dev/null || true
+    done
+    PORT="$candidate"
+    break
   fi
 done
 
 if [ -z "$PORT" ]; then
   echo "No free port between $BASE_PORT and $((BASE_PORT + 20))." >&2
+  echo "Close whatever holds those ports, or set RIPPLE_PORT to another" >&2
+  echo "starting port, then run this script again." >&2
   exit 1
 fi
 
@@ -97,4 +161,8 @@ echo
   done
 ) &
 
-exec "$PYTHON" -m uvicorn ripple.web.app:app --host 127.0.0.1 --port "$PORT" --log-level info
+# --reload restarts the server when a Python file changes, so an edit shows
+# up on the next page load. Templates and static assets need no restart at
+# all: templates re-read on render, and every response is sent no-store.
+exec "$PYTHON" -m uvicorn ripple.web.app:app --host 127.0.0.1 --port "$PORT" \
+  --log-level info --reload --reload-dir "$REPO_ROOT/ripple"

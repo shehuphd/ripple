@@ -1,6 +1,6 @@
 """Resumable, scene-at-a-time graph extraction.
 
-PRD section 10 rules out paid background workers, so the browser drives the
+Paid background workers are ruled out, so the browser drives the
 loop: it asks for one scene job, the server does that scene and commits it, and
 the browser asks again. A reload resumes from the first incomplete scene
 because progress lives in `scene_extractions` rather than in a process.
@@ -19,6 +19,7 @@ Three properties this module has to hold:
 from __future__ import annotations
 
 import logging
+import time
 import uuid as uuid_module
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -32,13 +33,20 @@ from ripple.db.models import (
     Assertion,
     Entity,
     EntityAlias,
+    EntityAttribute,
     ExtractionRun,
+    ModelCall,
     Scene,
     SceneExtraction,
     Script,
     ScriptUnit,
 )
 from ripple.db.naming import normalize
+from ripple.db.repository import (
+    clear_model_unavailable,
+    get_fallback_model,
+    mark_model_unavailable,
+)
 from ripple.extraction.prompt import (
     OUTPUT_SCHEMA,
     PROMPT_VERSION,
@@ -54,7 +62,8 @@ from ripple.extraction.validate import (
     validate_response,
 )
 from ripple.graph.predicates import canonical_endpoints
-from ripple.llm.base import LLMProvider, ProviderError
+from ripple.llm.base import AVAILABILITY_CODES, LLMProvider, ProviderError
+from ripple.services.spend import BudgetExceeded, check_budget
 from ripple.tracing import ensure_configured
 
 logger = logging.getLogger(__name__)
@@ -74,6 +83,7 @@ class SceneOutcome:
     status: str
     entities_written: int = 0
     assertions_written: int = 0
+    attributes_written: int = 0
     rejected: int = 0
     cached: bool = False
     error_code: str | None = None
@@ -253,21 +263,72 @@ def extract_scene(
         prompt = build_prompt(scene.heading, scene.display_scene_number, units)
         job.attempt_count += 1
 
-        try:
-            result = provider.generate(
-                job.model_id,
-                prompt,
-                system=SYSTEM_PROMPT,
-                max_output_tokens=MAX_OUTPUT_TOKENS,
-                json_schema=OUTPUT_SCHEMA,
+        # The main model, then the configured fallback when the main refuses
+        # for an availability reason. Each attempt writes its own audit row.
+        candidates = [job.model_id]
+        _, fallback = get_fallback_model(session)
+        if fallback and fallback != job.model_id:
+            candidates.append(fallback)
+
+        result = None
+        call = None
+        for candidate in candidates:
+            call = ModelCall(
+                script_id=run.script_id,
+                scene_id=job.scene_id,
+                purpose="extract",
+                prompt_version=job.prompt_version,
+                model_id=candidate,
+                request_text=prompt,
+                outcome="ok",
             )
-        except ProviderError as error:
-            return _fail(session, job, run, trace, error.code)
+            try:
+                check_budget(session, call)
+            except BudgetExceeded:
+                # A spent budget fails the scene outright: retrying cannot
+                # help, and the pending run should stop asking rather than
+                # loop.
+                job.attempt_count = MAX_ATTEMPTS
+                return _fail(session, job, run, trace, "budget_exceeded")
+
+            call_started = time.perf_counter()
+            try:
+                result = provider.generate(
+                    candidate,
+                    prompt,
+                    system=SYSTEM_PROMPT,
+                    max_output_tokens=MAX_OUTPUT_TOKENS,
+                    json_schema=OUTPUT_SCHEMA,
+                )
+            except ProviderError as error:
+                if error.code == "model_not_available":
+                    mark_model_unavailable(session, provider.name, candidate)
+                call.outcome = "provider_error"
+                call.error_message = error.message
+                call.duration_ms = int(
+                    (time.perf_counter() - call_started) * 1000
+                )
+                session.add(call)
+                session.flush()
+                more = candidate != candidates[-1]
+                if more and error.code in AVAILABILITY_CODES:
+                    logger.info(
+                        "extraction failing over after %s", error.code
+                    )
+                    continue
+                return _fail(session, job, run, trace, error.code)
+            clear_model_unavailable(session, provider.name, candidate)
+            break
+
+        call.response_text = result.text
+        call.input_tokens = result.input_tokens
+        call.output_tokens = result.output_tokens
+        call.duration_ms = int((time.perf_counter() - call_started) * 1000)
 
         trace.event(
             kind="model",
             operation="generate",
-            target=job.model_id,
+            target=call.model_id,
             data={
                 "input_tokens": result.input_tokens,
                 "output_tokens": result.output_tokens,
@@ -275,6 +336,9 @@ def extract_scene(
             },
         )
         if result.truncated:
+            call.outcome = "truncated"
+            session.add(call)
+            session.flush()
             return _fail(session, job, run, trace, "output_truncated")
 
         try:
@@ -283,7 +347,20 @@ def extract_scene(
             )
         except MalformedResponse as error:
             logger.info("scene %s: %s", job.scene_id, error)
+            call.outcome = "malformed"
+            call.error_message = str(error)
+            session.add(call)
+            session.flush()
             return _fail(session, job, run, trace, "malformed_response")
+
+        call.validation_json = {
+            "entities": len(report.entities),
+            "assertions": len(report.assertions),
+            "rejected": len(report.rejected),
+            "rejection_codes": sorted(set(report.rejection_codes)),
+        }
+        session.add(call)
+        session.flush()
 
         trace.event(
             kind="validate",
@@ -295,7 +372,7 @@ def extract_scene(
                 "rejection_codes": sorted(set(report.rejection_codes)),
             },
         )
-        return _complete(session, job, run, report, trace)
+        return _complete(session, job, run, report, trace, model_used=call.model_id)
 
 
 def _reuse_cached(session: Session, job: SceneExtraction) -> SceneOutcome | None:
@@ -336,6 +413,9 @@ def _reuse_cached(session: Session, job: SceneExtraction) -> SceneOutcome | None
     job.completed_at = _now()
     run = session.get(ExtractionRun, job.extraction_run_id)
     run.completed_scenes += 1
+    # Without the roll-up, a run whose last scene is a cache hit keeps its
+    # old status forever and the script never leaves "analysing".
+    _roll_up(session, run)
     session.flush()
     return SceneOutcome(
         scene_id=str(job.scene_id),
@@ -352,16 +432,27 @@ def _complete(
     report: ValidationReport,
     trace: ActionTrace,
     empty: bool = False,
+    model_used: str | None = None,
 ) -> SceneOutcome:
     """Write the validated graph rows and mark the job completed."""
     resolved: dict[str, Entity] = {}
     for proposed in report.entities:
         resolved[proposed.local_id] = _resolve_entity(session, run.script_id, proposed)
 
+    model_used = model_used or job.model_id
     written = 0
     for proposed in report.assertions:
-        if _write_assertion(session, run, job, proposed, resolved):
+        if _write_assertion(session, run, job, proposed, resolved, model_used):
             written += 1
+
+    attributes_written = 0
+    for proposed in report.entities:
+        entity = resolved.get(proposed.local_id)
+        if entity is None:
+            continue
+        for attribute in proposed.attributes:
+            if _write_attribute(session, job, entity, attribute, model_used):
+                attributes_written += 1
 
     job.status = "completed"
     job.completed_at = _now()
@@ -377,6 +468,7 @@ def _complete(
             "empty": empty,
             "entities": len(resolved),
             "assertions": written,
+            "attributes": attributes_written,
             "rejected": len(report.rejected),
         }
     )
@@ -385,6 +477,7 @@ def _complete(
         status="completed",
         entities_written=len(resolved),
         assertions_written=written,
+        attributes_written=attributes_written,
         rejected=len(report.rejected),
     )
 
@@ -468,6 +561,7 @@ def _write_assertion(
     job: SceneExtraction,
     proposed: ValidatedAssertion,
     resolved: dict[str, Entity],
+    model_used: str,
 ) -> bool:
     """Write one assertion, skipping a duplicate the dedupe key already holds."""
     subject_id = _endpoint_id(
@@ -505,7 +599,7 @@ def _write_assertion(
         confidence=proposed.confidence,
         provenance="model",
         prompt_version=job.prompt_version,
-        model_id=job.model_id,
+        model_id=model_used,
     )
     try:
         # A savepoint, not a rollback: the dedupe index rejecting one duplicate
@@ -513,6 +607,56 @@ def _write_assertion(
         # this scene. Re-extraction producing the same edge is expected.
         with session.begin_nested():
             session.add(assertion)
+            session.flush()
+    except IntegrityError:
+        return False
+    return True
+
+
+def _write_attribute(
+    session: Session, job: SceneExtraction, entity, proposed, model_used: str
+) -> bool:
+    """Write one attribute, unless the key already holds an active value.
+
+    First writer wins across an extraction: an entity's color stated in scene
+    3 is not overwritten by scene 40 restating it, and a re-extraction of the
+    same scene writes nothing. Changing an active value is the judgement
+    engine's job, through an accepted change set, never a side effect of
+    extraction.
+    """
+    existing = session.scalar(
+        select(EntityAttribute.id).where(
+            EntityAttribute.entity_id == entity.id,
+            EntityAttribute.key == proposed.key,
+            EntityAttribute.active.is_(True),
+        )
+    )
+    if existing is not None:
+        return False
+
+    try:
+        source_unit_id = uuid_module.UUID(proposed.source_unit_id)
+    except (ValueError, AttributeError):
+        return False
+
+    try:
+        # A savepoint for the same reason assertions use one: two entities in
+        # one reply racing to the same key must not discard the whole scene.
+        with session.begin_nested():
+            session.add(
+                EntityAttribute(
+                    entity_id=entity.id,
+                    key=proposed.key,
+                    value=proposed.value,
+                    confidence=proposed.confidence,
+                    provenance="model",
+                    source_unit_id=source_unit_id,
+                    evidence_start=proposed.evidence_start,
+                    evidence_end=proposed.evidence_end,
+                    prompt_version=job.prompt_version,
+                    model_id=model_used,
+                )
+            )
             session.flush()
     except IntegrityError:
         return False
@@ -543,11 +687,16 @@ def _roll_up(session: Session, run: ExtractionRun) -> None:
 
     if outstanding:
         run.status = "partially_ready" if run.completed_scenes else "running"
-    elif run.failed_scenes and not run.completed_scenes:
-        run.status = "failed"
+    elif run.failed_scenes:
+        # Finished with failures: the graph holds only the completed scenes.
+        # "ready" is reserved for a run every scene of which completed.
+        run.status = "failed" if not run.completed_scenes else "partially_ready"
+        if run.completed_at is None:
+            run.completed_at = _now()
     else:
         run.status = "ready"
-        run.completed_at = _now()
+        if run.completed_at is None:
+            run.completed_at = _now()
 
     script = session.get(Script, run.script_id)
     if script is not None:

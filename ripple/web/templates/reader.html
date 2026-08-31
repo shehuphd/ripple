@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}{{ script.title }} — Ripple{% endblock %}
+{% block title %}{{ script.title }} · Ripple{% endblock %}
 
 {% block sidebar %}
 <div class="side-hd"><span>Scene</span><span>Pages</span></div>
 <div class="side-scroll" style="padding:0">
   {% for scene in scenes %}
-  <div class="scene-row" data-scene="{{ scene.id }}">
+  <div class="scene-row" data-scene="{{ scene.id }}" tabindex="0" role="button">
     <div class="hd">
       <span class="no">{{ scene.number }}</span>
       <span class="tx">{{ scene.heading }}</span>
@@ -14,6 +14,7 @@
       {{ scene.entities }} entities</div>
   </div>
   {% endfor %}
+  <div class="kbdmap">⌨ Tab reaches lines · Esc reverts a line · Enter opens the ripple</div>
 </div>
 {% endblock %}
 
@@ -21,25 +22,29 @@
 <h1>{{ script.title }}</h1>
 <span class="sub" id="crumb">base v{{ script.current_version }}</span>
 <div class="right">
+  <a class="btn" href="/scripts/{{ script.id }}/graph">⁙ Graph</a>
   {% if findings %}
-  <span class="chip"><i class="dot medium"></i>{{ findings }} continuity findings</span>
+  <a class="chip" href="/findings?script={{ script.id }}"
+     data-tip="Open this script's continuity findings"><i class="dot medium"></i>
+    {{ findings }} continuity finding{{ '' if findings == 1 else 's' }}</a>
   {% endif %}
   {% if model %}<span class="chip">◎ {{ model }}</span>
     <button class="btn" id="extract">Build graph</button>
   {% else %}
-    <a class="chip" href="/settings" title="Choose a model to build the graph">
+    <a class="chip" href="/settings" data-tip="Choose a model to build the graph">
       ◎ no model</a>
-    <button class="btn" disabled title="Choose a model in Settings first">
+    <button class="btn" disabled data-tip="Choose a model in Settings first">
       Build graph</button>
   {% endif %}
   <span class="chip hide" id="draft-count"><i class="dot medium"></i>
     <span>0 edited</span></span>
+  <button class="btn" id="undo-last" disabled>Undo last accept</button>
   <button class="btn" id="revert-all" disabled
-          title="Discard every unapplied edit">Revert edits</button>
+          data-tip="Discard every unapplied edit">Revert edits</button>
   <button class="btn pri" id="see-ripple" disabled
-          title="Edit a line, then see what it changes">≋ See ripple</button>
+          data-tip="Edit a line, then see what it changes">≋ See ripple</button>
   <button class="toggle" data-pane="reader" data-target=".reader"
-          title="Show or hide the requirement pane" aria-label="Toggle pane">⬒</button>
+          data-tip="Show or hide the requirement pane" aria-label="Toggle pane">⬒</button>
 </div>
 {% endblock %}
 
@@ -52,7 +57,7 @@
     diff, and the deterministic continuity findings all work without one.</span>
   <a href="/settings">Choose a model</a></div>
 {% endif %}
-<div id="run" class="card" style="display:none;margin-bottom:14px">
+<div id="run" class="card" style="display:none;margin-bottom:14px" aria-live="polite">
   <div style="display:flex"><strong id="run-label">Extracting</strong>
     <span class="tiny muted num" id="run-count" style="margin-left:auto"></span></div>
   <div class="track"><i id="run-bar" style="width:0"></i></div>
@@ -101,31 +106,35 @@
     <div class="right">
       <span class="chip" id="pv-sev"><i class="dot"></i><span>severity</span></span>
       {% if model %}<span class="chip">◎ {{ model }}</span>{% endif %}
-      <button class="btn icon" id="pv-close" title="Close">↩</button>
+      <button class="btn icon" id="pv-close" data-tip="Close" aria-label="Close preview">↩</button>
     </div>
+  </div>
+
+  <div class="lock hide" id="pv-warning">
+    <span class="ic">⚠</span><span id="pv-warning-text"></span>
   </div>
 
   <div class="obody">
     <div class="cards">
-      <div class="textpair">
-        <div class="textbox">
-          <div class="lb">Accepted · base v{{ script.current_version }}</div>
-          <div class="tx" id="pv-accepted"></div>
-        </div>
-        <div class="textbox prop">
-          <div class="lb">Proposed · <b>not applied</b></div>
-          <textarea id="pv-proposed"></textarea>
-        </div>
+      <div class="card">
+        <div class="hd"><h2>Edited lines</h2>
+          <span class="meta" id="pv-editmeta">base v{{ script.current_version }}</span></div>
+        <div id="pv-edits"></div>
       </div>
 
       <div class="card">
         <div class="hd"><h2>What changes</h2><span class="meta" id="pv-meta"></span></div>
-        <div id="pv-summary" class="empty">Computing…</div>
+        <div id="pv-summary" class="empty" aria-live="polite">Computing…</div>
       </div>
 
       <div class="card">
         <div class="hd"><h2>Graph diff</h2><span class="meta" id="pv-diffmeta"></span></div>
         <div id="pv-diff"></div>
+      </div>
+
+      <div class="card">
+        <div class="hd"><h2>Attributes</h2><span class="meta">per entity</span></div>
+        <div id="pv-attrs"><div class="empty">No attribute changes.</div></div>
       </div>
     </div>
 

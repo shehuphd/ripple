@@ -2,7 +2,7 @@
 """Render an authored Fountain screenplay into the other three import formats.
 
 One authored source per demo script produces .fdx, .pdf, and .txt, so all four
-adapters in PRD section 5 have a fixture derived from identical content. Any
+adapters have a fixture derived from identical content. Any
 difference an adapter produces is the adapter's, not the source material's.
 
     python tools/render_screenplay.py                    # every demo script
@@ -94,7 +94,7 @@ def inject_scene_numbers(fdx: Path, numbers: list[str]) -> int:
             "parser did not recognise, or a missing #N# marker."
         )
     injected = 0
-    for heading, number in zip(headings, numbers):
+    for heading, number in zip(headings, numbers, strict=False):
         if number:
             heading.set("Number", number)
             injected += 1

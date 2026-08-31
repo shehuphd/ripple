@@ -63,8 +63,8 @@ class FixtureProvider:
         """Always true: the fixture provider needs no credential."""
         return True
 
-    def list_models(self) -> list[ModelInfo]:
-        """The three fixture models, one per tier."""
+    def list_models(self, *, api_key: str | None = None) -> list[ModelInfo]:
+        """The three fixture models, one per tier. Any key is accepted."""
         return [
             ModelInfo(
                 id=identifier,

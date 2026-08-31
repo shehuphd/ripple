@@ -8,6 +8,7 @@ commit and the rollback.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -31,6 +32,7 @@ from ripple.db.models import (
     Script,
     ScriptUnit,
     SourceAnchor,
+    UiPreference,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,7 +42,7 @@ logger = logging.getLogger(__name__)
 class DeletionCounts:
     """What a destructive operation removed, or would remove.
 
-    PRD section 9 requires counts before confirmation, so the same structure
+    Counts are shown before confirmation, so the same structure
     serves the preview and the result.
     """
 
@@ -190,6 +192,28 @@ def _count(session: Session, model, script_id=None) -> int:
     return session.scalar(statement) or 0
 
 
+def graph_labels(session: Session, script_id) -> dict:
+    """Display labels for every node in one script's graph.
+
+    Entities are labelled by canonical name; scenes by their display number.
+    An unnumbered scene (an intercut sub-heading, an OMITTED slug) stays
+    visibly unnumbered as "Sc —": substituting the position invents a number
+    that collides with a numbered scene further along the spine.
+    """
+    labels: dict = {}
+    for entity_id, name in session.execute(
+        select(Entity.id, Entity.canonical_name).where(Entity.script_id == script_id)
+    ):
+        labels[entity_id] = name
+    for scene_id, number in session.execute(
+        select(Scene.id, Scene.display_scene_number).where(
+            Scene.script_id == script_id
+        )
+    ):
+        labels[scene_id] = f"Sc {number}" if number else "Sc —"
+    return labels
+
+
 def deletion_preview(session: Session, script_id=None) -> DeletionCounts:
     """What deleting one script, or all scripts, would remove."""
     scene_filter = select(Scene.id)
@@ -208,6 +232,14 @@ def deletion_preview(session: Session, script_id=None) -> DeletionCounts:
             or 0
         )
 
+    # Findings hang off change sets, so scoping to one script goes through
+    # the change set's script_id rather than a column findings do not have.
+    findings_query = select(func.count()).select_from(ContinuityFinding)
+    if script_id is not None:
+        findings_query = findings_query.join(
+            ChangeSet, ContinuityFinding.change_set_id == ChangeSet.id
+        ).where(ChangeSet.script_id == script_id)
+
     return DeletionCounts(
         scripts=1 if script_id is not None else _count(session, Script),
         scenes=len(scene_ids),
@@ -216,12 +248,12 @@ def deletion_preview(session: Session, script_id=None) -> DeletionCounts:
         assertions=_count(session, Assertion, script_id),
         extraction_runs=_count(session, ExtractionRun, script_id),
         change_sets=_count(session, ChangeSet, script_id),
-        findings=_count(session, ContinuityFinding),
+        findings=session.scalar(findings_query) or 0,
     )
 
 
 def delete_script(session: Session, script_id) -> DeletionCounts:
-    """Delete one script and everything under it. ERD section 10."""
+    """Delete one script and everything under it."""
     counts = deletion_preview(session, script_id)
     script = session.get(Script, script_id)
     if script is None:
@@ -244,7 +276,7 @@ def clear_all_graphs(session: Session) -> DeletionCounts:
     """Delete graph data while preserving scripts, scenes, units, and anchors.
 
     Query log rows survive, because a question concerns the script rather than
-    one extraction run. ERD section 9.
+    one extraction run.
     """
     counts = DeletionCounts(
         entities=_count(session, Entity),
@@ -294,13 +326,114 @@ def get_active_model(session: Session) -> tuple[str | None, str | None]:
     return (row.provider_id, row.model_id) if row else (None, None)
 
 
+def set_fallback_model(
+    session: Session, provider_id: str | None, model_id: str | None
+) -> None:
+    """Record the fallback model, or clear it when either identifier is None.
+
+    The fallback answers when the main model refuses for an availability
+    reason; it is stored the same way as the active model, identifiers only.
+    """
+    row = session.get(AppConfiguration, "fallback_model")
+    if provider_id is None or model_id is None:
+        if row is not None:
+            session.delete(row)
+        session.flush()
+        return
+    if row is None:
+        row = AppConfiguration(key="fallback_model")
+        session.add(row)
+    row.provider_id = provider_id
+    row.model_id = model_id
+    session.flush()
+
+
+def get_fallback_model(session: Session) -> tuple[str | None, str | None]:
+    """The fallback provider and model, or (None, None) when none is set."""
+    row = session.get(AppConfiguration, "fallback_model")
+    return (row.provider_id, row.model_id) if row else (None, None)
+
+
+# Where clicking a script in the library goes. The reader is the default;
+# the graph stays one click away either way.
+LANDING_VIEWS = ("reader", "graph")
+
+
+def get_landing_view(session: Session) -> str:
+    """The chosen landing view, defaulting to the reader."""
+    row = session.get(UiPreference, "landing_view")
+    return row.value if row is not None and row.value in LANDING_VIEWS else "reader"
+
+
+def set_landing_view(session: Session, view: str) -> None:
+    """Persist the landing-view choice."""
+    if view not in LANDING_VIEWS:
+        raise ValueError(
+            f"landing view must be one of {', '.join(LANDING_VIEWS)}, not {view!r}"
+        )
+    row = session.get(UiPreference, "landing_view")
+    if row is None:
+        session.add(UiPreference(key="landing_view", value=view))
+    else:
+        row.value = view
+    session.flush()
+
+
+def _dead_model_key(provider_id: str, model_id: str) -> str:
+    """A fixed-length row key: model identifiers can exceed the key column."""
+    digest = hashlib.sha256(f"{provider_id}\x00{model_id}".encode()).hexdigest()[:16]
+    return f"dead_model:{digest}"
+
+
+def mark_model_unavailable(session: Session, provider_id: str, model_id: str) -> None:
+    """Record that a live call found this model dead on the current account.
+
+    The provider's catalog cannot say this: availability can differ per
+    account, so the only trustworthy signal is the provider rejecting an
+    actual call with `model_not_available`. The picker reads these marks.
+    """
+    key = _dead_model_key(provider_id, model_id)
+    if session.get(AppConfiguration, key) is None:
+        session.add(
+            AppConfiguration(key=key, provider_id=provider_id, model_id=model_id)
+        )
+        session.flush()
+
+
+def clear_model_unavailable(session: Session, provider_id: str, model_id: str) -> None:
+    """Drop the mark after a call succeeds: the account regained the model."""
+    row = session.get(AppConfiguration, _dead_model_key(provider_id, model_id))
+    if row is not None:
+        session.delete(row)
+        session.flush()
+
+
+def unavailable_models(session: Session, provider_id: str) -> set[str]:
+    """Model identifiers a live call has found dead for this provider."""
+    rows = session.scalars(
+        select(AppConfiguration).where(
+            AppConfiguration.key.startswith("dead_model:"),
+            AppConfiguration.provider_id == provider_id,
+        )
+    )
+    return {row.model_id for row in rows if row.model_id}
+
+
 __all__ = [
     "DeletionCounts",
     "clear_all_graphs",
+    "clear_model_unavailable",
     "delete_all_scripts",
     "delete_script",
     "deletion_preview",
     "get_active_model",
+    "get_fallback_model",
+    "get_landing_view",
+    "graph_labels",
+    "mark_model_unavailable",
     "persist_import",
     "set_active_model",
+    "set_fallback_model",
+    "set_landing_view",
+    "unavailable_models",
 ]

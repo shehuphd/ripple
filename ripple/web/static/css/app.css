@@ -53,6 +53,7 @@ button{font:inherit}
 .l1{background:#ff5f57}.l2{background:#febc2e}.l3{background:#28c840}
 .mark{width:15px;height:15px;border-radius:50%;border:1.5px solid var(--ac);
   box-shadow:0 0 0 3px var(--panel),0 0 0 4px var(--ac-d);margin-left:8px}
+.ver{font-size:10.5px;color:var(--t4);margin-left:4px;white-space:nowrap}
 .side-scroll{flex:1;padding:6px 8px;overflow-y:auto}
 .sgroup{font-size:11px;color:var(--t3);letter-spacing:.04em;padding:14px 9px 5px}
 .srow{display:flex;align-items:center;gap:9px;height:30px;padding:0 9px;border-radius:5px;
@@ -68,9 +69,10 @@ button{font:inherit}
 .side-hd{display:flex;padding:6px 15px 8px;font-size:11px;color:var(--t3);
   border-bottom:.5px solid var(--bd)}
 .side-hd span:last-child{margin-left:auto}
-.scene-row{padding:8px 15px;cursor:pointer;border-left:2px solid transparent}
+.scene-row{padding:8px 15px;cursor:pointer}
 .scene-row:hover{background:var(--raised)}
-.scene-row.on{background:var(--ac-w);border-left-color:var(--ac)}
+.scene-row.on{background:var(--ac-w)}
+.scene-row.on .no{color:var(--ac)}
 .scene-row .hd{display:flex;gap:9px;font-size:13px;align-items:baseline}
 .scene-row .no{color:var(--t4);font-variant-numeric:tabular-nums;min-width:18px}
 .scene-row .tx{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -105,6 +107,14 @@ button{font:inherit}
   color:var(--t1);padding:7px 11px 7px 30px;font:inherit;font-size:13px;width:290px}
 .search input:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px var(--ac-w)}
 .search .ic{position:absolute;left:10px;top:7px;color:var(--t4)}
+.search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;
+  background:var(--card);border:.5px solid var(--bd2);border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);overflow:hidden;z-index:5}
+.sres{display:flex;align-items:center;gap:10px;padding:8px 11px;font-size:13px;
+  cursor:pointer;border-bottom:.5px solid var(--bd)}
+.sres:last-child{border-bottom:0}
+.sres .mono{color:var(--t3);flex:0 0 auto}
+.sres:hover,.sres.active{background:var(--raised)}
 
 .content{flex:1;overflow-y:auto;padding:18px}
 /* Panes scroll independently. The container is fixed and hidden; each pane
@@ -126,6 +136,7 @@ button{font:inherit}
 .chip{display:inline-flex;align-items:center;gap:6px;background:var(--raised);
   border:.5px solid var(--bd2);border-radius:7px;padding:6px 11px;font-size:13px;
   color:var(--t1);white-space:nowrap}
+a.chip:hover{border-color:var(--ac);color:var(--t1)}
 .chip .dot{width:6px;height:6px;border-radius:50%;background:var(--t4);flex:0 0 auto}
 .chip .dot.high{background:var(--red)}
 .chip .dot.medium{background:var(--amber)}
@@ -204,14 +215,13 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .sh .no{color:var(--t4);font-weight:400;min-width:20px;text-align:right}
 .sh:first-of-type{margin-top:0}
 .u{padding:2px 7px;margin:0 0 12px;border-radius:4px;cursor:text;
-  border-left:2px solid transparent;white-space:pre-wrap;outline:none}
+  white-space:pre-wrap;outline:none}
 .u:hover{background:var(--raised)}
-.u.sel{background:var(--ac-w);border-left-color:var(--ac)}
-.u:focus{background:var(--ac-w);border-left-color:var(--ac);
-  box-shadow:inset 0 0 0 1px var(--ac-d)}
+.u.sel{background:var(--ac-w)}
+.u:focus{background:var(--ac-w);box-shadow:inset 0 0 0 1px var(--ac-d)}
 /* An edited line is visibly a draft. Nothing is applied until the ripple is
    accepted, so the script must not look as though the edit already landed. */
-.u.edited{border-left-color:var(--amber);background:rgba(201,138,46,.07)}
+.u.edited{background:rgba(201,138,46,.07)}
 .u.edited::after{content:" ·  edited, not applied";font-family:var(--sf);
   font-size:11px;color:var(--amber);white-space:nowrap}
 .u.character{margin-left:32%;margin-bottom:0;text-transform:uppercase}
@@ -231,9 +241,9 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .edge:last-child{border-bottom:0}
 .edge .p{font-family:var(--mono);font-size:11.5px;color:var(--t3);flex:0 0 auto}
 .edge .c{margin-left:auto;color:var(--t4);font-variant-numeric:tabular-nums;flex:0 0 auto}
-.edge.add{border-left:2px solid var(--green);padding-left:9px;background:rgba(78,159,106,.08)}
-.edge.del{border-left:2px solid var(--red);padding-left:9px;background:rgba(201,86,79,.08)}
-.edge.chg{border-left:2px solid var(--amber);padding-left:9px;background:rgba(201,138,46,.08)}
+.edge.add{padding-left:9px;background:rgba(78,159,106,.08)}
+.edge.del{padding-left:9px;background:rgba(201,86,79,.08)}
+.edge.chg{padding-left:9px;background:rgba(201,138,46,.08)}
 .edge .sign{width:11px;color:var(--t3);flex:0 0 auto}
 .edge.add .sign{color:var(--green)}
 .edge.del .sign{color:var(--red)}
@@ -256,16 +266,13 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .overlay .ofoot{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:14px 18px;
   border-top:.5px solid var(--bd);background:var(--panel)}
 .overlay .ofoot .btns{margin-left:auto;display:flex;gap:10px}
-.textpair{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media(max-width:900px){.textpair{grid-template-columns:1fr}}
-.textbox{background:var(--card);border:.5px solid var(--bd);border-radius:9px;padding:14px 16px}
-.textbox.prop{border-color:var(--ac)}
-.textbox .lb{font-size:12px;color:var(--t3);margin-bottom:9px}
-.textbox .lb b{color:var(--ac);font-weight:400}
-.textbox .tx{font-family:var(--mono);font-size:13.5px;line-height:1.55}
-.textbox textarea{width:100%;background:transparent;border:0;color:var(--t1);
-  font-family:var(--mono);font-size:13.5px;line-height:1.55;resize:vertical;min-height:56px}
-.textbox textarea:focus{outline:none}
+.pv-edit{padding:10px 0;border-bottom:.5px solid var(--bd)}
+.pv-edit:last-child{border-bottom:0}
+.pv-edit .wdiff{margin:6px 0 0;font-family:var(--mono);font-size:13.5px;
+  line-height:1.6;color:var(--t2)}
+.wdiff del{background:rgba(201,86,79,.14);color:var(--t2);
+  text-decoration:line-through;text-decoration-color:var(--red);padding:1px 2px}
+.wdiff mark{background:rgba(78,159,106,.18);color:var(--t1);padding:1px 2px}
 
 .finding{padding:12px 0;border-bottom:.5px solid var(--bd)}
 .finding:last-child{border-bottom:0}
@@ -274,6 +281,48 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .finding p{margin:6px 0 0 16px;color:var(--t2);font-size:13px;line-height:1.5}
 .finding .acts{display:flex;align-items:center;gap:9px;margin:10px 0 0 16px}
 .finding .acts .cited-link{color:var(--ac);font-size:12.5px;cursor:pointer;margin-right:auto}
+.finding.dismissed{opacity:.55}
+.finding.dismissed .ttl::after{content:"dismissed";font-family:var(--sf);
+  font-size:11px;color:var(--t3);margin-left:6px}
+.u.cited{outline:2px solid var(--amber);outline-offset:2px;border-radius:3px}
+.item .acts{display:flex;align-items:center;gap:8px;margin-left:12px}
+.pager{display:flex;align-items:center;justify-content:center;gap:14px;
+  padding:14px 0}
+.pager-status{color:var(--t3);font-size:12.5px;font-variant-numeric:tabular-nums}
+
+/* Instant tooltips. data-tip carries the text; CSS renders it with no
+   hover delay. Icon-only controls pair it with aria-label so the name
+   exists for readers too. */
+[data-tip]{position:relative}
+[data-tip]::after{content:attr(data-tip);position:absolute;left:50%;
+  top:calc(100% + 7px);transform:translateX(-50%);background:#1c2733;
+  color:#f2f5f8;padding:4px 9px;border-radius:6px;font-family:var(--sf);
+  font-size:11.5px;font-weight:500;line-height:1.35;white-space:nowrap;
+  max-width:320px;opacity:0;pointer-events:none;z-index:80;
+  border:.5px solid rgba(255,255,255,.16);
+  box-shadow:0 4px 14px rgba(0,0,0,.35);transition:opacity .08s}
+.right [data-tip]::after,.gzoomctl [data-tip]::after{left:auto;right:0;
+  transform:none}
+[data-tip]:hover::after,[data-tip]:focus-visible::after{opacity:1}
+@media (prefers-reduced-motion:reduce){[data-tip]::after{transition:none}}
+
+/* Touch targets grow to 44px where the pointer is coarse; the dense
+   desktop layout keeps its own sizes. */
+@media (pointer:coarse){
+  .btn,.btn.sm,.zbtn,.stab,.toggle,.srow,.scene-row{min-height:44px}
+  .zbtn{min-width:44px}
+}
+
+/* Keyboard focus is visible on everything interactive. */
+.gnode:focus-visible,.scene-row:focus-visible,.item:focus-visible{
+  outline:2px solid var(--ac);outline-offset:2px}
+
+/* The keyboard map, printed where the keys work. */
+.kbdmap{position:absolute;left:14px;bottom:38px;color:var(--t4);
+  font-family:var(--sf);font-size:11px;pointer-events:none;z-index:5}
+.side-scroll .kbdmap{position:static;padding:10px 14px;pointer-events:auto}
+.scripts .title{color:inherit;text-decoration:none}
+.scripts .title:hover{text-decoration:underline}
 
 .stage{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px}
 .stage .tick{color:var(--green)}
@@ -302,12 +351,52 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .gcanvas{position:relative;background:var(--inset);
   background-image:linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),
     linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);
-  background-size:32px 32px;overflow:hidden}
+  background-size:32px 32px;overflow:hidden;cursor:grab;touch-action:none}
+.gcanvas.grabbing{cursor:grabbing}
+.gcanvas:focus{outline:none}
+.gcanvas:focus-visible{outline:2px solid var(--ac);outline-offset:-2px}
+/* The transform boundary: draw() lays out every node and edge in this
+   layer's own untransformed box, so zoom/pan is one CSS transform on the
+   whole layer rather than a rewrite of the x*width / y*height layout math. */
+.gzoom{position:absolute;inset:0;transform-origin:0 0}
+.gzoomctl{position:absolute;right:14px;bottom:12px;display:flex;align-items:center;
+  gap:2px;background:var(--card);border:.5px solid var(--bd2);border-radius:7px;padding:3px}
+.gzoomctl .zbtn{width:24px;height:24px;display:grid;place-items:center;background:none;
+  border:0;color:var(--t2);cursor:pointer;border-radius:5px;font-size:14px;line-height:1}
+.gzoomctl .zbtn:hover{background:var(--raised);color:var(--t1)}
+.gzoomctl .znum{font-size:11px;color:var(--t3);width:38px;text-align:center;
+  font-variant-numeric:tabular-nums}
 .gcanvas svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 /* A halo behind edge labels, so a predicate stays readable where an edge
    passes under it. */
 .gcanvas svg text{font-family:var(--mono);font-size:10px;fill:var(--t3);
   paint-order:stroke;stroke:var(--inset);stroke-width:3px;stroke-linejoin:round}
+/* Edge families. Each family pairs a dash pattern with its colour so no
+   distinction rests on colour alone, and the printed predicate stays the
+   ground truth. Directed families animate their dashes toward the object;
+   the mid-edge arrowhead carries direction when animation is off. */
+.epath{fill:none;stroke:var(--bd2);stroke-width:1}
+.epath.interaction{stroke:var(--t3);stroke-width:2.4;opacity:.3}
+.epath.handling{stroke:var(--t3);stroke-width:1.1;stroke-dasharray:1.5 5;
+  stroke-linecap:round;animation:eflow-6-5 3.2s linear infinite}
+.epath.dependency{stroke:var(--amber);stroke-width:1.1;stroke-dasharray:6 4;
+  animation:eflow-10 2.2s linear infinite}
+.epath.establishes{stroke:var(--ac);stroke-width:1.4;stroke-dasharray:8 4;
+  animation:eflow-12 1.4s linear infinite}
+.epath.removed{stroke:var(--red);stroke-width:1.2;stroke-dasharray:4 3}
+.epath.rev{animation-direction:reverse}
+.eglow{fill:none;stroke:var(--ac);stroke-width:6;opacity:.14}
+.earrow{stroke:none;fill:var(--t3)}
+.earrow.dependency{fill:var(--amber)}
+.earrow.establishes{fill:var(--ac)}
+.elabel.dependency{fill:var(--amber)}
+.elabel.establishes{fill:var(--ac)}
+.elabel.removed{fill:var(--red)}
+/* Offsets run one full dash period per cycle, so the loop has no seam. */
+@keyframes eflow-6-5{to{stroke-dashoffset:-6.5px}}
+@keyframes eflow-10{to{stroke-dashoffset:-10px}}
+@keyframes eflow-12{to{stroke-dashoffset:-12px}}
+@media(prefers-reduced-motion:reduce){.epath{animation:none}}
 .gnode{position:absolute;transform:translate(-50%,-50%);padding:5px 11px;border-radius:6px;
   font-size:12.5px;white-space:nowrap;cursor:pointer;background:var(--card);
   border:.5px solid var(--bd2);z-index:2}
@@ -315,9 +404,18 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .gnode.removed{border-color:var(--red);color:var(--red);border-style:dashed}
 .gnode:hover{border-color:var(--ac)}
 .gnode.on{border-color:var(--ac);box-shadow:0 0 0 3px var(--ac-w)}
+.gnode.dim{opacity:.22;transition:opacity .15s}
+@media(prefers-reduced-motion:reduce){.gnode.dim{transition:none}}
 .glegend{position:absolute;left:14px;bottom:12px;display:flex;gap:14px;font-size:11.5px;
   color:var(--t3)}
 .glegend i{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:5px}
+.glegend .ln{display:inline-block;width:20px;margin-right:6px;vertical-align:middle;
+  border-top:1px solid var(--bd2)}
+.glegend .ln.establishes{border-top:2px dashed var(--ac)}
+.glegend .ln.dependency{border-top:1.5px dashed var(--amber)}
+.glegend .ln.handling{border-top:2px dotted var(--t3)}
+.glegend .ln.interaction{border-top:3px solid var(--t3);opacity:.4}
+.glegend .ln.removed{border-top:1.5px dashed var(--red)}
 .gcount{position:absolute;left:14px;top:12px;font-size:11.5px;color:var(--t4)}
 .gcanvas.mini{position:relative;height:230px;border-radius:7px;
   border:.5px solid var(--bd)}
@@ -381,3 +479,25 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
   max-width:420px;box-shadow:0 14px 34px rgba(0,0,0,.5);z-index:60}
 .toast.err{border-color:#3a2523;color:var(--red)}
 .empty{color:var(--t3);font-size:13px;padding:6px 0}
+
+/* In-app confirmation dialog */
+.confirm-veil{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:70;
+  display:flex;align-items:center;justify-content:center}
+.confirm-box{background:var(--panel);border:.5px solid var(--bd2);border-radius:10px;
+  padding:18px 20px;max-width:420px;box-shadow:0 18px 44px rgba(0,0,0,.55)}
+.confirm-box p{font-size:13.5px;white-space:pre-wrap;margin-bottom:16px}
+.confirm-acts{display:flex;gap:9px;justify-content:flex-end}
+
+/* Settings tabs */
+.settings-split{display:grid;grid-template-columns:168px minmax(0,1fr);gap:18px;
+  align-items:start}
+.settings-rail{display:flex;flex-direction:column;gap:3px;position:sticky;top:12px}
+.stab{display:block;text-align:left;padding:8px 12px;border-radius:7px;border:0;
+  background:transparent;color:var(--t2);font-size:13.5px;cursor:pointer}
+.stab:hover{background:var(--card);color:var(--t1)}
+.stab.on{background:var(--card);color:var(--t1);font-weight:600}
+.stab:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+@media(max-width:760px){
+  .settings-split{grid-template-columns:1fr}
+  .settings-rail{flex-direction:row;position:static}
+}

@@ -1,6 +1,6 @@
 """Tracing must record the shape of an import and none of its content.
 
-PRD section 12 forbids screenplay text, prompts, uploaded bytes, credentials,
+Traces must never hold screenplay text, prompts, uploaded bytes, credentials,
 and raw filesystem paths in traces. The adversarial test here is not "a trace
 was written" but "nothing from the screenplay appears in it".
 """

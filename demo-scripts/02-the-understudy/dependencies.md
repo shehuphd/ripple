@@ -2,7 +2,7 @@
 
 Original work written for the Ripple demo corpus. No third-party rights attach; it ships under the repository licence.
 
-41 scene headings across 39 base scenes plus revision inserts 11A and 30A. 9 script pages plus a title page. Written against Schema Lock v1.
+41 scene headings across 39 base scenes plus revision inserts 11A and 30A. 9 script pages plus a title page.
 
 Script 01 covers a contemporary thriller with terse action and few departments. This one is deliberately its opposite: period, ensemble, and heavy on the departments 01 barely touches. Between them the two scripts exercise all eight unit types and all ten entity types.
 
@@ -33,6 +33,45 @@ Script 01 covers a contemporary thriller with terse action and few departments. 
 Chain 2 is the interesting one for the diff engine. The prompt book moves from Vera to Holloway's desk at 11A and to a young ASM at 25, so a single entity carries three different `carries` assertions with different subjects across the script. Editing scene 11A should ripple into 25 and 37 without touching 3, 6, or 8.
 
 Chain 4 inverts the usual retrieval direction. Every chain in script 01 establishes early and depends late. Here the establishing scene is 32 of 39, so a continuity sweep that only looks backwards finds nothing.
+
+## 2a. Expected entities
+
+| Canonical name | Type | Aliases in text |
+|---|---|---|
+| Evelyn Aldridge | `cast` | EVELYN, MISS ALDRIDGE, Miss Evelyn Aldridge |
+| Vera Coyne | `cast` | VERA, Vera |
+| Holloway | `cast` | HOLLOWAY |
+| Desmond | `cast` | DESMOND |
+| Dresser | `cast` | DRESSER, a dresser |
+| Young ASM | `cast` | YOUNG ASM |
+| Casting Woman | `cast` | CASTING WOMAN |
+| Company | `cast` | COMPANY |
+| Emerald gown | `wardrobe` | the gown |
+| Prompt book | `prop` | the book |
+| Gas footlights | `set_design` | the footlights, footlight |
+| Safety curtain | `set_design` | |
+| Burn dressing | `makeup` | the dressing |
+| Albion Theatre | `location` | The Albion Theatre |
+| Albion Theatre - Stage | `location` | the stage |
+| Albion Theatre - Corridor | `location` | |
+| Albion Theatre - Dressing Room One | `location` | |
+| Albion Theatre - Dressing Room Two | `location` | |
+| Albion Theatre - Green Room | `location` | |
+| Albion Theatre - Holloway's Office | `location` | |
+| Albion Theatre - Prompt Corner | `location` | |
+| Albion Theatre - Auditorium | `location` | |
+
+## 2b. Expected attributes
+
+Structured facts the text states about an entity. The
+evidence scene is where the stating line lives.
+
+| Entity | Key | Value | Evidence scene |
+|---|---|---|---|
+| Emerald gown | color | emerald | 2 |
+| Emerald gown | construction | beaded to the shoulder | 5 |
+| Gas footlights | fuel | gas | 2 |
+| Gas footlights | hood | brass | 2 |
 
 ## 3. Entity and alias traps
 

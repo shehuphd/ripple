@@ -11,7 +11,6 @@ import pytest
 
 from ripple.llm import (
     PROVIDERS,
-    SUBMISSION_PROVIDER,
     configured_providers,
     get_provider,
 )
@@ -80,12 +79,8 @@ class TestTierInference:
 
 
 class TestRegistry:
-    def test_gemini_is_the_submission_provider(self):
-        assert SUBMISSION_PROVIDER == "google"
-        assert SUBMISSION_PROVIDER in PROVIDERS
-
     def test_gemini_is_the_only_provider(self):
-        """PRD section 14 bars non-Google models at runtime.
+        """The runtime registry holds Google alone; no other provider ships.
 
         Ripple builds and tests against Gemini only now, rather than carrying
         OpenAI/Anthropic/DeepSeek dev-only adapters to strip out later.
@@ -123,12 +118,40 @@ class TestCredentialHandling:
         assert not provider.is_configured()
 
     def test_no_credential_value_reaches_an_error_message(self, monkeypatch):
+        """The provider's typed rejection carries through with no key in it.
+
+        The client is stubbed so the test never contacts the network: the
+        guarantee under test is Ripple's error carrying, not Google's reply.
+        """
+        from keycall import ErrorCode, KeyCallError
+
         secret = "sk-do-not-leak-this-value"
+
+        class RejectingClient:
+            def __init__(self, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *ignored):
+                return False
+
+            def list_models(self, refresh=True):
+                raise KeyCallError(
+                    "API key not valid for this provider.",
+                    code=ErrorCode("invalid_api_key"),
+                )
+
+        monkeypatch.setattr(
+            "ripple.llm.keycall_provider.KeyCall", RejectingClient
+        )
         provider = get_provider("google")
         monkeypatch.setenv(provider.credential_variable, secret)
         assert provider.is_configured()
         with pytest.raises(ProviderError) as caught:
             provider.list_models()
+        assert caught.value.code == "invalid_api_key"
         assert secret not in str(caught.value)
         assert secret not in caught.value.message
 
@@ -153,11 +176,30 @@ class TestActionableErrors:
     """
 
     def _validate_google(self, monkeypatch, tmp_path, key):
+        """Run a key through the local gate, with the provider stubbed.
+
+        The stub answers the way the live endpoint answers a bad key, so the
+        test proves the local gate let the value through without a network
+        call being involved.
+        """
         from ripple.config.secrets import SecretStore
         from ripple.services.settings import SettingsService
 
-        monkeypatch.setenv("GOOGLE_API_KEY", key)
-        return SettingsService(SecretStore(tmp_path / "s.env")).validate("google")
+        class ProviderJudges:
+            name = "google"
+            credential_variable = "GOOGLE_API_KEY"
+
+            def list_models(self, *, api_key=None):
+                raise ProviderError(
+                    "invalid_api_key", "The provider rejected this key."
+                )
+
+        monkeypatch.setattr(
+            "ripple.services.settings.get_provider", lambda name: ProviderJudges()
+        )
+        return SettingsService(SecretStore(tmp_path / "s.env")).validate(
+            "google", key
+        )
 
     @pytest.mark.parametrize(
         "key",

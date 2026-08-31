@@ -1,6 +1,6 @@
 """Deterministic 2D layout for a scoped graph view.
 
-PRD section 17 left the renderer open. This is a fixed layout rather than a
+This is a fixed layout rather than a
 force simulation, for four reasons:
 
 - Edge labels are the content. `Mara travels_by Blue sedan` has to be readable,
@@ -241,4 +241,41 @@ def _clamp(value: float, margin: float = 0.09) -> float:
     return max(margin, min(1.0 - margin, value))
 
 
-__all__ = ["DEPARTMENT_ORDER", "Placed", "layout"]
+def script_layout(nodes: list[dict[str, Any]], aspect: float = 2.0) -> list[Placed]:
+    """Place a whole script's graph, deterministically.
+
+    Scenes run left to right in script order along the spine, on two staggered
+    rows so forty-plus labels do not collide. Entities keep the same
+    department wedges as the scoped view, so a department occupies the same
+    region of the screen whichever view the user is in.
+    """
+    if not nodes:
+        return []
+
+    ordered = sorted(nodes, key=_sort_key)
+    scenes = sorted(
+        (n for n in ordered if n.get("kind") == "scene"), key=_scene_order
+    )
+    entities = [n for n in ordered if n.get("kind") != "scene"]
+
+    placed: list[Placed] = []
+    span = max(len(scenes) - 1, 1)
+    for index, node in enumerate(scenes):
+        placed.append(
+            Placed(
+                id=str(node["id"]),
+                label=node.get("label", ""),
+                kind="scene",
+                entity_type=None,
+                x=_clamp(0.06 + 0.88 * index / span, 0.05),
+                # Alternate rows, so adjacent labels stagger instead of touch.
+                y=0.47 if index % 2 == 0 else 0.53,
+                ring=0,
+                removed=bool(node.get("removed")),
+            )
+        )
+    placed.extend(_place_wedges(entities, aspect))
+    return placed
+
+
+__all__ = ["DEPARTMENT_ORDER", "Placed", "layout", "script_layout"]

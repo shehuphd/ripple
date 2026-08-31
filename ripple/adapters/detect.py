@@ -1,6 +1,6 @@
 """Format detection from content and file signature.
 
-PRD section 5: extensions are hints, not authority. Every check here reads the
+Extensions are hints, not authority. Every check here reads the
 bytes. The extension only breaks a tie between two text formats that scored
 identically, and never overrides a positive content signal.
 """
