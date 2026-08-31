@@ -295,3 +295,19 @@ class TestNonAsciiNames:
         decomposed = unicodedata.normalize("NFD", composed)
         assert composed != decomposed
         assert normalize(composed) == normalize(decomposed)
+
+
+class TestOcrLeavesNoFiles:
+    def test_a_multi_page_scan_writes_nothing_to_the_working_directory(
+        self, image_only_pdf: bytes, tmp_path, monkeypatch
+    ):
+        """pdftoppm's output prefix must never reach the filesystem.
+
+        Any trailing argument to pdftoppm, including "-", is a filename
+        prefix, and a prefix drops page images ("--1.png") into the working
+        directory instead of writing to stdout.
+        """
+        monkeypatch.chdir(tmp_path)
+        import_screenplay(image_only_pdf, "scan.pdf")
+        droppings = list(tmp_path.glob("*.png")) + list(tmp_path.glob("*.ppm"))
+        assert droppings == []

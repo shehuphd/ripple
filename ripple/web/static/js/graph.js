@@ -591,7 +591,10 @@ if (canvas) {
     const rows = edges.map((l) => {
       const other = l.source === node.id ? byId[l.target] : byId[l.source];
       return `<div class="kv"><span class="mono tiny">${esc(l.predicate).replace(/_/g, ' ')}</span>
-        <span>${esc(other ? other.label : '?')} · ${esc(l.confidence)}</span></div>`;
+        <span>${esc(other ? other.label : '?')} · <span class="c" tabindex="0"
+          data-tip="Confidence: the model's certainty this fact is stated, from 0 to 1"
+          aria-label="Confidence ${esc(l.confidence)}, from 0 to 1"
+          >${esc(l.confidence)}</span></span></div>`;
     }).join('');
     detail.innerHTML = `
       <h3>${esc(node.label)}</h3>
@@ -768,7 +771,10 @@ if (scriptCanvas) {
     const rows = edges.map((l) => {
       const other = l.source === node.id ? byId[l.target] : byId[l.source];
       return `<div class="kv"><span class="mono tiny">${esc(l.predicate).replace(/_/g, ' ')}</span>
-        <span>${esc(other ? other.label : '?')} · ${esc(l.confidence)}</span></div>`;
+        <span>${esc(other ? other.label : '?')} · <span class="c" tabindex="0"
+          data-tip="Confidence: the model's certainty this fact is stated, from 0 to 1"
+          aria-label="Confidence ${esc(l.confidence)}, from 0 to 1"
+          >${esc(l.confidence)}</span></span></div>`;
     }).join('');
     detail.innerHTML = `
       <h3>${esc(node.label)}</h3>

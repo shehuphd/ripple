@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import func, select
 
 from ripple.adapters import import_screenplay
-from ripple.db.models import Assertion, Entity, EntityAttribute, Script
+from ripple.db.models import Assertion, Entity, EntityAttribute, ExtractionRun, Script
 from ripple.db.repository import persist_import
 from ripple.db.session import create_all, create_db_engine, session_factory
 from ripple.graph.fixtures import (
@@ -177,13 +177,59 @@ class TestSeeding:
 
     def test_startup_seeding_skips_ready_scripts(self, session):
         script = _import(session, "01-night-freight", "night-freight.fountain")
+        script.origin = "bundled"
         assert seed_demo_graphs(session, DEMO_SCRIPTS) == 1
         assert seed_demo_graphs(session, DEMO_SCRIPTS) == 0
         assert script.graph_status == "ready"
 
     def test_a_cleared_graph_reseeds_on_the_next_start(self, session):
         script = _import(session, "01-night-freight", "night-freight.fountain")
+        script.origin = "bundled"
         seed_demo_graphs(session, DEMO_SCRIPTS)
         script.graph_status = "not_analysed"
         session.flush()
         assert seed_demo_graphs(session, DEMO_SCRIPTS) == 1
+
+
+class TestOrigin:
+    """Seeding trusts the origin marker, never a title match."""
+
+    def test_an_upload_sharing_a_demo_title_is_never_seeded(self, session):
+        script = _import(session, "01-night-freight", "night-freight.fountain")
+        assert script.origin == "upload"
+        assert seed_demo_graphs(session, DEMO_SCRIPTS) == 0
+        assert script.graph_status == "not_analysed"
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(Assertion)
+                .where(Assertion.script_id == script.id)
+            )
+            == 0
+        )
+
+    def test_a_pre_origin_demo_script_is_re_marked_and_reseeds(self, session):
+        # A database seeded before the origin column existed: system-provenance
+        # graph, no extraction run, origin stamped "upload" by the migration.
+        script = _import(session, "01-night-freight", "night-freight.fountain")
+        truth = next(t for t in ground_truths(DEMO_SCRIPTS) if "FREIGHT" in t.title)
+        seed_graph(session, script, truth)
+        assert script.origin == "upload"
+        script.graph_status = "not_analysed"
+        session.flush()
+        assert seed_demo_graphs(session, DEMO_SCRIPTS) == 1
+        assert script.origin == "bundled"
+
+    def test_an_upload_with_extraction_history_is_not_re_marked(self, session):
+        script = _import(session, "01-night-freight", "night-freight.fountain")
+        session.add(
+            ExtractionRun(
+                script_id=script.id,
+                status="partially_ready",
+                prompt_version="extract.v4",
+                model_id="gemini-flash-latest",
+            )
+        )
+        session.flush()
+        assert seed_demo_graphs(session, DEMO_SCRIPTS) == 0
+        assert script.origin == "upload"

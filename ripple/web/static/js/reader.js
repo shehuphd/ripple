@@ -73,7 +73,10 @@ function edgeRow(edge, cls, sign) {
     <span>${esc(edge.subject)}</span>
     <span class="p">${esc(edge.predicate).replace(/_/g, ' ')}</span>
     <span>${esc(edge.object)}</span>
-    <span class="c">${esc(edge.confidence ?? '')}</span></div>`;
+    <span class="c" tabindex="0"
+      data-tip="Confidence: the model's certainty this fact is stated, from 0 to 1"
+      aria-label="Confidence ${esc(edge.confidence ?? '')}, from 0 to 1"
+      >${esc(edge.confidence ?? '')}</span></div>`;
 }
 
 /* Scene list selection scrolls the page rather than filtering it, so the
@@ -276,7 +279,10 @@ async function runPreview() {
           <span>${esc(a.entity)}</span>
           <span class="p">${esc(a.key)}</span>
           <span>${esc(a.before ?? '—')} → ${esc(a.after ?? '—')}</span>
-          <span class="c">${a.confidence}</span></div>`).join('')
+          <span class="c" tabindex="0"
+            data-tip="Confidence: the model's certainty this fact is stated, from 0 to 1"
+            aria-label="Confidence ${a.confidence}, from 0 to 1"
+            >${a.confidence}</span></div>`).join('')
       : '<div class="empty">No attribute changes.</div>';
 
     ripple.trace('preview.result', {

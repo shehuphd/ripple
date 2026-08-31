@@ -74,7 +74,38 @@ def create_all(engine: Engine) -> None:
     finishing the rebuild would collide with them.
     """
     _widen_model_call_outcomes(engine)
+    _add_script_origin(engine)
     Base.metadata.create_all(engine)
+
+
+def _add_script_origin(engine: Engine) -> None:
+    """Add `scripts.origin` to a database that predates it.
+
+    Every pre-existing script is stamped "upload", the safe default: seeding
+    never touches an upload. The demo scripts are re-marked "bundled" at
+    startup by the seeder's backfill, which requires evidence (a seeded graph,
+    no extraction) before trusting a title match.
+    """
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.connect() as connection:
+        table_exists = connection.exec_driver_sql(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='scripts'"
+        ).fetchone()
+        if not table_exists:
+            return
+        columns = {
+            row[1]
+            for row in connection.exec_driver_sql("PRAGMA table_info(scripts)")
+        }
+        if "origin" in columns:
+            return
+        logger.info("adding scripts.origin")
+        connection.exec_driver_sql(
+            "ALTER TABLE scripts ADD COLUMN origin VARCHAR(16) "
+            "NOT NULL DEFAULT 'upload'"
+        )
+        connection.commit()
 
 
 def _widen_model_call_outcomes(engine: Engine) -> None:

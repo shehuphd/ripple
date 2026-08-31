@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ripple.db.models import (
@@ -25,6 +25,7 @@ from ripple.db.models import (
     Entity,
     EntityAlias,
     EntityAttribute,
+    ExtractionRun,
     Scene,
     Script,
     ScriptUnit,
@@ -512,20 +513,58 @@ def seed_graph(session: Session, script: Script, truth: GroundTruth) -> SeedCoun
     return counts
 
 
-def seed_demo_graphs(session: Session, directory: Path) -> int:
-    """Seed every demo script that matches a ground-truth file and has no graph.
+def _backfill_origin(session: Session, titles: set[str]) -> None:
+    """Re-mark pre-`origin` demo scripts as bundled.
 
-    Runs at startup. `graph_status == "ready"` is the completion marker, so a
-    library that was seeded before is not re-scanned, and a graph the user
-    cleared (status back to `not_analysed`) is rebuilt on the next start.
+    The column migration stamps every existing script "upload". A demo script
+    is distinguishable from an upload sharing its title: its graph was seeded
+    (system-provenance assertions exist) and extraction never ran on it. A
+    title match alone is not evidence, so a script with no graph rows at all
+    stays an upload and is never seeded.
+    """
+    for script in session.scalars(
+        select(Script).where(Script.origin == "upload", Script.title.in_(titles))
+    ):
+        ran_extraction = session.scalar(
+            select(func.count())
+            .select_from(ExtractionRun)
+            .where(ExtractionRun.script_id == script.id)
+        )
+        if ran_extraction:
+            continue
+        provenances = set(
+            session.scalars(
+                select(Assertion.provenance)
+                .where(Assertion.script_id == script.id)
+                .distinct()
+            )
+        )
+        if provenances == {"system"}:
+            script.origin = "bundled"
+            logger.info("re-marked %s as a bundled demo script", script.title)
+    session.flush()
+
+
+def seed_demo_graphs(session: Session, directory: Path) -> int:
+    """Seed every bundled demo script that matches a ground truth and has no graph.
+
+    Runs at startup. Only scripts marked `origin == "bundled"` are candidates:
+    a user's upload sharing a demo title builds its graph by extraction, never
+    from the bundled ground truth. `graph_status == "ready"` is the completion
+    marker, so a library that was seeded before is not re-scanned, and a graph
+    the user cleared (status back to `not_analysed`) is rebuilt on the next
+    start.
     """
     seeded = 0
     truths = {truth.title: truth for truth in ground_truths(directory)}
     if not truths:
         return 0
+    _backfill_origin(session, set(truths))
     for script in session.scalars(select(Script)):
         truth = truths.get(script.title)
-        if truth is None or script.graph_status == "ready":
+        if truth is None or script.origin != "bundled":
+            continue
+        if script.graph_status == "ready":
             continue
         counts = seed_graph(session, script, truth)
         logger.info(

@@ -217,41 +217,64 @@ class PdfAdapter:
                 "layer, Fountain, Final Draft XML, or plain text.",
             )
 
+        # One page per pass. pdftoppm writes to stdout only when the output
+        # root is omitted entirely; any trailing argument, including "-", is a
+        # filename prefix, and a prefix means page images dropped into the
+        # working directory, which is both a mess and a broken promise about
+        # disk. Limiting each pass to a single page keeps stdout a single PNG.
+        page_texts: list[str] = []
         try:
-            raster = subprocess.run(
-                ["pdftoppm", "-r", "200", "-gray", "-png", "-", "-"],
-                input=payload.data,
-                capture_output=True,
-                timeout=300,
-                check=True,
-            )
-            completed = subprocess.run(
-                ["tesseract", "stdin", "stdout", "--psm", "6"],
-                input=raster.stdout,
-                capture_output=True,
-                timeout=300,
-                check=True,
-            )
+            for page_number in range(1, classification.page_count + 1):
+                raster = subprocess.run(
+                    [
+                        "pdftoppm",
+                        "-r",
+                        "200",
+                        "-gray",
+                        "-png",
+                        "-f",
+                        str(page_number),
+                        "-l",
+                        str(page_number),
+                        "-",
+                    ],
+                    input=payload.data,
+                    capture_output=True,
+                    timeout=300,
+                    check=True,
+                )
+                completed = subprocess.run(
+                    ["tesseract", "stdin", "stdout", "--psm", "6"],
+                    input=raster.stdout,
+                    capture_output=True,
+                    timeout=300,
+                    check=True,
+                )
+                page_texts.append(completed.stdout.decode("utf-8", "replace"))
         except subprocess.TimeoutExpired as error:
             raise ImportRejected(
-                "ocr_timeout", "OCR did not finish within five minutes."
+                "ocr_timeout", "OCR did not finish within five minutes for a page."
             ) from error
         except subprocess.CalledProcessError as error:
             detail = (error.stderr or b"").decode("utf-8", "replace").strip()
             raise ImportRejected("ocr_failed", f"OCR failed: {detail[:200]}") from error
 
-        text = completed.stdout.decode("utf-8", "replace")
-        lines = [
-            _Line(
-                page=1,
-                x=float(len(line) - len(line.lstrip())),
-                y=-index,
-                text=line.strip(),
-                is_bold=False,
-            )
-            for index, line in enumerate(text.splitlines())
-            if line.strip()
-        ]
+        lines = []
+        index = 0
+        for page_number, text in enumerate(page_texts, start=1):
+            for line in text.splitlines():
+                if not line.strip():
+                    continue
+                lines.append(
+                    _Line(
+                        page=page_number,
+                        x=float(len(line) - len(line.lstrip())),
+                        y=-index,
+                        text=line.strip(),
+                        is_bold=False,
+                    )
+                )
+                index += 1
         return lines, [
             ImportWarning(
                 code="ocr_derived",

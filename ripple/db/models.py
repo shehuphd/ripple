@@ -122,6 +122,10 @@ OPERATION_TYPES = (
 )
 FINDING_STATUSES = ("open", "dismissed", "resolved")
 GRAPH_STATUSES = ("not_analysed", "analysing", "partially_ready", "ready", "failed")
+
+# Where a script came from: imported by the application at startup, or
+# uploaded by a user. Seeding trusts the marker, not the title.
+SCRIPT_ORIGINS = ("bundled", "upload")
 MODEL_CALL_PURPOSES = ("extract", "judge", "continuity", "synthesize", "query")
 MODEL_CALL_OUTCOMES = (
     "ok",
@@ -143,6 +147,7 @@ class Script(Base):
     __table_args__ = (
         _in("import_status", IMPORT_OUTCOMES),
         _in("graph_status", GRAPH_STATUSES),
+        _in("origin", SCRIPT_ORIGINS),
         CheckConstraint("current_version >= 0", name="ck_script_version_non_negative"),
     )
 
@@ -150,6 +155,10 @@ class Script(Base):
     title: Mapped[str] = mapped_column(String(500))
     import_status: Mapped[str] = mapped_column(String(32))
     graph_status: Mapped[str] = mapped_column(String(32), default="not_analysed")
+    # "bundled" marks the demo scripts the application imports on first run.
+    # Ground-truth seeding keys on this, never on the title: a user's upload
+    # that happens to share a demo title must build its graph by extraction.
+    origin: Mapped[str] = mapped_column(String(16), default="upload")
     current_version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(

@@ -119,7 +119,8 @@ def seed_demo_corpus(session: Session) -> int:
     for path in sorted(DEMO_SCRIPTS.glob("*/*.fountain")):
         result = import_screenplay(path.read_bytes(), path.name)
         if result.accepted:
-            persist_import(session, result)
+            script = persist_import(session, result)
+            script.origin = "bundled"
             imported += 1
     session.commit()
     logger.info("seeded %d demo screenplays", imported)
