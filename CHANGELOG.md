@@ -99,6 +99,7 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **The launcher finds a working Python instead of trusting PATH's `python3`.** A version manager's pin can hold `python3` below 3.11 while newer interpreters are present and working; the launcher now reuses a valid venv without needing a system Python at all, and otherwise probes version-named binaries and the usual install locations, judging each candidate by running it.
 - **Predicates print as words in the UI.** Edge labels, requirement rows, detail panes, and the Assertions page show "appears in" rather than `appears_in`; the stored vocabulary is unchanged.
 - **The launcher stops a stale server instead of adopting it.** `launch.command` now terminates any running Ripple instance before touching the environment, so two servers can never share the SQLite file. It also verifies Python 3.11 or newer with an actionable message, rebuilds a broken virtual environment instead of failing on it, and takes over a port held by another Ripple instance rather than skipping past it.
 - **The virtual environments and runtime data are excluded from Dropbox sync.** The launcher marks `tools/.venv`, `.venv`, and `data/` with the ignore marker on every start, so sync can no longer invalidate the environment mid-run or replicate `data/secrets.env` off the machine.

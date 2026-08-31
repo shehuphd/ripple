@@ -50,27 +50,44 @@ if [ -n "$running" ]; then
   done
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 was not found on PATH. Install Python 3.11 or newer from" >&2
-  echo "https://www.python.org/downloads/ and run this script again." >&2
-  exit 1
-fi
+# The project needs Python 3.11 or newer. A candidate is judged by running
+# it, not by its name existing: a version manager's shim can be present and
+# still refuse to execute.
+meets_floor() {
+  "$1" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' \
+    >/dev/null 2>&1
+}
 
-# The project needs 3.11+; saying so here beats a syntax error later.
-if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'; then
-  echo "Ripple needs Python 3.11 or newer; python3 here is $(python3 -V 2>&1)." >&2
-  echo "Install a newer Python from https://www.python.org/downloads/ and" >&2
-  echo "run this script again." >&2
-  exit 1
-fi
-
-# An existing venv is validated by running its interpreter, not by the
-# directory existing: a half-created or broken venv would otherwise be
-# trusted forever.
-if ! "$PYTHON" -c 'import sys' >/dev/null 2>&1; then
-  echo "Creating the virtual environment..."
+# The venv, when it exists and meets the floor, is the only interpreter this
+# script needs; the search below runs only to create or rebuild it. Plain
+# `python3` is tried after the version-named binaries, because a version
+# manager's pin can hold it below 3.11 while newer interpreters are present
+# and working elsewhere (a pyenv install, a python.org framework build), and
+# a launcher that trusts PATH's python3 alone refuses machines that can run
+# the app.
+if ! meets_floor "$PYTHON"; then
+  SYSTEM_PYTHON=""
+  for candidate in \
+    python3.13 python3.12 python3.11 python3 \
+    /opt/homebrew/bin/python3.13 /opt/homebrew/bin/python3.12 \
+    /opt/homebrew/bin/python3.11 /opt/homebrew/bin/python3 \
+    /usr/local/bin/python3 \
+    /Library/Frameworks/Python.framework/Versions/*/bin/python3; do
+    if meets_floor "$candidate"; then
+      SYSTEM_PYTHON="$candidate"
+      break
+    fi
+  done
+  if [ -z "$SYSTEM_PYTHON" ]; then
+    echo "No Python 3.11 or newer was found on this machine." >&2
+    echo "python3 here answers as: $(python3 -V 2>&1 || true)" >&2
+    echo "Install a newer Python from https://www.python.org/downloads/ and" >&2
+    echo "run this script again." >&2
+    exit 1
+  fi
+  echo "Creating the virtual environment with $SYSTEM_PYTHON..."
   rm -rf "$VENV"
-  python3 -m venv "$VENV"
+  "$SYSTEM_PYTHON" -m venv "$VENV"
   "$PYTHON" -m ensurepip --upgrade >/dev/null 2>&1 || true
 fi
 
