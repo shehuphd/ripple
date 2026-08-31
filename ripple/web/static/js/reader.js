@@ -489,31 +489,37 @@ if (undoLast) {
 }
 
 /* Browser-driven extraction: one scene per request, each committed on its own,
-   so a reload resumes rather than restarting. */
+   so a reload resumes rather than restarting. Shared by the Build graph
+   button and the extraction of a freshly inserted scene. */
+async function driveRun(runId) {
+  const panel = document.getElementById('run');
+  const bar = document.getElementById('run-bar');
+  const count = document.getElementById('run-count');
+  panel.style.display = 'block';
+  let progress = null;
+  for (;;) {
+    const step = await api(`/api/extract/${runId}/next`, { method: 'POST' });
+    progress = step.progress;
+    const done = progress.completed + progress.failed;
+    bar.style.width =
+      `${Math.round((done / Math.max(progress.total, 1)) * 100)}%`;
+    count.textContent =
+      `${done} of ${progress.total} · ${progress.failed} failed`;
+    if (step.done || progress.pending === 0) break;
+  }
+  return progress;
+}
+
 const extract = document.getElementById('extract');
 if (extract) {
   extract.addEventListener('click', async () => {
     const scriptId = window.location.pathname.split('/').pop();
-    const panel = document.getElementById('run');
-    const bar = document.getElementById('run-bar');
-    const count = document.getElementById('run-count');
     const label = document.getElementById('run-label');
-    panel.style.display = 'block';
     extract.disabled = true;
     try {
       const started = await api(`/api/scripts/${scriptId}/extract`, { method: 'POST' });
       ripple.trace('extract.started', { run: started.run_id });
-      let progress = null;
-      for (;;) {
-        const step = await api(`/api/extract/${started.run_id}/next`, { method: 'POST' });
-        progress = step.progress;
-        const done = progress.completed + progress.failed;
-        bar.style.width =
-          `${Math.round((done / Math.max(progress.total, 1)) * 100)}%`;
-        count.textContent =
-          `${done} of ${progress.total} · ${progress.failed} failed`;
-        if (step.done || progress.pending === 0) break;
-      }
+      const progress = await driveRun(started.run_id);
       ripple.trace('extract.finished', {
         run: started.run_id,
         completed: progress ? progress.completed : null,
@@ -523,9 +529,124 @@ if (extract) {
       setTimeout(() => window.location.reload(), 900);
     } catch (error) {
       ripple.trace('extract.stopped', { error: error.message });
-      label.textContent = 'Extraction stopped';
+      document.getElementById('run-label').textContent = 'Extraction stopped';
       toast(error.message, true);
       extract.disabled = false;
     }
   });
 }
+
+/* Scene insertion. The dialog collects a heading and a body; the server
+   parses them with the same rules an imported file gets, inserts the scene,
+   and extracts just that scene when a model is selected. */
+const addVeil = document.getElementById('add-scene-veil');
+if (addVeil) {
+  const headingInput = document.getElementById('add-scene-heading');
+  const bodyInput = document.getElementById('add-scene-body');
+  const whereLabel = document.getElementById('add-scene-where');
+  let afterScene = null;
+
+  const closeAdd = () => addVeil.classList.add('hide');
+  document.getElementById('add-scene-cancel').addEventListener('click', closeAdd);
+  addVeil.addEventListener('click', (event) => {
+    if (event.target === addVeil) closeAdd();
+  });
+  addVeil.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { event.preventDefault(); closeAdd(); }
+  });
+
+  document.querySelectorAll('.scene-add').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      afterScene = button.dataset.scene || null;
+      whereLabel.textContent = afterScene
+        ? `Inserted after scene ${button.dataset.number || 'this one'}. `
+          + 'The scenes that follow keep their numbers.'
+        : 'Inserted at the top of the script.';
+      headingInput.value = '';
+      bodyInput.value = '';
+      addVeil.classList.remove('hide');
+      headingInput.focus();
+    });
+  });
+
+  document.getElementById('add-scene-save').addEventListener('click', async () => {
+    const scriptId = window.location.pathname.split('/').pop();
+    const save = document.getElementById('add-scene-save');
+    save.disabled = true;
+    try {
+      const result = await api(`/api/scripts/${scriptId}/scenes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          heading: headingInput.value,
+          body: bodyInput.value,
+          after_scene_id: afterScene,
+        }),
+      });
+      ripple.trace('scene.inserted', { scene: result.scene.scene_id });
+      closeAdd();
+      if (result.run) {
+        document.getElementById('run-label').textContent =
+          'Extracting the new scene';
+        await driveRun(result.run.run_id);
+        toast('Scene inserted and extracted.');
+      } else {
+        toast('Scene inserted. Choose a model to extract its requirements.');
+      }
+      setTimeout(() => window.location.reload(), 700);
+    } catch (error) {
+      toast(error.message, true);
+      save.disabled = false;
+    }
+  });
+}
+
+/* Omission and restoration, per the production convention: the scene keeps
+   its number and reads OMITTED; Restore brings it back. */
+document.querySelectorAll('.scene-omit').forEach((button) => {
+  button.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    const number = button.dataset.number;
+    const ok = await confirmDialog(
+      `Mark scene ${number || 'this scene'} OMITTED? Its stored facts `
+      + 'deactivate, later scenes that depend on them are flagged, and '
+      + 'Restore undoes all of it.',
+      'Omit scene',
+    );
+    if (!ok) return;
+    try {
+      const result = await api(`/api/scenes/${button.dataset.scene}/omit`, {
+        method: 'POST',
+      });
+      ripple.trace('scene.omitted', {
+        scene: result.scene_id,
+        findings: result.findings.length,
+      });
+      const warning = result.findings.length
+        ? ` ${result.findings.length} orphaned dependant(s) flagged.`
+        : '';
+      toast(`Scene omitted. ${result.assertions_deactivated} fact(s) `
+        + `deactivated.${warning}`, result.findings.length > 0);
+      setTimeout(() => window.location.reload(), 900);
+    } catch (error) {
+      toast(error.message, true);
+    }
+  });
+});
+
+document.querySelectorAll('.scene-restore').forEach((button) => {
+  button.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    try {
+      const result = await api(`/api/scenes/${button.dataset.scene}/restore`, {
+        method: 'POST',
+      });
+      ripple.trace('scene.restored', { scene: result.scene_id });
+      toast('Scene restored; its facts are active again.');
+      setTimeout(() => window.location.reload(), 700);
+    } catch (error) {
+      toast(error.message, true);
+    }
+  });
+});

@@ -1127,3 +1127,62 @@ class TestSecretsIsolation:
         point it at an empty file, so the live key must never be present
         while a web test runs."""
         assert "GOOGLE_API_KEY" not in os.environ
+
+
+class TestSceneStructure:
+    """The insertion, omission, and restoration routes."""
+
+    def _scene_id(self, client, script_id) -> str:
+        import re
+
+        page = client.get(f"/scripts/{script_id}").text
+        match = re.search(r'data-scene-body="([0-9a-f-]{36})"', page)
+        assert match
+        return match.group(1)
+
+    def test_a_scene_inserts_through_the_api(self, client):
+        script_id = _first_script(client)
+        first_scene = self._scene_id(client, script_id)
+        response = client.post(
+            f"/api/scripts/{script_id}/scenes",
+            json={
+                "heading": "INT. BREAK ROOM - NIGHT",
+                "body": "A kettle rattles.",
+                "after_scene_id": first_scene,
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["scene"]["heading"] == "INT. BREAK ROOM - NIGHT"
+        # No model is configured in the test client, so no run starts.
+        assert body["run"] is None
+        assert body["scene"]["heading"] in client.get(f"/scripts/{script_id}").text
+
+    def test_a_bad_heading_is_a_422_with_a_reason(self, client):
+        script_id = _first_script(client)
+        response = client.post(
+            f"/api/scripts/{script_id}/scenes",
+            json={"heading": "", "body": "Text."},
+        )
+        assert response.status_code == 422
+        assert "heading" in response.json()["detail"].lower()
+
+    def test_omit_and_restore_round_trip(self, client):
+        script_id = _first_script(client)
+        scene_id = self._scene_id(client, script_id)
+
+        omitted = client.post(f"/api/scenes/{scene_id}/omit")
+        assert omitted.status_code == 200, omitted.text
+        assert omitted.json()["assertions_deactivated"] > 0
+        assert "omit-tag" in client.get(f"/scripts/{script_id}").text
+
+        again = client.post(f"/api/scenes/{scene_id}/omit")
+        assert again.status_code == 400
+
+        restored = client.post(f"/api/scenes/{scene_id}/restore")
+        assert restored.status_code == 200, restored.text
+        assert "omit-tag" not in client.get(f"/scripts/{script_id}").text
+
+    def test_an_unknown_scene_is_a_404(self, client):
+        missing = "11111111-1111-1111-1111-111111111111"
+        assert client.post(f"/api/scenes/{missing}/omit").status_code == 404

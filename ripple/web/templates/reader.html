@@ -5,10 +5,12 @@
 <div class="side-hd"><span>Scene</span><span>Pages</span></div>
 <div class="side-scroll" style="padding:0">
   {% for scene in scenes %}
-  <div class="scene-row" data-scene="{{ scene.id }}" tabindex="0" role="button">
+  <div class="scene-row{{ ' omitted' if scene.omitted }}" data-scene="{{ scene.id }}"
+       tabindex="0" role="button">
     <div class="hd">
       <span class="no">{{ scene.number }}</span>
       <span class="tx">{{ scene.heading }}</span>
+      {% if scene.omitted %}<span class="omit-tag">OMITTED</span>{% endif %}
     </div>
     <div class="me num">p. {{ scene.page }} · {{ scene.eighths }} ·
       {{ scene.entities }} entities</div>
@@ -67,10 +69,30 @@
   <div><div class="page" id="page">
     <div class="phd"><span>{{ script.title }}</span>
       <span class="pno">{{ pages }} pages</span></div>
+    <div class="scene-insert">
+      <button class="btn sm scene-add" data-scene=""
+              data-tip="Insert a new scene at the top"
+              aria-label="Insert a scene at the top">＋ scene</button>
+    </div>
     {% for scene in scenes %}
-    <section data-scene-body="{{ scene.id }}">
+    <section data-scene-body="{{ scene.id }}"
+             {% if scene.omitted %}class="omitted"{% endif %}>
       <div class="sh"><span class="no num">{{ scene.number }}</span>
-        <span>{{ scene.heading }}</span></div>
+        <span>{{ scene.heading }}</span>
+        {% if scene.omitted %}<span class="omit-tag">OMITTED</span>{% endif %}
+        <span class="sctl">
+        {% if scene.omitted %}
+          <button class="btn sm scene-restore" data-scene="{{ scene.id }}"
+                  data-tip="Restore this scene and reactivate its facts">
+            Restore</button>
+        {% else %}
+          <button class="btn sm scene-omit" data-scene="{{ scene.id }}"
+                  data-number="{{ scene.number }}"
+                  data-tip="Mark this scene OMITTED; its facts deactivate"
+                  aria-label="Omit scene {{ scene.number }}">⊘</button>
+        {% endif %}
+        </span></div>
+      {% if not scene.omitted %}
       {% for unit in scene.units %}
       <div class="u {{ unit.type }}" data-unit="{{ unit.id }}"
            data-scene-no="{{ scene.number }}"
@@ -78,6 +100,14 @@
            contenteditable="plaintext-only" spellcheck="false"
            role="textbox" aria-label="Script line">{{ unit.text }}</div>
       {% endfor %}
+      {% endif %}
+      <div class="scene-insert">
+        <button class="btn sm scene-add" data-scene="{{ scene.id }}"
+                data-number="{{ scene.number }}"
+                data-tip="Insert a new scene after this one"
+                aria-label="Insert a scene after scene {{ scene.number }}">
+          ＋ scene</button>
+      </div>
     </section>
     {% endfor %}
   </div></div>
@@ -95,6 +125,25 @@
       <div id="graph"><div class="empty">Select a line in the script.</div></div>
     </div>
   </aside>
+</div>
+
+<div class="confirm-veil hide" id="add-scene-veil">
+  <div class="confirm-box add-scene" role="dialog" aria-modal="true"
+       aria-label="Add a scene">
+    <h2 style="margin-bottom:4px">Add a scene</h2>
+    <p class="tiny muted" id="add-scene-where" style="margin-bottom:10px"></p>
+    <label class="tiny" for="add-scene-heading">Heading</label>
+    <input id="add-scene-heading" class="field" autocomplete="off" spellcheck="false"
+           placeholder="INT. LOADING DOCK - NIGHT">
+    <label class="tiny" for="add-scene-body">Scene text</label>
+    <textarea id="add-scene-body" class="field" rows="9" spellcheck="false"
+              placeholder="Action lines. Blank line, then an ALL-CAPS name for a
+character cue, dialogue below it."></textarea>
+    <div class="confirm-acts">
+      <button class="btn" id="add-scene-cancel">Cancel</button>
+      <button class="btn pri" id="add-scene-save">Insert scene</button>
+    </div>
+  </div>
 </div>
 {% endblock %}
 

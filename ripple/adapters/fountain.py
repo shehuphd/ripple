@@ -381,3 +381,44 @@ class _LineParser:
             ):
                 chosen = scene
         return chosen
+
+
+def parse_scene_text(heading: str, body: str) -> ParsedScene:
+    """Parse one user-typed scene into the same structure an import produces.
+
+    The full line parser runs over the typed text, so a typed scene supports
+    every element a file does: character cues, parentheticals, transitions,
+    forced headings. A heading that is not in scene-heading form ("Rooftop -
+    Night") is retried forced, because a person typing into a heading field
+    has stated their intent. Raises ImportRejected when the text is not one
+    scene: no parseable heading, or a second heading inside the body.
+    """
+    heading = heading.strip()
+    body = body.strip()
+    if not heading:
+        raise ImportRejected("scene_no_heading", "A scene needs a heading.")
+
+    def attempt(first_line: str) -> list[ParsedScene]:
+        source = f"{first_line}\n\n{body}\n" if body else f"{first_line}\n"
+        scenes, _ = _LineParser(source, 0, {}).run()
+        return scenes
+
+    scenes = attempt(heading)
+    if not scenes or not scenes[0].heading:
+        scenes = attempt(f".{heading}")
+    if not scenes or not scenes[0].heading:
+        raise ImportRejected(
+            "scene_no_heading",
+            "The heading could not be read as a scene heading.",
+        )
+    if len(scenes) > 1:
+        raise ImportRejected(
+            "scene_multiple_headings",
+            "The body contains another scene heading; insert one scene at "
+            "a time.",
+        )
+    scene = scenes[0]
+    # Typed text has no source document, so no unit carries an anchor.
+    for unit in scene.units:
+        unit.anchor = None
+    return scene

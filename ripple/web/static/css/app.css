@@ -501,3 +501,23 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
   .settings-split{grid-template-columns:1fr}
   .settings-rail{flex-direction:row;position:static}
 }
+
+/* Scene structure controls: insertion, omission, restoration. */
+.sh .sctl{margin-left:auto;display:flex;gap:6px;opacity:0;transition:opacity .12s}
+.sh:hover .sctl,.sh:focus-within .sctl{opacity:1}
+.scene-insert{display:flex;justify-content:center;margin:2px 0;opacity:0;
+  transition:opacity .12s}
+.scene-insert:hover,.scene-insert:focus-within{opacity:1}
+@media (prefers-reduced-motion:reduce){
+  .sh .sctl,.scene-insert{transition:none}}
+@media (pointer:coarse){.sh .sctl,.scene-insert{opacity:1}}
+.omit-tag{font-size:10.5px;letter-spacing:.08em;color:var(--red);
+  border:.5px solid var(--red);border-radius:5px;padding:1px 6px;
+  font-weight:600;align-self:center;white-space:nowrap}
+section.omitted .sh>span:not(.no){color:var(--t4);text-decoration:line-through}
+section.omitted .sh .omit-tag,section.omitted .sh .sctl{text-decoration:none}
+.scene-row.omitted .tx{color:var(--t4);text-decoration:line-through}
+.confirm-box.add-scene{width:min(560px,92vw)}
+.confirm-box.add-scene label{display:block;margin:10px 0 4px;color:var(--t3)}
+.confirm-box.add-scene .field{width:100%}
+.confirm-box.add-scene textarea.field{resize:vertical;font-family:var(--mono)}

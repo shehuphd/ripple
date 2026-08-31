@@ -805,3 +805,140 @@ class TestOutcomeVocabularyMigration:
                 "SELECT name FROM sqlite_master WHERE name='model_calls_old'"
             ).fetchone()
         assert leftovers is None
+
+
+class TestChangeVocabularyMigration:
+    def _regress(self, connection, table: str, needles: list[str]) -> None:
+        current = connection.exec_driver_sql(
+            f"SELECT sql FROM sqlite_master WHERE name='{table}'"
+        ).fetchone()[0]
+        old = current
+        for needle in needles:
+            old = old.replace(needle, "")
+        assert old != current
+        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        connection.exec_driver_sql(f"DROP TABLE {table}")
+        connection.exec_driver_sql(old)
+
+    def test_old_change_tables_widen_and_children_survive(self, tmp_path):
+        """A database from before scene omission must accept the new change
+        kind and operation, and the rebuild must never break the tables that
+        reference change_sets: a rename-based rebuild rewrites their foreign
+        keys to follow the renamed table, and every later insert fails."""
+        from ripple.db.session import create_db_engine
+
+        url = f"sqlite+pysqlite:///{tmp_path}/old.db"
+        engine = create_db_engine(url)
+        create_all(engine)
+
+        with engine.connect() as connection:
+            self._regress(connection, "change_operations", [", 'set_scene_omitted'"])
+            self._regress(connection, "change_sets", [", 'omit_scene'"])
+            connection.exec_driver_sql(
+                "INSERT INTO scripts (id, title, import_status, graph_status, "
+                "current_version, origin, created_at, updated_at) "
+                "VALUES ('aa11', 'T', 'accepted', 'not_analysed', 1, 'upload', "
+                "datetime('now'), datetime('now'))"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO change_sets (id, script_id, kind, status, "
+                "base_script_version, created_at) VALUES "
+                "('cs01', 'aa11', 'edit', 'accepted', 1, datetime('now'))"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO continuity_findings (id, change_set_id, "
+                "finding_type, severity, message, status, created_at) VALUES "
+                "('f001', 'cs01', 'orphaned_reference', 'high', 'm', 'open', "
+                "datetime('now'))"
+            )
+            connection.commit()
+
+        second = create_db_engine(url)
+        create_all(second)
+        with second.connect() as connection:
+            sets_ddl = connection.exec_driver_sql(
+                "SELECT sql FROM sqlite_master WHERE name='change_sets'"
+            ).fetchone()[0]
+            ops_ddl = connection.exec_driver_sql(
+                "SELECT sql FROM sqlite_master WHERE name='change_operations'"
+            ).fetchone()[0]
+            dangling = connection.exec_driver_sql(
+                "PRAGMA foreign_key_check"
+            ).fetchall()
+            survivors = connection.exec_driver_sql(
+                "SELECT count(*) FROM change_sets"
+            ).fetchone()[0]
+            # The finding's insert path is what breaks when the rebuild
+            # rewrites child foreign keys: prove a child write still works.
+            connection.exec_driver_sql(
+                "INSERT INTO continuity_findings (id, change_set_id, "
+                "finding_type, severity, message, status, created_at) VALUES "
+                "('f002', 'cs01', 'orphaned_reference', 'low', 'm', 'open', "
+                "datetime('now'))"
+            )
+            connection.commit()
+        assert "'omit_scene'" in sets_ddl
+        assert "'set_scene_omitted'" in ops_ddl
+        assert dangling == []
+        assert survivors == 1
+
+
+class TestDanglingReferenceRepair:
+    def test_children_pointing_at_a_missing_table_are_rebuilt(self, tmp_path):
+        """The damage a rename-based rebuild leaves behind: children whose
+        foreign keys follow the renamed table into oblivion. Startup must
+        heal it with every row intact."""
+        from ripple.db.session import create_db_engine
+
+        url = f"sqlite+pysqlite:///{tmp_path}/damaged.db"
+        engine = create_db_engine(url)
+        create_all(engine)
+
+        with engine.connect() as connection:
+            connection.exec_driver_sql(
+                "INSERT INTO scripts (id, title, import_status, graph_status, "
+                "current_version, origin, created_at, updated_at) "
+                "VALUES ('aa11', 'T', 'accepted', 'not_analysed', 1, 'upload', "
+                "datetime('now'), datetime('now'))"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO change_sets (id, script_id, kind, status, "
+                "base_script_version, created_at) VALUES "
+                "('cs01', 'aa11', 'edit', 'accepted', 1, datetime('now'))"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO continuity_findings (id, change_set_id, "
+                "finding_type, severity, message, status, created_at) VALUES "
+                "('f001', 'cs01', 'orphaned_reference', 'high', 'm', 'open', "
+                "datetime('now'))"
+            )
+            connection.commit()
+            # Inflict the damage: a default-mode rename drags every child's
+            # foreign key along to the new name, and the drop strands them.
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.exec_driver_sql(
+                "ALTER TABLE change_sets RENAME TO change_sets_old"
+            )
+            connection.exec_driver_sql(
+                "CREATE TABLE change_sets AS SELECT * FROM change_sets_old"
+            )
+            connection.exec_driver_sql("DROP TABLE change_sets_old")
+            connection.commit()
+
+        with engine.connect() as connection:
+            damaged = connection.exec_driver_sql(
+                "PRAGMA foreign_key_check"
+            ).fetchall()
+        assert damaged, "the damage must exist for the repair to be proven"
+
+        second = create_db_engine(url)
+        create_all(second)
+        with second.connect() as connection:
+            healed = connection.exec_driver_sql(
+                "PRAGMA foreign_key_check"
+            ).fetchall()
+            finding_rows = connection.exec_driver_sql(
+                "SELECT count(*) FROM continuity_findings"
+            ).fetchone()[0]
+        assert healed == []
+        assert finding_rows == 1

@@ -108,7 +108,7 @@ PROVENANCE = ("model", "user", "accepted_change", "system")
 IMPORT_OUTCOMES = ("accepted", "accepted_with_warnings", "needs_review", "rejected")
 RUN_STATUSES = ("pending", "running", "partially_ready", "ready", "failed", "cancelled")
 SCENE_STATUSES = ("pending", "running", "completed", "failed", "cancelled")
-CHANGE_KINDS = ("edit", "multi_unit_edit", "undo", "direct_save")
+CHANGE_KINDS = ("edit", "multi_unit_edit", "undo", "direct_save", "omit_scene")
 CHANGE_STATUSES = ("pending", "accepted", "rejected", "stale", "reverted", "failed")
 OPERATION_TYPES = (
     "add_assertion",
@@ -119,6 +119,7 @@ OPERATION_TYPES = (
     "set_entity_attribute",
     "remove_entity_attribute",
     "set_unit_text",
+    "set_scene_omitted",
 )
 FINDING_STATUSES = ("open", "dismissed", "resolved")
 GRAPH_STATUSES = ("not_analysed", "analysing", "partially_ready", "ready", "failed")
@@ -224,6 +225,10 @@ class Scene(Base):
     int_ext: Mapped[str | None] = mapped_column(String(16))
     time_of_day: Mapped[str | None] = mapped_column(String(32))
     current_version: Mapped[int] = mapped_column(Integer, default=1)
+    # An omitted scene keeps its row and its number, matching the production
+    # convention: later references stay resolvable, and restoring the scene is
+    # a flag flip plus the reactivation its change set records.
+    omitted: Mapped[bool] = mapped_column(Boolean, default=False)
 
     script: Mapped[Script] = relationship(back_populates="scenes")
     units: Mapped[list[ScriptUnit]] = relationship(

@@ -55,6 +55,8 @@ INVERSE = {
     # inverts to an update with the sides swapped.
     "create_entity": "create_entity",
     "update_entity": "update_entity",
+    # The payload swap does the work: before and after each state the flag.
+    "set_scene_omitted": "set_scene_omitted",
     # set_entity_attribute inverts by shape: setting a fresh key inverts to a
     # removal, updating an existing one inverts to a set with the sides
     # swapped. _inverse_type below decides from the operation's before_json.
@@ -431,6 +433,7 @@ def _apply(session: Session, script: Script, operation: ChangeOperation) -> int:
         "update_entity": _update_entity,
         "set_entity_attribute": _set_entity_attribute,
         "remove_entity_attribute": _remove_entity_attribute,
+        "set_scene_omitted": _set_scene_omitted,
     }.get(operation.operation_type)
     if handler is None:
         raise InvalidOperation(f"Unknown operation {operation.operation_type!r}.")
@@ -698,6 +701,25 @@ def _remove_entity_attribute(
     if attribute is None:
         raise InvalidOperation("The attribute to remove no longer exists.")
     attribute.active = False
+    session.flush()
+    return 0
+
+
+def _set_scene_omitted(
+    session: Session, _script: Script, operation: ChangeOperation
+) -> int:
+    """Flip a scene's omitted flag. The payload states the resulting value.
+
+    The row and its number stay, matching the production convention: a cut
+    scene reads OMITTED rather than renumbering everything after it.
+    """
+    scene = session.get(Scene, operation.target_id)
+    if scene is None:
+        raise InvalidOperation("The scene to mark no longer exists.")
+    payload = operation.after_json or {}
+    if "omitted" not in payload:
+        raise InvalidOperation("A scene marker must state the resulting state.")
+    scene.omitted = bool(payload["omitted"])
     session.flush()
     return 0
 

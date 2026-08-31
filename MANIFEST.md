@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-08-31 17:34:13 UTC
+Last updated: 2026-08-31 20:15:27 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
 
@@ -95,6 +95,7 @@ Every file in the repository and what it does. Directories the application write
 | `services/__init__.py` | Package marker. |
 | `services/preview.py` | The judgement engine: one proposal across many lines, verdicts validated, calls audited and replayed. |
 | `services/changeset.py` | Atomic accept, reject, and latest-only undo of a proposal. |
+| `services/scenes.py` | Scene insertion, omission (OMITTED, reversible), and restoration. |
 | `services/spend.py` | Token ledger and the hard budget gate every call site checks. |
 | `services/settings.py` | Credential entry and validation, main and fallback model selection. |
 | `services/synthesizer.py` | Plain-language ripple explanation, with a deterministic no-model fallback. |
@@ -136,6 +137,7 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_adapters.py` | Import pipeline across all four formats. |
 | `tests/test_adversarial.py` | Hostile inputs: malformed files, encoding traps, oversized documents. |
 | `tests/test_changeset.py` | Accept, reject, undo, and inverse operations. |
+| `tests/test_scenes.py` | Scene insertion, omission, and restoration. |
 | `tests/test_continuity.py` | Evidence retrieval and orphaned-reference detection. |
 | `tests/test_continuity_judge.py` | Continuity reply verification and prompt assembly. |
 | `tests/test_diff.py` | Diff engine identity and grouping rules. |

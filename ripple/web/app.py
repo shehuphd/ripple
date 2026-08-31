@@ -36,7 +36,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from traceact import ActionTrace
 
 from ripple.adapters import import_screenplay
-from ripple.adapters.base import MAX_UPLOAD_BYTES
+from ripple.adapters.base import MAX_UPLOAD_BYTES, ImportRejected
 from ripple.config.secrets import SecretStore
 from ripple.db.models import (
     Assertion,
@@ -78,6 +78,7 @@ from ripple.graph.layout import layout as graph_layout
 from ripple.llm import ProviderError, get_provider
 from ripple.services import changeset, spend
 from ripple.services import preview as preview_service
+from ripple.services import scenes as scenes_service
 from ripple.services.preview import PreviewFailed, PreviewRefused, PreviewResult
 from ripple.services.settings import SettingsService
 from ripple.services.synthesizer import answer_question, synthesize
@@ -510,6 +511,7 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
                 # with the scene that carries that number later in the script.
                 "number": scene.display_scene_number or "",
                 "heading": scene.heading,
+                "omitted": scene.omitted,
                 "page": page_of(running),
                 "eighths": eighths(characters),
                 "entities": len([e for e in entity_ids if e]),
@@ -1435,6 +1437,69 @@ def script_graph_page(
 
 
 # Extraction
+
+
+@app.post("/api/scripts/{script_id}/scenes")
+def add_scene(
+    script_id: str,
+    payload: dict[str, Any] = Body(...),
+    session: Session = Depends(get_session),
+):
+    """Insert one scene and start extracting it when a model is selected.
+
+    The body takes `heading`, `body`, and an optional `after_scene_id`
+    (omitted or null inserts at the top). The response carries the created
+    scene and, when extraction started, the run for the browser loop to
+    drive; without a model the scene still inserts and its graph waits.
+    """
+    try:
+        inserted = scenes_service.insert_scene(
+            session,
+            _uuid(script_id),
+            heading=str(payload.get("heading") or ""),
+            body=str(payload.get("body") or ""),
+            after_scene_id=(
+                _uuid(payload["after_scene_id"])
+                if payload.get("after_scene_id")
+                else None
+            ),
+        )
+    except ImportRejected as error:
+        raise HTTPException(422, error.message) from None
+    except ValueError as error:
+        raise HTTPException(404, str(error)) from None
+
+    run_progress = None
+    _, model_id = settings_service.selected_model(session)
+    if model_id:
+        run = start_run(
+            session,
+            _uuid(script_id),
+            model_id,
+            scene_ids=[_uuid(inserted.scene_id)],
+        )
+        run_progress = progress(session, run.id).__dict__
+    return {"scene": inserted.__dict__, "run": run_progress}
+
+
+@app.post("/api/scenes/{scene_id}/omit")
+def omit_scene(scene_id: str, session: Session = Depends(get_session)):
+    """Mark a scene OMITTED, deactivating its facts and reporting orphans."""
+    try:
+        result = scenes_service.omit_scene(session, _uuid(scene_id))
+    except ValueError as error:
+        raise HTTPException(404, str(error)) from None
+    return result.__dict__
+
+
+@app.post("/api/scenes/{scene_id}/restore")
+def restore_scene(scene_id: str, session: Session = Depends(get_session)):
+    """Reverse an omission, reactivating the scene's facts."""
+    try:
+        result = scenes_service.restore_scene(session, _uuid(scene_id))
+    except ValueError as error:
+        raise HTTPException(404, str(error)) from None
+    return result.__dict__
 
 
 @app.post("/api/scripts/{script_id}/extract")

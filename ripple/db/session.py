@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -75,7 +76,157 @@ def create_all(engine: Engine) -> None:
     """
     _widen_model_call_outcomes(engine)
     _add_script_origin(engine)
+    _add_scene_omitted(engine)
+    _widen_change_vocabularies(engine)
+    _repair_dangling_references(engine)
     Base.metadata.create_all(engine)
+
+
+def _repair_dangling_references(engine: Engine) -> None:
+    """Rebuild any table whose foreign keys reference a missing table.
+
+    SQLite rewrites referencing tables' DDL when their target is renamed, so
+    a rebuild that renamed a parent aside and dropped it leaves children
+    pointing at a table that no longer exists; with foreign keys on, every
+    later insert into such a child fails. Scanning for the damage and
+    rebuilding the child in place (same copy-out pattern, no rename) makes a
+    startup heal it, whichever migration caused it.
+    """
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.connect() as connection:
+        rows = connection.exec_driver_sql(
+            "SELECT name, sql FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+        existing = {name for name, _ in rows}
+        reference = re.compile(r'REFERENCES\s+"?(\w+)"?', re.IGNORECASE)
+        for name, sql in rows:
+            if name not in Base.metadata.tables or not sql:
+                continue
+            missing = [
+                target
+                for target in reference.findall(sql)
+                if target not in existing
+            ]
+            if not missing:
+                continue
+            logger.warning(
+                "rebuilding %s: its foreign keys reference missing %s",
+                name,
+                ", ".join(sorted(set(missing))),
+            )
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            bag = f"{name}_repair"
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {bag}")
+            connection.exec_driver_sql(
+                f"CREATE TABLE {bag} AS SELECT * FROM {name}"
+            )
+            connection.exec_driver_sql(f"DROP TABLE {name}")
+            Base.metadata.tables[name].create(connection)
+            columns = ", ".join(
+                column.name for column in Base.metadata.tables[name].columns
+            )
+            connection.exec_driver_sql(
+                f"INSERT OR IGNORE INTO {name} ({columns}) "
+                f"SELECT {columns} FROM {bag}"
+            )
+            connection.exec_driver_sql(f"DROP TABLE {bag}")
+            for index in Base.metadata.tables[name].indexes:
+                index.create(connection, checkfirst=True)
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            connection.commit()
+
+
+def _add_scene_omitted(engine: Engine) -> None:
+    """Add `scenes.omitted` to a database that predates it."""
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.connect() as connection:
+        table_exists = connection.exec_driver_sql(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='scenes'"
+        ).fetchone()
+        if not table_exists:
+            return
+        columns = {
+            row[1]
+            for row in connection.exec_driver_sql("PRAGMA table_info(scenes)")
+        }
+        if "omitted" in columns:
+            return
+        logger.info("adding scenes.omitted")
+        connection.exec_driver_sql(
+            "ALTER TABLE scenes ADD COLUMN omitted BOOLEAN NOT NULL DEFAULT 0"
+        )
+        connection.commit()
+
+
+def _widen_change_vocabularies(engine: Engine) -> None:
+    """Rebuild the change tables in a database that predates scene omission.
+
+    SQLite bakes CHECK constraints into a table's DDL, so the added
+    "omit_scene" kind and "set_scene_omitted" operation never reach an
+    existing database without a rebuild; the first such write would fail its
+    constraint. Columns are unchanged in both tables, so each rebuild is a
+    straight copy, resume-safe the same way the model_calls rebuild is.
+    """
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.connect() as connection:
+
+        def table_sql(name: str) -> str | None:
+            row = connection.exec_driver_sql(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+                (name,),
+            ).fetchone()
+            return row[0] if row else None
+
+        for table, needle in (
+            ("change_sets", "'omit_scene'"),
+            ("change_operations", "'set_scene_omitted'"),
+        ):
+            has_leftover = table_sql(f"{table}_old") is not None
+            current = table_sql(table)
+            needs_widening = current is not None and needle not in current
+            if not has_leftover and not needs_widening:
+                if current is not None:
+                    for index in Base.metadata.tables[table].indexes:
+                        index.create(connection, checkfirst=True)
+                    connection.commit()
+                continue
+
+            logger.info("widening the %s vocabulary", table)
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            # Never RENAME here: SQLite rewrites other tables' foreign keys
+            # to follow a renamed table, and the children of these tables
+            # (findings, reports, audited calls) would end up referencing the
+            # dropped _old copy. The _old table is a plain data bag created by
+            # copy, so the original's name never moves and the children's DDL
+            # never changes.
+            if not has_leftover:
+                connection.exec_driver_sql(
+                    f"CREATE TABLE {table}_old AS SELECT * FROM {table}"
+                )
+                connection.exec_driver_sql(f"DROP TABLE {table}")
+            elif needs_widening:
+                # A half-run stopped after copying and before recreating: the
+                # narrow table under the original name is the stale one.
+                connection.exec_driver_sql(f"DROP TABLE {table}")
+
+            if table_sql(table) is None:
+                Base.metadata.tables[table].create(connection)
+            columns = ", ".join(
+                column.name for column in Base.metadata.tables[table].columns
+            )
+            connection.exec_driver_sql(
+                f"INSERT OR IGNORE INTO {table} ({columns}) "
+                f"SELECT {columns} FROM {table}_old"
+            )
+            connection.exec_driver_sql(f"DROP TABLE {table}_old")
+            for index in Base.metadata.tables[table].indexes:
+                index.create(connection, checkfirst=True)
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            connection.commit()
 
 
 def _add_script_origin(engine: Engine) -> None:

@@ -120,24 +120,34 @@ def _scene_units(session: Session, scene_id) -> list[tuple[str, str, str]]:
 
 
 def start_run(
-    session: Session, script_id, model_id: str, prompt_version: str = PROMPT_VERSION
+    session: Session,
+    script_id,
+    model_id: str,
+    prompt_version: str = PROMPT_VERSION,
+    scene_ids: list | None = None,
 ) -> ExtractionRun:
     """Create a run and a pending job for every scene.
 
     Content hashes are computed now, so a scene edited after the run starts is
     detected as changed rather than silently extracted from stale text.
+
+    `scene_ids` narrows the run to those scenes, which is how an inserted
+    scene is extracted without re-running the rest: on a seeded script the
+    other scenes have no cache rows, so a whole-script run would bill all of
+    them. Omitted scenes are never extracted.
     """
     script = session.get(Script, script_id)
     if script is None:
         raise ValueError(f"no script with id {script_id}")
 
-    scenes = list(
-        session.scalars(
-            select(Scene)
-            .where(Scene.script_id == script_id)
-            .order_by(Scene.sequence_index)
-        )
+    query = (
+        select(Scene)
+        .where(Scene.script_id == script_id, Scene.omitted.is_(False))
+        .order_by(Scene.sequence_index)
     )
+    if scene_ids is not None:
+        query = query.where(Scene.id.in_(scene_ids))
+    scenes = list(session.scalars(query))
 
     run = ExtractionRun(
         script_id=script_id,

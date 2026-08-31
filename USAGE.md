@@ -108,6 +108,16 @@ A preview that fails after model contact persists nothing except its audit recor
 
 Retryable provider errors are retried once, and a retried preview replays already-judged scenes from their recorded replies at no cost.
 
+## Adding and omitting scenes
+
+The reader edits the script's structure as well as its lines.
+
+**Add a scene.** Hover between two scenes (or above the first) and press **＋ scene**. The dialog takes a heading and the scene text; the text is parsed with the same rules an imported file gets, so character cues, parentheticals, and transitions all work. On a numbered script the new scene takes a lettered number per the production convention: after scene 12 comes 12A, and a scene above the first is A1. Every other scene keeps its number. When a model is selected, the new scene is extracted immediately, and only the new scene: nothing else is re-billed. Without a model, the scene inserts and its requirements wait for the next graph build.
+
+**Omit a scene.** Hover a scene heading and press **⊘**. The scene keeps its row and its number and reads OMITTED; its stored facts deactivate as one recorded change, and every entity it introduced that later scenes still use becomes an open continuity finding citing the surviving lines. **Restore**, on the omitted heading, reverses all of it: the facts reactivate and the omission's findings resolve.
+
+Both operations move the script's base version, so a ripple preview drafted against the old structure is refused as stale rather than applied against a script it never saw.
+
 ## Continuity findings
 
 Findings are evidence-backed warnings about a proposal's effect on other scenes, and they come from two places. One is computed with no model at all: removing the only line that establishes an entity while later scenes still reference it. The rest come from a continuity judgement, one model call per preview: the model is handed the edit, the graph changes, and a bounded packet of earlier and later facts about the affected entities, each with the line that states it, and reports the conflicts the edit creates. A reported conflict is kept only when it cites evidence the model was shown, and it carries its own severity. The pass is advisory: when its call fails, the preview stands on the deterministic findings and a banner says so.
