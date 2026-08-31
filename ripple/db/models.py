@@ -756,6 +756,9 @@ class ContinuityFinding(Base):
     message: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), default="open")
     dismissal_reason: Mapped[str | None] = mapped_column(Text)
+    # Typed data an actionable finding carries beyond its message: a
+    # possible_rename holds the two entity ids its Confirm action joins.
+    payload_json: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

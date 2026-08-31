@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-08-31 21:01:46 UTC
+Last updated: 2026-08-31 21:53:06 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
 
@@ -98,6 +98,7 @@ Every file in the repository and what it does. Directories the application write
 | `services/changeset.py` | Atomic accept, reject, and latest-only undo of a proposal. |
 | `services/draft_report.py` | The cross-draft ripple report: entity deltas, lost introductions, judged conflicts. |
 | `services/drafts.py` | Draft linking: alignment, lineage, graph carry-over. |
+| `services/renames.py` | Rename detection from transferred speaking positions, auto-apply, confirm, and missed-instance findings. |
 | `services/scenes.py` | Scene insertion, omission (OMITTED, reversible), and restoration. |
 | `services/spend.py` | Token ledger and the hard budget gate every call site checks. |
 | `services/settings.py` | Credential entry and validation, main and fallback model selection. |
@@ -142,6 +143,7 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_changeset.py` | Accept, reject, undo, and inverse operations. |
 | `tests/test_alignment.py` | The draft aligner's passes and refusals. |
 | `tests/test_drafts.py` | Draft linking and carry-over on a one-line revision. |
+| `tests/test_renames.py` | Rename detection and application across drafts. |
 | `tests/test_scenes.py` | Scene insertion, omission, and restoration. |
 | `tests/test_continuity.py` | Evidence retrieval and orphaned-reference detection. |
 | `tests/test_continuity_judge.py` | Continuity reply verification and prompt assembly. |

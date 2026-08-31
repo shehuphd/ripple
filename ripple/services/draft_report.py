@@ -44,6 +44,7 @@ from ripple.extraction.continuity_judge import (
 )
 from ripple.graph.continuity import USE_PREDICATES, retrieve
 from ripple.services import preview as preview_service
+from ripple.services import renames
 from ripple.tracing import ensure_configured
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,8 @@ class DraftReport:
     lost_introductions: list[str] = field(default_factory=list)
     conflicts: int = 0
     continuity_notes: list[str] = field(default_factory=list)
+    renames_applied: list[str] = field(default_factory=list)
+    renames_suggested: int = 0
     already_existed: bool = False
 
 
@@ -125,6 +128,19 @@ def build_draft_report(
             )
 
         pairs, added, removed = _resolve_entities(session, script, old)
+
+        # Rename detection runs on the added cast before anything else is
+        # judged: an applied rename joins two identities, and the attribute
+        # and introduction comparisons should see the joined one.
+        candidates = renames.detect_renames(session, script, old, added)
+        auto_applied: list[tuple] = []
+        for candidate in candidates:
+            if candidate.automatic:
+                survivor = renames.apply_rename(session, script, candidate)
+                auto_applied.append((candidate, survivor))
+        if auto_applied:
+            pairs, added, removed = _resolve_entities(session, script, old)
+
         attribute_changes = _attribute_changes(session, pairs)
         lost = _lost_introductions(session, script, old, pairs)
 
@@ -178,6 +194,18 @@ def build_draft_report(
             session.add(finding)
         session.flush()
 
+        for candidate, survivor in auto_applied:
+            report.renames_applied.append(
+                f"{candidate.old_name} to {survivor.canonical_name}"
+            )
+            renames.file_partial_finding(
+                session, script, anchor.id, survivor, candidate.old_name
+            )
+        for candidate in candidates:
+            if not candidate.automatic:
+                renames.file_suggestion(session, anchor.id, candidate)
+                report.renames_suggested += 1
+
         if provider is not None and model_id:
             report.conflicts, report.continuity_notes = _judge_changed_scenes(
                 session, script, old, anchor, provider, model_id
@@ -193,7 +221,10 @@ def build_draft_report(
             if lost or report.conflicts
             else (
                 "medium"
-                if removed or attribute_changes
+                if removed
+                or attribute_changes
+                or report.renames_applied
+                or report.renames_suggested
                 else "low"
             )
         )
@@ -628,6 +659,14 @@ def _summary(session, script: Script, report: DraftReport) -> str:
             for change in report.attribute_changes[:4]
         )
         parts.append(f"Changed: {bits}.")
+    if report.renames_applied:
+        parts.append(f"Renamed: {', '.join(report.renames_applied)}.")
+    if report.renames_suggested:
+        noun = "rename" if report.renames_suggested == 1 else "renames"
+        parts.append(
+            f"{report.renames_suggested} possible {noun} await confirmation "
+            "on the findings page."
+        )
     if report.lost_introductions:
         parts.append(
             f"{len(report.lost_introductions)} entit"

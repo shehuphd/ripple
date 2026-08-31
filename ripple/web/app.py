@@ -80,6 +80,7 @@ from ripple.services import changeset, spend
 from ripple.services import draft_report as report_service
 from ripple.services import drafts as drafts_service
 from ripple.services import preview as preview_service
+from ripple.services import renames as renames_service
 from ripple.services import scenes as scenes_service
 from ripple.services.preview import PreviewFailed, PreviewRefused, PreviewResult
 from ripple.services.settings import SettingsService
@@ -710,6 +711,17 @@ def findings_page(
             "right": finding.created_at.strftime("%d %b %H:%M"),
             "actions": [
                 {"label": "Review", "href": f"/scripts/{script.id}"},
+                *(
+                    [
+                        {
+                            "label": "Confirm rename",
+                            "url": f"/api/findings/{finding.id}/confirm-rename",
+                        }
+                    ]
+                    if finding.status == "open"
+                    and finding.finding_type == "possible_rename"
+                    else []
+                ),
                 *(
                     [
                         {
@@ -1923,6 +1935,31 @@ def dismiss_finding(
     finding.dismissal_reason = reason
     session.flush()
     return {"id": str(finding.id), "status": finding.status}
+
+
+@app.post("/api/findings/{finding_id}/confirm-rename")
+def confirm_rename_route(finding_id: str, session: Session = Depends(get_session)):
+    """Apply the rename a possible_rename finding describes.
+
+    The two identities join: one entity, the new name current, the old name
+    recorded as an alias, and any line still under the old name reported as
+    a partial rename.
+    """
+    finding = session.get(ContinuityFinding, _uuid(finding_id))
+    if finding is None:
+        raise HTTPException(404, "No such finding")
+    if finding.status != "open":
+        raise HTTPException(409, f"This finding is {finding.status}.")
+    try:
+        survivor = renames_service.confirm_rename(session, finding)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from None
+    return {
+        "id": str(finding.id),
+        "status": finding.status,
+        "entity_id": str(survivor.id),
+        "entity": survivor.canonical_name,
+    }
 
 
 @app.post("/api/scripts/{script_id}/ask")

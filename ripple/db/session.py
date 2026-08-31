@@ -83,9 +83,9 @@ def create_all(engine: Engine) -> None:
     Base.metadata.create_all(engine)
 
 
-# Nullable draft-lineage columns, added to databases that predate them. Each
-# entry is (table, column, DDL fragment after the column name).
-_LINEAGE_COLUMNS = (
+# Nullable columns added to databases that predate them. Each entry is
+# (table, column, DDL fragment after the column name).
+_ADDED_COLUMNS = (
     ("scripts", "draft_number", "INTEGER NOT NULL DEFAULT 1"),
     ("scripts", "predecessor_script_id", "CHAR(32) REFERENCES scripts (id)"),
     ("scenes", "predecessor_scene_id", "CHAR(32) REFERENCES scenes (id)"),
@@ -100,15 +100,16 @@ _LINEAGE_COLUMNS = (
         "predecessor_entity_id",
         "CHAR(32) REFERENCES entities (id)",
     ),
+    ("continuity_findings", "payload_json", "JSON"),
 )
 
 
 def _add_lineage_columns(engine: Engine) -> None:
-    """Add the draft-lineage columns to a database that predates them."""
+    """Add the newer nullable columns to a database that predates them."""
     if engine.dialect.name != "sqlite":
         return
     with engine.connect() as connection:
-        for table, column, ddl in _LINEAGE_COLUMNS:
+        for table, column, ddl in _ADDED_COLUMNS:
             exists = connection.exec_driver_sql(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
                 (table,),
