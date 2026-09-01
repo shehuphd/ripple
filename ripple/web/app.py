@@ -731,7 +731,10 @@ def findings_page(
             ),
             "right": finding.created_at.strftime("%d %b %H:%M"),
             "actions": [
-                {"label": "Review", "href": f"/scripts/{script.id}"},
+                {
+                    "label": "Review",
+                    "href": f"/scripts/{script.id}?finding={finding.id}",
+                },
                 *(
                     [
                         {
@@ -2053,6 +2056,35 @@ def dismiss_finding(
     finding.dismissal_reason = reason
     session.flush()
     return {"id": str(finding.id), "status": finding.status}
+
+
+@app.get("/api/findings/{finding_id}")
+def finding_detail(finding_id: str, session: Session = Depends(get_session)):
+    """One finding with the unit ids its evidence cites, for Review."""
+    finding = session.get(ContinuityFinding, _uuid(finding_id))
+    if finding is None:
+        raise HTTPException(404, "No such finding")
+    cited_units = []
+    cited_scenes = []
+    for evidence in finding.evidence:
+        unit = session.get(ScriptUnit, evidence.script_unit_id)
+        if unit is None:
+            continue
+        # The reader renders headings as scene chrome, never as line nodes,
+        # so a cited heading is addressed through its scene instead.
+        if unit.unit_type == "scene_heading":
+            if str(unit.scene_id) not in cited_scenes:
+                cited_scenes.append(str(unit.scene_id))
+        else:
+            cited_units.append(str(unit.id))
+    return {
+        "id": str(finding.id),
+        "status": finding.status,
+        "finding_type": finding.finding_type,
+        "message": finding.message,
+        "cited_units": cited_units,
+        "cited_scenes": cited_scenes,
+    }
 
 
 @app.post("/api/findings/{finding_id}/confirm-rename")

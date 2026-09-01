@@ -723,7 +723,33 @@ class TestFindingActions:
         finding_id = self._make_finding(script_id)
         body = client.get("/findings").text
         assert f'data-post="/api/findings/{finding_id}/dismiss"' in body
-        assert f'href="/scripts/{script_id}"' in body
+        # Review deep-links to the script with the finding, so the reader
+        # can scroll to and mark the cited lines.
+        assert f'href="/scripts/{script_id}?finding={finding_id}"' in body
+
+    def test_a_finding_reports_the_units_its_evidence_cites(self, client):
+        import uuid
+
+        from ripple.db.models import FindingEvidence
+
+        script_id = _first_script(client)
+        finding_id = self._make_finding(script_id)
+        unit_id = _units(client, script_id)[0]
+        with web._sessions() as session:
+            session.add(
+                FindingEvidence(
+                    finding_id=uuid.UUID(finding_id),
+                    script_unit_id=uuid.UUID(unit_id),
+                    rank=0,
+                    match_reason="reference",
+                )
+            )
+            session.commit()
+        detail = client.get(f"/api/findings/{finding_id}").json()
+        assert detail["cited_units"] == [unit_id]
+        assert detail["cited_scenes"] == []
+        assert detail["status"] == "open"
+        assert client.get(f"/api/findings/{uuid.uuid4()}").status_code == 404
 
     def test_dismissing_removes_the_offer(self, client):
         script_id = _first_script(client)

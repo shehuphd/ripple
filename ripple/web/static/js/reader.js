@@ -402,8 +402,33 @@ document.getElementById('pv-warning-trace').addEventListener('click',
     }
   });
 
+/* Centre a node in the reader pane. Scrolls only that pane, computed
+   directly: scrollIntoView walks every scrollable ancestor and, at load
+   time, overshoots and drags the layout sideways. */
+function scrollPaneTo(node, behavior) {
+  let pane = null;
+  for (let e = node.parentElement; e; e = e.parentElement) {
+    const style = getComputedStyle(e);
+    if (
+      (style.overflowY === 'auto' || style.overflowY === 'scroll')
+      && e.scrollHeight > e.clientHeight
+    ) { pane = e; break; }
+  }
+  if (!pane) {
+    node.scrollIntoView({ block: 'center', behavior });
+    return;
+  }
+  const target = node.getBoundingClientRect();
+  const box = pane.getBoundingClientRect();
+  pane.scrollTo({
+    top: pane.scrollTop + (target.top - box.top)
+      - (pane.clientHeight - target.height) / 2,
+    behavior,
+  });
+}
+
 /* Scroll to the units a finding cites and mark them for a moment. */
-function reviewUnits(unitIds) {
+function reviewUnits(unitIds, behavior = 'smooth') {
   const nodes = unitIds
     .map((id) => document.querySelector(`.u[data-unit="${id}"]`))
     .filter(Boolean);
@@ -411,11 +436,56 @@ function reviewUnits(unitIds) {
     toast('The cited units are not on this page.');
     return;
   }
-  nodes[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+  scrollPaneTo(nodes[0], behavior);
+  ripple.trace('units.reviewed', {
+    cited: unitIds.length,
+    found: nodes.length,
+    behavior,
+    top: Math.round(nodes[0].getBoundingClientRect().top),
+  });
   nodes.forEach((node) => {
     node.classList.add('cited');
     setTimeout(() => node.classList.remove('cited'), 4000);
   });
+}
+
+/* The findings page's Review deep-links here with ?finding=<id>: fetch the
+   finding's cited lines, scroll to them, and mark them for a moment. */
+const pendingFinding = new URLSearchParams(window.location.search).get('finding');
+if (pendingFinding) {
+  (async () => {
+    try {
+      const detail = await api(`/api/findings/${pendingFinding}`);
+      // After the webfont applies, as an instant jump: the screenplay is
+      // over ten times taller in the fallback font, so any position
+      // computed before fonts settle scrolls to the wrong place.
+      const fonts = document.fonts ? document.fonts.ready : Promise.resolve();
+      const after = (act) => {
+        const go = () => fonts.then(() => requestAnimationFrame(act));
+        if (document.readyState === 'complete') go();
+        else window.addEventListener('load', go, { once: true });
+      };
+      if (detail.cited_units.length) {
+        after(() => reviewUnits(detail.cited_units, 'auto'));
+      } else if (detail.cited_scenes.length) {
+        // Evidence citing only scene headings: show the scene itself.
+        after(() => {
+          const scene = document.querySelector(
+            `[data-scene-body="${detail.cited_scenes[0]}"]`);
+          if (scene) scrollPaneTo(scene, 'auto');
+          else toast('The cited scene is not on this page.');
+        });
+      } else {
+        toast('This finding cites no lines in this script.');
+      }
+      ripple.trace('finding.reviewed', {
+        finding: pendingFinding, units: detail.cited_units.length,
+      });
+    } catch (error) {
+      toast(error.message, true);
+    }
+    window.history.replaceState(null, '', window.location.pathname);
+  })();
 }
 
 seeRipple.addEventListener('click', openPreview);

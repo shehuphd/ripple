@@ -158,7 +158,7 @@ The report refuses while changed scenes are still unextracted, because a missing
 
 Findings are evidence-backed warnings about a proposal's effect on other scenes, and they come from two places. One is computed with no model at all: removing the only line that establishes an entity while later scenes still reference it. The rest come from a continuity judgement, one model call per preview: the model is handed the edit, the graph changes, and a bounded packet of earlier and later facts about the affected entities, each with the line that states it, and reports the conflicts the edit creates. A reported conflict is kept only when it cites evidence the model was shown, and it carries its own severity. The pass is advisory: when its call fails, the preview stands on the deterministic findings and a banner says so.
 
-Findings appear in the preview overlay, where Review units jumps to the cited lines and Dismiss records a dismissal, and on the **Continuity findings** page, filtered per script.
+Findings appear in the preview overlay, where Review units jumps to the cited lines and Dismiss records a dismissal, and on the **Continuity findings** page, filtered per script. The findings page's Review opens the script scrolled to the cited lines, marked for a moment; evidence citing a scene heading opens on that scene.
 
 ## Ask the graph
 
