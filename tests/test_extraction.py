@@ -14,14 +14,23 @@ import pytest
 from sqlalchemy import func, select
 
 from ripple.adapters import import_screenplay
-from ripple.db.models import Assertion, Entity, EntityAlias, SceneExtraction, Script
+from ripple.db.models import (
+    Assertion,
+    Entity,
+    EntityAlias,
+    ExtractionRun,
+    SceneExtraction,
+    Script,
+)
 from ripple.db.repository import persist_import
 from ripple.db.session import create_all, create_db_engine, session_factory
 from ripple.extraction.prompt import PROMPT_VERSION, build_prompt, input_hash
 from ripple.extraction.service import (
     MAX_ATTEMPTS,
+    _scene_units,
     claim_next_scene,
     extract_scene,
+    pending_scene_count,
     progress,
     start_run,
 )
@@ -962,3 +971,72 @@ class TestRunStatusTruth:
         assert claim_next_scene(session, second.id) is None
         assert second.status == "ready"
         assert second.completed_scenes == second.total_scenes
+
+
+class TestPendingSceneCount:
+    """The count behind the Build graph gate: billable scenes only."""
+
+    def _complete_all(self, session, script, model=MODEL):
+        from datetime import UTC, datetime
+
+        run = ExtractionRun(
+            script_id=script.id,
+            status="ready",
+            prompt_version=PROMPT_VERSION,
+            model_id=model,
+            total_scenes=len(script.scenes),
+            completed_scenes=len(script.scenes),
+            started_at=datetime.now(UTC),
+        )
+        session.add(run)
+        session.flush()
+        for scene in script.scenes:
+            digest = input_hash(scene.heading, _scene_units(session, scene.id))
+            session.add(
+                SceneExtraction(
+                    extraction_run_id=run.id,
+                    scene_id=scene.id,
+                    status="completed",
+                    input_hash=digest,
+                    prompt_version=PROMPT_VERSION,
+                    model_id=model,
+                )
+            )
+        session.flush()
+
+    def test_an_unbuilt_script_counts_every_scene(self, session, script):
+        count = pending_scene_count(session, script.id, MODEL)
+        assert count == len(script.scenes)
+
+    def test_a_current_cache_counts_nothing(self, session, script):
+        self._complete_all(session, script)
+        assert pending_scene_count(session, script.id, MODEL) == 0
+
+    def test_an_edited_scene_counts_again(self, session, script):
+        self._complete_all(session, script)
+        unit = next(
+            unit
+            for unit in script.scenes[0].units
+            if unit.unit_type != "scene_heading"
+        )
+        unit.current_text = unit.current_text + " Edited."
+        session.flush()
+        assert pending_scene_count(session, script.id, MODEL) == 1
+
+    def test_an_omitted_scene_never_counts(self, session, script):
+        self._complete_all(session, script)
+        scene = script.scenes[0]
+        unit = next(
+            unit for unit in scene.units if unit.unit_type != "scene_heading"
+        )
+        unit.current_text = unit.current_text + " Edited."
+        scene.omitted = True
+        session.flush()
+        assert pending_scene_count(session, script.id, MODEL) == 0
+
+    def test_a_different_model_counts_every_scene(self, session, script):
+        self._complete_all(session, script)
+        assert (
+            pending_scene_count(session, script.id, "another-model")
+            == len(script.scenes)
+        )

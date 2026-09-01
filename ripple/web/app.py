@@ -69,6 +69,7 @@ from ripple.db.session import create_all, create_db_engine, session_factory
 from ripple.extraction.service import (
     claim_next_scene,
     extract_scene,
+    pending_scene_count,
     progress,
     start_run,
 )
@@ -551,6 +552,14 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
         .join(ChangeSet)
         .where(ChangeSet.script_id == script.id, ContinuityFinding.status == "open")
     )
+    # Building the graph bills model calls, so the button is gated on there
+    # being billable work: scenes whose current content has no completed
+    # extraction under the selected model. Accepting a ripple, adding or
+    # restoring a scene, and linking a draft all change scene content, so
+    # they re-enable the button without any bookkeeping of their own.
+    pending = (
+        pending_scene_count(session, script.id, model) if model else 0
+    )
     return templates.TemplateResponse(
         request,
         "reader.html",
@@ -560,6 +569,7 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
             "pages": page_total,
             "findings": findings,
             "model": model,
+            "pending_scenes": pending,
             "counts": sidebar_counts(session),
         },
     )

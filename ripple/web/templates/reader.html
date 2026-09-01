@@ -37,7 +37,17 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
     {{ findings }} continuity finding{{ '' if findings == 1 else 's' }}</a>
   {% endif %}
   {% if model %}<span class="chip">◎ {{ model }}</span>
+    {% if script.graph_status == 'ready' and pending_scenes == 0 %}
+    <button class="btn" id="extract" disabled
+            data-tip="The graph matches every scene. Accepting a change or adding a scene enables an update.">
+      Build graph</button>
+    {% elif script.graph_status == 'ready' %}
+    <button class="btn" id="extract"
+            data-tip="{{ pending_scenes }} scene{{ '' if pending_scenes == 1 else 's' }} changed since the last build. Unchanged scenes replay from cache at no cost.">
+      Update graph</button>
+    {% else %}
     <button class="btn" id="extract">Build graph</button>
+    {% endif %}
   {% else %}
     <a class="chip" href="/settings" data-tip="Choose a model to build the graph">
       ◎ no model</a>

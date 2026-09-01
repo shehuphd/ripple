@@ -54,6 +54,8 @@ Open **Settings** from the sidebar. It has three tabs.
 
 Open a script and press **Build graph**. Extraction runs one scene per model call, in the browser's control: each scene commits independently, so a failure late in a run keeps everything before it, and re-running resumes from the unfinished scenes instead of restarting. A scene already extracted from identical input under the same prompt and model is served from the cache with no call and no spend.
 
+The button is gated on billable work. Once the graph is built and every scene's content matches its cached extraction, it disables, with the reason in its tooltip. When scenes have changed since the last build (an accepted ripple, an added or restored scene, a linked draft, or a switched model), it reads **Update graph** and its tooltip counts the changed scenes; only those are billed, since the rest replay from cache.
+
 A run ends in one of three states:
 
 | Status | Meaning |

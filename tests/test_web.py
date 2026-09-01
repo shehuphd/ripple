@@ -1382,3 +1382,48 @@ class TestTraceViewerLaunch:
         response = client.post("/api/traces/trc_9f3a1c7b2d44/viewer")
         assert response.status_code == 404
         assert "RIPPLE_TRACING" in response.json()["detail"]
+
+
+class TestBuildGraphGate:
+    """Build graph is gated on billable work: changed or unextracted scenes."""
+
+    def test_a_current_graph_disables_the_button(
+        self, client, judged, monkeypatch
+    ):
+        monkeypatch.setattr(
+            web, "pending_scene_count", lambda session, script_id, model: 0
+        )
+        body = client.get(f"/scripts/{_first_script(client)}").text
+        assert 'id="extract" disabled' in body
+        assert "The graph matches every scene" in body
+
+    def test_changed_scenes_offer_an_update_with_the_count(
+        self, client, judged, monkeypatch
+    ):
+        monkeypatch.setattr(
+            web, "pending_scene_count", lambda session, script_id, model: 2
+        )
+        body = client.get(f"/scripts/{_first_script(client)}").text
+        assert "Update graph" in body
+        assert "2 scenes changed since the last build" in body
+        assert 'id="extract" disabled' not in body
+
+    def test_an_unbuilt_script_offers_a_plain_build(self, client, judged):
+        response = client.post(
+            "/api/scripts",
+            files={
+                "file": (
+                    "gate.fountain",
+                    b"INT. GATE ROOM - DAY\n\nA console blinks.\n\n"
+                    b"OPERATOR\nStill green.\n\n"
+                    b"EXT. GATE YARD - DAY\n\nRain on gravel.\n\n"
+                    b"OPERATOR\nStill wet.\n",
+                )
+            },
+        )
+        assert response.status_code == 200, response.text
+        upload = response.json()
+        body = client.get(f"/scripts/{upload['id']}").text
+        assert "Build graph" in body
+        assert "Update graph" not in body
+        assert 'id="extract" disabled' not in body

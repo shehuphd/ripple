@@ -119,6 +119,43 @@ def _scene_units(session: Session, scene_id) -> list[tuple[str, str, str]]:
     return [(str(unit.id), unit.unit_type, unit.current_text) for unit in rows]
 
 
+def pending_scene_count(
+    session: Session,
+    script_id,
+    model_id: str,
+    prompt_version: str = PROMPT_VERSION,
+) -> int:
+    """How many scenes a run started now would bill.
+
+    A scene counts when no completed extraction matches its current content
+    under this prompt and model: never extracted, edited since the last
+    build, restored with different text, or carried into a draft the cache
+    has not seen. Everything else replays from cache at no cost, so this is
+    the number the Build graph gate cares about. Omitted scenes are never
+    extracted and never count.
+    """
+    pending = 0
+    scenes = session.scalars(
+        select(Scene).where(
+            Scene.script_id == script_id, Scene.omitted.is_(False)
+        )
+    )
+    for scene in scenes:
+        digest = input_hash(scene.heading, _scene_units(session, scene.id))
+        done = session.scalar(
+            select(SceneExtraction.id).where(
+                SceneExtraction.scene_id == scene.id,
+                SceneExtraction.input_hash == digest,
+                SceneExtraction.prompt_version == prompt_version,
+                SceneExtraction.model_id == model_id,
+                SceneExtraction.status == "completed",
+            )
+        )
+        if done is None:
+            pending += 1
+    return pending
+
+
 def start_run(
     session: Session,
     script_id,
