@@ -103,7 +103,7 @@ A preview that fails after model contact persists nothing except its audit recor
 
 | Code | Cause |
 |---|---|
-| `output_truncated` | The model stopped at an output limit. The message names the model, the output tokens it produced against the tokens Ripple requested, and the finish reason, so a model whose own limit is the smaller one identifies itself. |
+| `output_truncated` | The model stopped at an output limit. The message names the model, the answer tokens (and any hidden reasoning tokens, which bill against the same output budget) against the tokens Ripple requested, and the finish reason. |
 | `malformed_response` | The reply was not valid against the judgement schema. |
 | `incomplete_judgement` | The reply skipped listed items; treating them as unchanged would be a guess. |
 | `model_not_available` and other provider codes | The provider refused the call; the message carries the provider's reason and a next step. |

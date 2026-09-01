@@ -87,7 +87,12 @@ logger = logging.getLogger(__name__)
 # validator already survives partial output, and a second identical call to a
 # model that produced garbage usually produces garbage again.
 RETRYABLE_CODES = {"rate_limited", "provider_unavailable", "timeout", "network_error"}
-MAX_OUTPUT_TOKENS = 4096
+# Matches extraction's cap. Models that reason before answering bill the
+# hidden reasoning to this same budget, and 4096 proved small enough for
+# gemini-flash to spend it before finishing a verdict list. Only tokens
+# produced are billed, so the headroom costs nothing on models that
+# answer within it.
+MAX_OUTPUT_TOKENS = 8192
 
 
 class PreviewRefused(Exception):
@@ -888,25 +893,41 @@ def _truncation_message(model_id: str, result: Any) -> str:
     """Say which model stopped, where, and against which requested limit.
 
     The bare fact ("the reply was cut off") gives the user nothing to act
-    on; the tokens produced against the tokens requested show whether the
-    model hit Ripple's cap or its own smaller one.
+    on, so the counts are spelled out. On models that reason before
+    answering, the hidden reasoning is billed against the same output
+    budget, so the visible answer can stop well short of the requested
+    cap; a reported reasoning count makes that the stated cause, and an
+    unreported one leaves it named as the likely cause rather than
+    mis-blaming the model's own limit.
     """
-    if result.output_tokens:
+    produced = result.output_tokens or 0
+    reasoning = getattr(result, "reasoning_tokens", None) or 0
+    reason = result.finish_reason or "length"
+    if reasoning:
         where = (
-            f"after {result.output_tokens} of the {MAX_OUTPUT_TOKENS} "
+            f"after {produced} answer tokens plus {reasoning} hidden "
+            f"reasoning tokens against the {MAX_OUTPUT_TOKENS} requested"
+        )
+    elif produced:
+        where = (
+            f"after {produced} of the {MAX_OUTPUT_TOKENS} "
             "output tokens Ripple requested"
         )
-        if result.output_tokens < MAX_OUTPUT_TOKENS:
-            where += ", so this model's own output limit is the smaller one"
     else:
         where = (
             f"before the {MAX_OUTPUT_TOKENS} output tokens Ripple requested"
         )
-    reason = result.finish_reason or "length"
-    return (
+    message = (
         f"{model_id} stopped mid-reply {where} "
         f"(finish reason: {reason})."
     )
+    if reasoning or produced < MAX_OUTPUT_TOKENS:
+        message += (
+            " Models that reason before answering bill the hidden "
+            "reasoning to the same output budget, so the cap can run out "
+            "before the answer finishes."
+        )
+    return message
 
 
 def _generate_verdicts(

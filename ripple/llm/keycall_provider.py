@@ -119,6 +119,7 @@ class KeycallProvider:
             provider=self.name,
             input_tokens=usage.input_tokens if usage else None,
             output_tokens=usage.output_tokens if usage else None,
+            reasoning_tokens=usage.reasoning_tokens if usage else None,
             finish_reason=result.finish_reason,
         )
 

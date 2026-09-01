@@ -1335,13 +1335,52 @@ class TestPreviewFailureSurface:
         assert response.status_code == 400
         body = response.json()
         assert body["code"] == "output_truncated"
-        # The message says which model stopped, where, and against what.
+        # The message says which model stopped, where, and against what,
+        # and names the reasoning budget as the likely cause of stopping
+        # short of the cap rather than mis-blaming the model's own limit.
         assert "fake-judge" in body["message"]
         assert "1024" in body["message"]
-        assert "4096" in body["message"]
+        assert "8192" in body["message"]
         assert "max_tokens" in body["message"]
+        assert "reason before answering" in body["message"]
         # The trace id field is always present; with tracing off it is null.
         assert "trace_id" in body
+
+    def test_reported_reasoning_tokens_are_stated_as_the_cause(
+        self, client, monkeypatch
+    ):
+        from ripple.llm.base import GenerationResult
+        from tests.test_preview import FakeJudge
+
+        class ThinkingJudge(FakeJudge):
+            def generate(self, model_id, prompt, **kwargs):
+                result = super().generate(model_id, prompt, **kwargs)
+                return GenerationResult(
+                    text=result.text[:40],
+                    model_id=model_id,
+                    provider=self.name,
+                    input_tokens=900,
+                    output_tokens=1476,
+                    reasoning_tokens=6716,
+                    finish_reason="MAX_TOKENS",
+                )
+
+        fake = ThinkingJudge()
+        monkeypatch.setattr(web, "get_provider", lambda name: fake)
+        monkeypatch.setattr(
+            web.settings_service,
+            "selected_model",
+            lambda session: ("google", "fake-judge"),
+        )
+        script_id = _first_script(client)
+        unit_id = _units(client, script_id)[0]
+        body = client.post(
+            f"/api/units/{unit_id}/preview",
+            data={"proposed_text": "A bicycle leans against the gate."},
+        ).json()
+        assert body["code"] == "output_truncated"
+        assert "1476 answer tokens" in body["message"]
+        assert "6716 hidden reasoning tokens" in body["message"]
 
 
 class TestTraceViewerLaunch:

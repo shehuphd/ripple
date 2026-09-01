@@ -92,6 +92,10 @@ class GenerationResult:
     provider: str
     input_tokens: int | None = None
     output_tokens: int | None = None
+    # Hidden reasoning, billed against the same output budget as the answer
+    # on models that think before replying. Reported so a truncation can be
+    # explained: the cap can run out before any visible text finishes.
+    reasoning_tokens: int | None = None
     finish_reason: str | None = None
 
     @property
