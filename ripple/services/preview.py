@@ -35,6 +35,7 @@ from ripple.db.models import (
     ChangeSet,
     ContinuityFinding,
     Entity,
+    EntityAlias,
     EntityAttribute,
     FindingEvidence,
     ModelCall,
@@ -741,6 +742,20 @@ def _listed(
     if rows:
         script_id = rows[0].script_id
         labels = _labels(session, script_id)
+    alias_names: dict = {}
+    alias_entity_ids = {
+        endpoint
+        for row in rows
+        for endpoint in (row.subject_entity_id, row.object_entity_id)
+        if endpoint
+    }
+    if alias_entity_ids:
+        for alias in session.scalars(
+            select(EntityAlias).where(
+                EntityAlias.entity_id.in_(alias_entity_ids)
+            )
+        ):
+            alias_names.setdefault(alias.entity_id, []).append(alias.alias)
     for row in rows:
         subject = row.subject_entity_id or row.subject_scene_id
         obj = row.object_entity_id or row.object_scene_id
@@ -753,6 +768,17 @@ def _listed(
             "subject": labels.get(subject, "?"),
             "predicate": row.predicate,
             "object": labels.get(obj, "?"),
+            # Aliases and entity ids feed the removal-visibility guard: an
+            # entity is named by any of its names, and a vanished word that
+            # is a stored attribute value marks a descriptor change.
+            "subject_entity_id": (
+                str(row.subject_entity_id) if row.subject_entity_id else None
+            ),
+            "object_entity_id": (
+                str(row.object_entity_id) if row.object_entity_id else None
+            ),
+            "subject_names": alias_names.get(row.subject_entity_id, []),
+            "object_names": alias_names.get(row.object_entity_id, []),
             "source_unit_id": str(row.source_unit_id),
             "evidence": evidence,
             "confidence": row.confidence,

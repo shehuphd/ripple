@@ -242,6 +242,7 @@ async function runPreview() {
     '<div class="empty">Computing…</div>';
   document.getElementById('pv-warning').classList.add('hide');
   setWarningTrace(null);
+  showWait();
   const scriptId = window.location.pathname.split('/').pop();
   try {
     const body = await api(`/api/scripts/${scriptId}/preview`, {
@@ -361,10 +362,12 @@ async function runPreview() {
       body.origin.method,
     ].filter(Boolean).join(' · ');
 
+    hideWait(true);
     document.getElementById('pv-foot').textContent =
       `${d.operations} graph operations · ${body.findings.length} continuity warnings`
       + spendLabel(body.spend);
   } catch (error) {
+    hideWait(false);
     ripple.trace('preview.failed', {
       edits: state.drafts.size, error: error.message,
     });
@@ -375,6 +378,25 @@ async function runPreview() {
     document.getElementById('pv-edits').innerHTML =
       '<div class="empty">The preview did not run. Nothing was recorded.</div>';
   }
+}
+
+/* The waiting interstitial: water and a spreading ripple while the
+   judgement runs, faded out into the results when they arrive. */
+function showWait() {
+  const wait = document.getElementById('pv-wait');
+  if (!wait) return;
+  wait.classList.remove('fading');
+  wait.classList.remove('hide');
+}
+function hideWait(fade) {
+  const wait = document.getElementById('pv-wait');
+  if (!wait) return;
+  if (!fade) {
+    wait.classList.add('hide');
+    return;
+  }
+  wait.classList.add('fading');
+  setTimeout(() => wait.classList.add('hide'), 520);
 }
 
 /* The warning banner's "Open trace" button: shown only when the failure

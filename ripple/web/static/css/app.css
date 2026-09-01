@@ -534,3 +534,33 @@ section.omitted .sh .omit-tag,section.omitted .sh .sctl{text-decoration:none}
 .sugg input{margin-top:3px;flex:0 0 auto;width:15px;height:15px}
 .sugg .pairing{display:flex;flex-direction:column;gap:3px;font-size:13px}
 .sugg .pairing .tiny{display:block}
+
+/* The preview's waiting interstitial: still water, one ripple spreading
+   from the centre, serif caption. Covers the overlay below its bar and
+   fades out into the results. */
+.pv-wait{position:absolute;inset:56px 0 0 0;z-index:45;display:flex;
+  align-items:center;justify-content:center;overflow:hidden;
+  background:
+    radial-gradient(115% 90% at 50% 42%, #10202e 0%, #0b1621 46%, #071019 100%);
+  opacity:1;transition:opacity .5s ease}
+.pv-wait.fading{opacity:0;pointer-events:none}
+.ripple-ring{position:absolute;left:50%;top:50%;width:36px;height:36px;
+  margin:-18px 0 0 -18px;border-radius:50%;
+  border:1.5px solid rgba(140,190,225,.55);
+  box-shadow:0 0 18px rgba(120,175,215,.12) inset;
+  opacity:0;animation:ripple-out 3.6s cubic-bezier(.16,.6,.4,1) infinite}
+.ripple-ring:nth-child(2){animation-delay:.9s}
+.ripple-ring:nth-child(3){animation-delay:1.8s}
+.ripple-ring:nth-child(4){animation-delay:2.7s}
+@keyframes ripple-out{
+  0%{transform:scale(.2);opacity:0}
+  8%{opacity:.85}
+  100%{transform:scale(16);opacity:0}}
+.pv-wait-text{position:relative;font-family:var(--serif);font-size:26px;
+  font-style:italic;letter-spacing:.02em;color:#cfe2f0;
+  text-shadow:0 2px 24px rgba(0,0,0,.55);
+  animation:wait-breathe 2.6s ease-in-out infinite}
+@keyframes wait-breathe{0%,100%{opacity:.65}50%{opacity:1}}
+@media(prefers-reduced-motion:reduce){
+  .ripple-ring{animation:none;opacity:.35;transform:scale(4)}
+  .pv-wait-text{animation:none}}

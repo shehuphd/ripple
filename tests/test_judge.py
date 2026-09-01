@@ -306,6 +306,103 @@ class TestConfidenceRange:
 class TestRemovalVisibility:
     """A removal must be visible in the edit itself."""
 
+    @staticmethod
+    def _removed(listed, current, proposed, attributes=None):
+        return validate_judgement(
+            json.dumps(
+                {
+                    "assertion_verdicts": [
+                        {"assertion_id": "a1", "verdict": "removed"}
+                    ],
+                    "attribute_verdicts": [],
+                }
+            ),
+            listed,
+            attributes or {},
+            {"u1": proposed},
+            {"u1": current},
+        )
+
+    def test_an_entity_named_only_by_alias_can_be_removed(self):
+        # The graph says Paperback; the line says book. The alias is how the
+        # edit names the entity, so the vanished alias makes removal visible.
+        listed = {
+            "a1": {
+                "id": "a1",
+                "subject": "Paperback",
+                "predicate": "appears_in",
+                "object": "Sc 29",
+                "subject_entity_id": "e-paperback",
+                "subject_names": ["his book", "turns a page"],
+                "source_unit_id": "u1",
+                "evidence": "his book",
+                "confidence": 0.9,
+            }
+        }
+        report = self._removed(
+            listed,
+            "Tomas watches her go and does not read his book.",
+            "Tomas watches her go and does not read his newspaper.",
+        )
+        assert report.assertion_verdicts[0].verdict == "removed"
+
+    def test_a_compound_name_losing_a_word_can_be_removed(self):
+        # "Boots on wet concrete" losing concrete is a different sound, even
+        # though boots survives in the proposed text.
+        listed = {
+            "a1": {
+                "id": "a1",
+                "subject": "Boots on wet concrete",
+                "predicate": "appears_in",
+                "object": "Sc 42",
+                "subject_entity_id": "e-boots",
+                "subject_names": ["boots"],
+                "source_unit_id": "u1",
+                "evidence": "Boots on wet concrete",
+                "confidence": 0.9,
+            }
+        }
+        report = self._removed(
+            listed,
+            "The trailer stops. Boots on wet concrete.",
+            "The trailer stops. Boots on wet quicksand.",
+        )
+        assert report.assertion_verdicts[0].verdict == "removed"
+
+    def test_a_changed_stored_descriptor_stays_an_attribute_change(self):
+        # Blue sedan losing blue, with color: blue on record, is the
+        # attribute path's case; the removal stays downgraded.
+        listed = {
+            "a1": {
+                "id": "a1",
+                "subject": "Blue sedan",
+                "predicate": "appears_in",
+                "object": "Sc 31",
+                "subject_entity_id": "e-sedan",
+                "subject_names": ["the sedan", "the car"],
+                "source_unit_id": "u1",
+                "evidence": "blue sedan",
+                "confidence": 0.9,
+            }
+        }
+        attributes = {
+            "at1": {
+                "id": "at1",
+                "entity": "Blue sedan",
+                "entity_id": "e-sedan",
+                "key": "color",
+                "value": "blue",
+            }
+        }
+        report = self._removed(
+            listed,
+            "The blue sedan waits by the gate.",
+            "The black sedan waits by the gate.",
+            attributes,
+        )
+        assert report.assertion_verdicts[0].verdict == "holds"
+        assert any("not visible" in reason for _, reason in report.rejected)
+
     def _listed(self):
         return {
             "a1": {

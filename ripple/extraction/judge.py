@@ -27,7 +27,7 @@ from ripple.extraction.validate import (
 )
 
 # Bumped with any wording change: the audit rows record which prompt spoke.
-JUDGE_PROMPT_VERSION = "judge.v3"
+JUDGE_PROMPT_VERSION = "judge.v4"
 
 VERDICTS = ("holds", "changed", "removed")
 
@@ -199,7 +199,12 @@ def build_judge_prompt(
         f"{RULES}\n\n---\n\n"
         "Judge every assertion and attribute below against the proposed text. "
         "Cite ids verbatim. New items follow the extraction rules "
-        "above and cite the edited unit that supports them.\n\n"
+        "above and cite the edited unit that supports them. When the "
+        "proposed text replaces one thing with another (a prop, a surface, "
+        "a sound, a vehicle), report the replaced item's assertions as "
+        "removed AND propose the replacement: a new entity plus at least "
+        "one new assertion citing the edited unit. A new entity that no "
+        "new assertion references is dropped.\n\n"
         f"{json.dumps(payload, indent=1)}"
     )
 
@@ -281,6 +286,16 @@ def validate_judgement(
         else None
     )
 
+    # Stored attribute values per entity, as significant words: the guard
+    # that separates a changed descriptor from a removed thing reads them.
+    values_by_entity: dict[str, set[str]] = {}
+    for listed in listed_attributes.values():
+        entity_id = str(listed.get("entity_id") or "")
+        if entity_id:
+            values_by_entity.setdefault(entity_id, set()).update(
+                _significant_words(str(listed.get("value") or ""))
+            )
+
     report = JudgementReport()
     seen_assertions: set[str] = set()
     seen_attributes: set[str] = set()
@@ -315,7 +330,10 @@ def validate_judgement(
         # text never named, was not removed by these lines; a changed count
         # or descriptor on a still-present object is an attribute change.
         if verdict == "removed" and not _removal_is_visible(
-            listed_assertions[verdict_id], current_all, proposed_all
+            listed_assertions[verdict_id],
+            current_all,
+            proposed_all,
+            values_by_entity,
         ):
             report.rejected.append(
                 (
@@ -484,30 +502,52 @@ def _significant_words(label: str) -> set[str]:
 
 
 def _removal_is_visible(
-    listed: dict[str, Any], current_all: str | None, proposed_all: str
+    listed: dict[str, Any],
+    current_all: str | None,
+    proposed_all: str,
+    values_by_entity: dict[str, set[str]] | None = None,
 ) -> bool:
     """Whether this edit could have removed the assertion.
 
-    True when some entity endpoint was named in the current text and is no
-    longer named in the proposed text. Names are compared as significant
-    words (four letters and up, case-insensitive), so "the sedan" still
-    counts as naming the Blue sedan. Scene endpoints ("Sc 14") carry no
-    significant words and are skipped. With no current text available, only
-    the proposed half is checked: an endpoint the proposed text still names
-    was not removed.
+    Each endpoint is known by its display label plus its aliases, compared
+    as significant words (four letters and up, case-insensitive). Removal
+    is visible in two ways. A name wholly gone: some name had a word in
+    the current text and has none in the proposed text ("his book" gone
+    when the line now says newspaper). A name degraded: a name fully
+    present in the current text loses a word ("Boots on wet concrete"
+    losing concrete), unless every vanished word is a stored attribute
+    value of that entity, because a changed descriptor on a still-present
+    object ("Blue sedan" losing blue, with color: blue on record) is an
+    attribute change, never a removal. Scene endpoints ("Sc 14") carry no
+    significant words and are skipped. With no current text available,
+    only the wholly-gone half is checked.
     """
-    for label in (listed.get("subject", ""), listed.get("object", "")):
-        words = _significant_words(label)
-        if not words:
-            continue
-        named_before = (
-            True
-            if current_all is None
-            else any(word in current_all for word in words)
-        )
-        named_after = any(word in proposed_all for word in words)
-        if named_before and not named_after:
-            return True
+    endpoints = (
+        (listed.get("subject", ""), listed.get("subject_names") or [],
+         listed.get("subject_entity_id")),
+        (listed.get("object", ""), listed.get("object_names") or [],
+         listed.get("object_entity_id")),
+    )
+    for label, aliases, entity_id in endpoints:
+        attribute_words: set[str] = set()
+        if values_by_entity and entity_id:
+            attribute_words = values_by_entity.get(str(entity_id), set())
+        for name in [label, *aliases]:
+            words = _significant_words(name)
+            if not words:
+                continue
+            before = (
+                words
+                if current_all is None
+                else {word for word in words if word in current_all}
+            )
+            after = {word for word in words if word in proposed_all}
+            if before and not after:
+                return True
+            if before == words and after != words:
+                vanished = words - after
+                if not vanished <= attribute_words:
+                    return True
     return False
 
 
