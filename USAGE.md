@@ -101,12 +101,14 @@ A preview that fails after model contact persists nothing except its audit recor
 
 | Code | Cause |
 |---|---|
-| `output_truncated` | The reply was cut off before it finished. |
+| `output_truncated` | The model stopped at an output limit. The message names the model, the output tokens it produced against the tokens Ripple requested, and the finish reason, so a model whose own limit is the smaller one identifies itself. |
 | `malformed_response` | The reply was not valid against the judgement schema. |
 | `incomplete_judgement` | The reply skipped listed items; treating them as unchanged would be a guess. |
 | `model_not_available` and other provider codes | The provider refused the call; the message carries the provider's reason and a next step. |
 
 Retryable provider errors are retried once, and a retried preview replays already-judged scenes from their recorded replies at no cost.
+
+A failed preview's warning banner also carries **Open trace**: it starts (or reuses) the local TraceAct viewer and opens it on that run's trace, map view, filtered to the one trace, so the failing step and its recorded error are one click away.
 
 ## Adding and omitting scenes
 

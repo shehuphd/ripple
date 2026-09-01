@@ -89,7 +89,12 @@ async function api(url, options) {
     trace('api.rejected', {
       method, url, status: response.status, ms, code: body.code || null,
     });
-    throw new Error(apiErrorMessage(body, response.status));
+    const error = new Error(apiErrorMessage(body, response.status));
+    error.code = body.code || null;
+    // A failed preview's response names the TraceAct trace that recorded
+    // the run, so the error surface can offer to open it in the viewer.
+    error.traceId = body.trace_id || null;
+    throw error;
   }
   trace('api.ok', { method, url, status: response.status, ms });
   return body;

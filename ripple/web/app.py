@@ -12,6 +12,7 @@ inside request handlers, with no background worker to pay for.
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -316,18 +317,28 @@ def _actionable_error(code: str, message: str) -> str:
 async def preview_refused_handler(_request: Request, error: PreviewRefused):
     """A refusal is a user-fixable state: no model call was made or billed."""
     return JSONResponse(
-        status_code=400, content={"code": error.code, "message": error.message}
+        status_code=400,
+        content={
+            "code": error.code,
+            "message": error.message,
+            "trace_id": getattr(error, "trace_id", None),
+        },
     )
 
 
 @app.exception_handler(PreviewFailed)
 async def preview_failed_handler(_request: Request, error: PreviewFailed):
-    """The judge call failed after retry. Nothing was persisted."""
+    """The judge call failed after retry. Nothing was persisted.
+
+    The trace id lets the client offer "Open trace": the run that failed,
+    in the TraceAct viewer, with the failing step marked.
+    """
     return JSONResponse(
         status_code=400,
         content={
             "code": error.code,
             "message": _actionable_error(error.code, error.message),
+            "trace_id": getattr(error, "trace_id", None),
         },
     )
 
@@ -818,6 +829,48 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
         "successes and refusals alike.",
         lock=None,
     )
+
+
+_TRACE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+@app.post("/api/traces/{trace_id}/viewer")
+def open_trace_viewer(trace_id: str):
+    """Open the TraceAct viewer on one trace's map, starting it if needed.
+
+    `launch_or_connect` reuses a running viewer or spawns one over the
+    app's trace folder; the returned URL is deep-linked so the tab opens
+    on the map view, pre-filtered to this trace and with it selected.
+    """
+    if not _TRACE_ID_PATTERN.match(trace_id):
+        raise HTTPException(400, "Not a trace id")
+    from ripple.tracing import DEFAULT_TRACE_DIR
+
+    if not DEFAULT_TRACE_DIR.exists():
+        raise HTTPException(
+            404,
+            "No trace files yet. Tracing may be off (RIPPLE_TRACING=off).",
+        )
+    from traceact.viewer.instance import launch_or_connect
+
+    try:
+        # Absolute, because a reused viewer resolves a relative path against
+        # its own working directory, which may be another project's.
+        url = launch_or_connect(
+            source=str(DEFAULT_TRACE_DIR.resolve()), name="ripple"
+        )
+    except Exception as error:  # a viewer that cannot start is a 503, not a 500
+        logger.exception("trace viewer launch failed")
+        raise HTTPException(
+            503, f"The trace viewer could not start: {error}"
+        ) from error
+    separator = "&" if "?" in url else "?"
+    return {
+        "url": (
+            f"{url}{separator}view=map&open=latest"
+            f"&pf_trace_id={trace_id}"
+        )
+    }
 
 
 @app.get("/api/settings/budget")

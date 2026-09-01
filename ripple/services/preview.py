@@ -97,6 +97,9 @@ class PreviewRefused(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+        # The TraceAct trace id for the run that raised, filled in by
+        # preview_changes so the error surface can open the trace viewer.
+        self.trace_id: str | None = None
 
 
 class PreviewFailed(Exception):
@@ -106,6 +109,7 @@ class PreviewFailed(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.trace_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -198,11 +202,15 @@ def preview_changes(
         audit: list[ModelCall] = []
         try:
             result = _preview(session, edits, provider, model_id, audit)
-        except (PreviewFailed, PreviewRefused):
+        except (PreviewFailed, PreviewRefused) as error:
             # The request's transaction is about to unwind, and the audit rows
             # for calls already made and billed would unwind with it. Only they
             # survive: a failed preview persists nothing else.
             _persist_audit(session, audit)
+            # The trace records what led up to the failure, so the error
+            # response carries its id and the UI can open it in the viewer.
+            # With tracing off, start() yields a no-op with no id.
+            error.trace_id = getattr(trace, "trace_id", None)
             raise
         trace.output(
             {
@@ -835,9 +843,10 @@ def _judge_scene(
         session.flush()
         raise PreviewFailed(
             "output_truncated",
-            "The model's reply was cut off before it finished, so the "
-            "verdicts are unusable. Try again, or pick a model with a "
-            "larger output limit in Settings.",
+            _truncation_message(call.model_id, result)
+            + " No verdict from a cut-off reply can be trusted, so nothing "
+            "was applied. Try again (a retry often completes), shorten the "
+            "edit, or pick a model with a larger output limit in Settings.",
         )
 
     try:
@@ -873,6 +882,31 @@ def _judge_scene(
     session.add(call)
     session.flush()
     return judgement, call.model_id
+
+
+def _truncation_message(model_id: str, result: Any) -> str:
+    """Say which model stopped, where, and against which requested limit.
+
+    The bare fact ("the reply was cut off") gives the user nothing to act
+    on; the tokens produced against the tokens requested show whether the
+    model hit Ripple's cap or its own smaller one.
+    """
+    if result.output_tokens:
+        where = (
+            f"after {result.output_tokens} of the {MAX_OUTPUT_TOKENS} "
+            "output tokens Ripple requested"
+        )
+        if result.output_tokens < MAX_OUTPUT_TOKENS:
+            where += ", so this model's own output limit is the smaller one"
+    else:
+        where = (
+            f"before the {MAX_OUTPUT_TOKENS} output tokens Ripple requested"
+        )
+    reason = result.finish_reason or "length"
+    return (
+        f"{model_id} stopped mid-reply {where} "
+        f"(finish reason: {reason})."
+    )
 
 
 def _generate_verdicts(
@@ -1105,8 +1139,8 @@ def judge_continuity_payloads(
         session.add(call)
         session.flush()
         return [], (
-            "The continuity reply was cut off, so only the deterministic "
-            "findings are shown."
+            _truncation_message(call.model_id, result)
+            + " Only the deterministic findings are shown."
         )
 
     try:

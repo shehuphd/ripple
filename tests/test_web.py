@@ -1296,3 +1296,89 @@ class TestDraftReportRoutes:
             json={"predecessor_script_id": predecessor},
         )
         assert linked.status_code == 200
+
+
+class TestPreviewFailureSurface:
+    """A failed preview names the cause and the run that recorded it."""
+
+    def test_a_truncated_reply_names_the_model_and_the_limits(
+        self, client, monkeypatch
+    ):
+        from ripple.llm.base import GenerationResult
+        from tests.test_preview import FakeJudge
+
+        class TruncatingJudge(FakeJudge):
+            def generate(self, model_id, prompt, **kwargs):
+                result = super().generate(model_id, prompt, **kwargs)
+                return GenerationResult(
+                    text=result.text[:40],
+                    model_id=model_id,
+                    provider=self.name,
+                    input_tokens=900,
+                    output_tokens=1024,
+                    finish_reason="max_tokens",
+                )
+
+        fake = TruncatingJudge()
+        monkeypatch.setattr(web, "get_provider", lambda name: fake)
+        monkeypatch.setattr(
+            web.settings_service,
+            "selected_model",
+            lambda session: ("google", "fake-judge"),
+        )
+        script_id = _first_script(client)
+        unit_id = _units(client, script_id)[0]
+        response = client.post(
+            f"/api/units/{unit_id}/preview",
+            data={"proposed_text": "A bicycle leans against the gate."},
+        )
+        assert response.status_code == 400
+        body = response.json()
+        assert body["code"] == "output_truncated"
+        # The message says which model stopped, where, and against what.
+        assert "fake-judge" in body["message"]
+        assert "1024" in body["message"]
+        assert "4096" in body["message"]
+        assert "max_tokens" in body["message"]
+        # The trace id field is always present; with tracing off it is null.
+        assert "trace_id" in body
+
+
+class TestTraceViewerLaunch:
+    """POST /api/traces/{id}/viewer deep-links the TraceAct viewer."""
+
+    def test_a_malformed_trace_id_is_refused(self, client):
+        assert client.post("/api/traces/trc%20nope/viewer").status_code == 400
+
+    def test_the_url_opens_the_map_filtered_to_the_trace(
+        self, client, monkeypatch, tmp_path
+    ):
+        import traceact.viewer.instance as viewer_instance
+
+        import ripple.tracing as tracing_module
+
+        monkeypatch.setattr(tracing_module, "DEFAULT_TRACE_DIR", tmp_path)
+        monkeypatch.setattr(
+            viewer_instance,
+            "launch_or_connect",
+            lambda source, name: "http://127.0.0.1:8765/?source=ripple",
+        )
+        response = client.post("/api/traces/trc_9f3a1c7b2d44/viewer")
+        assert response.status_code == 200
+        url = response.json()["url"]
+        assert url.startswith("http://127.0.0.1:8765/?source=ripple")
+        assert "view=map" in url
+        assert "open=latest" in url
+        assert "pf_trace_id=trc_9f3a1c7b2d44" in url
+
+    def test_no_trace_directory_is_a_404_with_the_reason(
+        self, client, monkeypatch, tmp_path
+    ):
+        import ripple.tracing as tracing_module
+
+        monkeypatch.setattr(
+            tracing_module, "DEFAULT_TRACE_DIR", tmp_path / "absent"
+        )
+        response = client.post("/api/traces/trc_9f3a1c7b2d44/viewer")
+        assert response.status_code == 404
+        assert "RIPPLE_TRACING" in response.json()["detail"]

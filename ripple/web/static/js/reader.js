@@ -241,6 +241,7 @@ async function runPreview() {
   document.getElementById('pv-edits').innerHTML =
     '<div class="empty">Computing…</div>';
   document.getElementById('pv-warning').classList.add('hide');
+  setWarningTrace(null);
   const scriptId = window.location.pathname.split('/').pop();
   try {
     const body = await api(`/api/scripts/${scriptId}/preview`, {
@@ -368,11 +369,37 @@ async function runPreview() {
     });
     summary.textContent = 'The preview did not run. Nothing was recorded.';
     document.getElementById('pv-warning-text').textContent = error.message;
+    setWarningTrace(error.traceId || null);
     document.getElementById('pv-warning').classList.remove('hide');
     document.getElementById('pv-edits').innerHTML =
       '<div class="empty">The preview did not run. Nothing was recorded.</div>';
   }
 }
+
+/* The warning banner's "Open trace" button: shown only when the failure
+   response named the TraceAct trace that recorded the run. Clicking asks
+   the server to start (or reuse) the local viewer and opens the returned
+   deep link: the trace's map, pre-filtered and selected. */
+function setWarningTrace(traceId) {
+  const button = document.getElementById('pv-warning-trace');
+  if (!button) return;
+  button.dataset.trace = traceId || '';
+  button.classList.toggle('hide', !traceId);
+}
+
+document.getElementById('pv-warning-trace').addEventListener('click',
+  async (event) => {
+    const traceId = event.currentTarget.dataset.trace;
+    if (!traceId) return;
+    try {
+      const body = await api(`/api/traces/${traceId}/viewer`,
+        { method: 'POST' });
+      window.open(body.url, '_blank', 'noopener');
+      ripple.trace('trace.viewer_opened', { trace: traceId });
+    } catch (error) {
+      toast(error.message);
+    }
+  });
 
 /* Scroll to the units a finding cites and mark them for a moment. */
 function reviewUnits(unitIds) {
