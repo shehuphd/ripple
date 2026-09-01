@@ -290,6 +290,24 @@ class TestDecisionFlow:
         after = client.get(f"/api/units/{unit_id}/requirements").json()
         assert after["unit"]["text"] == "A bicycle leans against the gate."
 
+    def test_accepted_words_render_marked_in_the_reader(self, client, judged):
+        script_id = _first_script(client)
+        _unit_id, preview = self._preview(client)
+        client.post(f"/api/changes/{preview['change_set_id']}/accept")
+        body = client.get(f"/scripts/{script_id}").text
+        # The changed word carries the revision mark; the rest of the line
+        # renders plain, and the whole line still matches data-accepted.
+        assert '<mark class="rev">bicycle leans against</mark>' in body
+        assert 'data-accepted="A bicycle leans against the gate."' in body
+
+    def test_an_undone_change_leaves_no_marks(self, client, judged):
+        script_id = _first_script(client)
+        unit_id, preview = self._preview(client)
+        client.post(f"/api/changes/{preview['change_set_id']}/accept")
+        assert client.post(f"/api/units/{unit_id}/undo").status_code == 200
+        body = client.get(f"/scripts/{script_id}").text
+        assert '<mark class="rev">' not in body
+
     def test_rejecting_applies_nothing(self, client, judged):
         unit_id, preview = self._preview(client)
         assert (

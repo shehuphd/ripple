@@ -114,7 +114,7 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
            data-scene-no="{{ scene.number }}"
            data-accepted="{{ unit.text }}"
            contenteditable="plaintext-only" spellcheck="false"
-           role="textbox" aria-label="Script line">{{ unit.text }}</div>
+           role="textbox" aria-label="Script line">{% if unit.segments %}{% for seg in unit.segments %}{% if seg.op == 'ins' %}<mark class="rev">{{ seg.text }}</mark>{% else %}{{ seg.text }}{% endif %}{% if not loop.last %} {% endif %}{% endfor %}{% else %}{{ unit.text }}{% endif %}</div>
       {% endfor %}
       {% endif %}
       <div class="scene-insert">

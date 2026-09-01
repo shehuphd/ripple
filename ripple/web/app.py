@@ -41,6 +41,7 @@ from ripple.adapters.base import MAX_UPLOAD_BYTES, ImportRejected
 from ripple.config.secrets import SecretStore
 from ripple.db.models import (
     Assertion,
+    ChangeOperation,
     ChangeSet,
     ContinuityFinding,
     Entity,
@@ -500,6 +501,45 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
 
     _, model = settings_service.selected_model(session)
     page_total = script_pages(session, script.id)
+
+    # Words changed by accepted ripples render highlighted, so a reader
+    # skimming sees at a glance what moved. Each revised unit is diffed
+    # against its text before the first accepted edit; undone and rejected
+    # change sets leave no highlight.
+    revised: dict[str, str] = {}
+    for operation, _change in session.execute(
+        select(ChangeOperation, ChangeSet)
+        .join(ChangeSet, ChangeOperation.change_set_id == ChangeSet.id)
+        .where(
+            ChangeSet.script_id == script.id,
+            ChangeSet.status == "accepted",
+            # An undo is itself an accepted change set writing text; its
+            # before is the undone wording, never the original.
+            ChangeSet.kind != "undo",
+            ChangeOperation.operation_type == "set_unit_text",
+        )
+        .order_by(ChangeSet.created_at, ChangeOperation.sequence_index)
+    ):
+        target = str(operation.target_id)
+        if target not in revised:
+            revised[target] = (operation.before_json or {}).get("text", "")
+
+    def revision_segments(unit) -> list[dict[str, str]] | None:
+        original = revised.get(str(unit.id))
+        if original is None or original == unit.current_text:
+            return None
+        segments = [
+            segment
+            for segment in preview_service.word_diff(original, unit.current_text)
+            if segment["op"] != "del"
+        ]
+        # The rendered text must reproduce current_text to the byte, or the
+        # reader would mark the unit as an unapplied draft. Unusual spacing
+        # falls back to plain rendering rather than risking that.
+        if " ".join(segment["text"] for segment in segments) != unit.current_text:
+            return None
+        return segments
+
     scenes = []
     running = 0
     for scene in script.scenes:
@@ -538,6 +578,7 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
                         "id": str(unit.id),
                         "type": unit.unit_type,
                         "text": unit.current_text,
+                        "segments": revision_segments(unit),
                     }
                     for unit in scene.units
                     if unit.unit_type != "scene_heading"

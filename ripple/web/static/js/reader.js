@@ -151,10 +151,37 @@ async function selectUnit(node) {
     }
 }
 
+/* Revision marks render inside the line, but editing operates on plain
+   text: on focus the marks flatten away, with the caret kept where the
+   click put it. They return on the next page load for unedited lines. */
+function flattenMarks(node) {
+  if (!node.querySelector('mark.rev')) return;
+  const selection = window.getSelection();
+  let offset = 0;
+  if (selection.rangeCount && node.contains(selection.anchorNode)) {
+    const range = selection.getRangeAt(0);
+    const before = range.cloneRange();
+    before.selectNodeContents(node);
+    before.setEnd(range.startContainer, range.startOffset);
+    offset = before.toString().length;
+  }
+  node.textContent = node.textContent;
+  const caret = document.createRange();
+  caret.setStart(
+    node.firstChild || node,
+    Math.min(offset, node.textContent.length));
+  caret.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(caret);
+}
+
 document.querySelectorAll('.u').forEach((node) => {
   // Focus is selection: clicking into a line to type is the same gesture as
   // choosing it, so the two are not separate interactions.
-  node.addEventListener('focus', () => selectUnit(node));
+  node.addEventListener('focus', () => {
+    flattenMarks(node);
+    selectUnit(node);
+  });
   node.addEventListener('input', () => {
     noteDraft(node);
     state.text = flatten(node.textContent);

@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-01 20:08:46 UTC
+Last updated: 2026-09-01 21:59:50 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
 
