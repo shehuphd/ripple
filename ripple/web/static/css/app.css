@@ -304,6 +304,9 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
   box-shadow:0 4px 14px rgba(0,0,0,.35);transition:opacity .08s}
 .right [data-tip]::after,.gzoomctl [data-tip]::after{left:auto;right:0;
   transform:none}
+/* The sidebar toggle is the leftmost control; a centred tooltip would
+   extend past the bar's left edge and under the sidebar. Grow rightward. */
+.toggle[data-tip]::after{left:0;transform:none}
 [data-tip]:hover::after,[data-tip]:focus-visible::after{opacity:1}
 @media (prefers-reduced-motion:reduce){[data-tip]::after{transition:none}}
 
