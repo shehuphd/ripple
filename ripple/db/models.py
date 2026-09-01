@@ -877,6 +877,12 @@ class ModelCall(Base):
     response_text: Mapped[str | None] = mapped_column(Text)
     input_tokens: Mapped[int | None] = mapped_column(Integer)
     output_tokens: Mapped[int | None] = mapped_column(Integer)
+    # Hidden reasoning, billed against the same output budget as the answer
+    # on models that think before replying. Recorded so a truncated reply's
+    # budget is accounted for in the audit rather than guessed at; TraceAct's
+    # redaction scrubs any *_tokens field, so this table is where the counts
+    # live.
+    reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     outcome: Mapped[str] = mapped_column(String(16))
     error_message: Mapped[str | None] = mapped_column(Text)

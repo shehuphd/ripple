@@ -75,6 +75,7 @@ def import_screenplay(data: bytes, source_name: str = "upload") -> ImportResult:
         result = _import(data, source_name, trace)
         trace.output(
             {
+                "title": result.title,
                 "outcome": result.outcome.value,
                 "detected_format": result.detected_format.value,
                 "adapter": result.adapter_name,
@@ -90,16 +91,22 @@ def import_screenplay(data: bytes, source_name: str = "upload") -> ImportResult:
 def _import(data: bytes, source_name: str, trace: ActionTrace) -> ImportResult:
     """Run the import pipeline, recording each stage on the open trace.
 
-    Only counts, codes, hashes, and formats reach the trace. Screenplay text,
-    the filename, and the uploaded bytes never do.
+    The trace records the filename, title, counts, codes, hashes, and
+    formats; the raw uploaded bytes stay out only for bulk, since the
+    content hash identifies them.
     """
     try:
         payload = SourcePayload(data=data, suggested_name=source_name)
     except ImportRejected as rejection:
         return _rejected(rejection, source_name, "", DetectedFormat.UNKNOWN, "none")
 
-    # The extension is a hint, not content. Recording it cannot leak a path.
-    trace.input({"byte_length": len(data), "source_extension": payload.extension})
+    trace.input(
+        {
+            "source_name": source_name,
+            "byte_length": len(data),
+            "source_extension": payload.extension,
+        }
+    )
     trace.set_meta("content_hash", payload.content_hash)
 
     detected, confidence = detect_format(payload)

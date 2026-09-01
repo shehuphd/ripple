@@ -101,6 +101,7 @@ _ADDED_COLUMNS = (
         "CHAR(32) REFERENCES entities (id)",
     ),
     ("continuity_findings", "payload_json", "JSON"),
+    ("model_calls", "reasoning_tokens", "INTEGER"),
 )
 
 
@@ -363,8 +364,20 @@ def _widen_model_call_outcomes(engine: Engine) -> None:
 
         if table_sql("model_calls") is None:
             Base.metadata.tables["model_calls"].create(connection)
+        # Only the columns the old table also has: a database old enough to
+        # need this rebuild predates later ADD COLUMN migrations too, and
+        # this rebuild runs before them, so selecting the full new column
+        # list from the old table would name columns it never had.
+        old_columns = {
+            row[1]
+            for row in connection.exec_driver_sql(
+                "PRAGMA table_info(model_calls_old)"
+            ).fetchall()
+        }
         columns = ", ".join(
-            column.name for column in Base.metadata.tables["model_calls"].columns
+            column.name
+            for column in Base.metadata.tables["model_calls"].columns
+            if column.name in old_columns
         )
         # OR IGNORE, so resuming after a partial copy never duplicates a row.
         connection.exec_driver_sql(

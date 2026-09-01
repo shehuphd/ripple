@@ -794,7 +794,10 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
     def tokens_of(call: ModelCall) -> str:
         if call.input_tokens is None and call.output_tokens is None:
             return "no token counts"
-        return f"{call.input_tokens or 0} in · {call.output_tokens or 0} out"
+        counts = f"{call.input_tokens or 0} in · {call.output_tokens or 0} out"
+        if call.reasoning_tokens:
+            counts += f" · {call.reasoning_tokens} reasoning"
+        return counts
 
     items = [
         {
@@ -2013,10 +2016,19 @@ def confirm_rename_route(finding_id: str, session: Session = Depends(get_session
         raise HTTPException(404, "No such finding")
     if finding.status != "open":
         raise HTTPException(409, f"This finding is {finding.status}.")
-    try:
-        survivor = renames_service.confirm_rename(session, finding)
-    except ValueError as error:
-        raise HTTPException(400, str(error)) from None
+    ensure_tracing()
+    with ActionTrace.start(action="rename.confirm", kind="change") as trace:
+        trace.input({"finding_id": str(finding.id), **(finding.payload_json or {})})
+        try:
+            survivor = renames_service.confirm_rename(session, finding)
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from None
+        trace.output(
+            {
+                "entity_id": str(survivor.id),
+                "entity": survivor.canonical_name,
+            }
+        )
     return {
         "id": str(finding.id),
         "status": finding.status,
@@ -2083,12 +2095,15 @@ def ask_graph(
     provider = get_provider(provider_name) if provider_name else None
     ensure_tracing()
     with ActionTrace.start(action="graph.query", kind="query") as query_trace:
-        query_trace.input({"terms": len(terms), "matched": len(matched)})
+        query_trace.input(
+            {"question": question, "terms": len(terms), "matched": len(matched)}
+        )
         answer = answer_question(
             question, matched[:40], provider, model_id, session, script.id
         )
         query_trace.output(
             {
+                "answer": answer.answer,
                 "generated": answer.generated,
                 "cited": len(answer.cited_assertion_ids),
             }

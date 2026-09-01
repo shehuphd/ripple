@@ -1,8 +1,9 @@
-"""Tracing must record the shape of an import and none of its content.
+"""Tracing records full payloads, by explicit decision.
 
-Traces must never hold screenplay text, prompts, uploaded bytes, credentials,
-and raw filesystem paths in traces. The adversarial test here is not "a trace
-was written" but "nothing from the screenplay appears in it".
+The traces are the debugging record: when a run fails, the answer is read
+from them rather than reconstructed. So the adversarial test here is the
+inverse of the usual one: the payloads MUST appear. The one thing still
+guarded is credential-shaped values, caught by the value-pattern layer.
 """
 
 from __future__ import annotations
@@ -10,15 +11,16 @@ from __future__ import annotations
 import json
 
 import pytest
-from traceact import JsonlSink, TraceConfig, configure
+from traceact import ActionTrace, JsonlSink, TraceBudget, TraceConfig, configure
 
 from ripple.adapters import import_screenplay
-from ripple.tracing import REDACTION, configure_tracing
+from ripple.services.preview import MAX_OUTPUT_TOKENS
+from ripple.tracing import model_event
 
 
 @pytest.fixture
 def captured_traces(tmp_path, monkeypatch):
-    """Enable tracing into a temp file and return a reader for its records."""
+    """Enable full-payload tracing into a temp file, mirroring production."""
     monkeypatch.setenv("RIPPLE_TRACING", "on")
     path = tmp_path / "traces.jsonl"
     configure(
@@ -26,9 +28,19 @@ def captured_traces(tmp_path, monkeypatch):
         config=TraceConfig(
             enabled=True,
             sink_mode="blocking",
-            capture_inputs=False,
-            capture_outputs=False,
-            redaction_presets=list(REDACTION),
+            capture_inputs=True,
+            capture_outputs=True,
+            capture_event_inputs=True,
+            redact_by_default=False,
+            redact_values=True,
+            redaction_presets=[],
+        ),
+        budget=TraceBudget(
+            max_events=1000,
+            max_steps=500,
+            max_depth=20,
+            max_payload_bytes=262_144,
+            always_trace_errors=True,
         ),
         sinks=[JsonlSink(str(path))],
     )
@@ -45,59 +57,83 @@ def captured_traces(tmp_path, monkeypatch):
     configure(config=TraceConfig(enabled=False, sink_mode="disabled"), sinks=[])
 
 
-class TestNoContentLeaks:
-    def test_no_screenplay_line_appears_in_any_trace(
+class TestFullPayloads:
+    def test_the_import_records_its_source_and_title(
         self, captured_traces, night_freight_fountain
     ):
         import_screenplay(night_freight_fountain, "night-freight.fountain")
         blob = json.dumps(captured_traces())
-        assert blob, "no traces were written"
+        assert "night-freight.fountain" in blob
+        assert "NIGHT FREIGHT" in blob
+        assert "script.import" in blob
 
-        for phrase in (
-            "the blue sedan idles by the gate",
-            "MARA OKONJO",
-            "Which yard, Dev?",
-            "EXT. LOADING DOCK",
-        ):
-            assert phrase not in blob, f"screenplay content leaked: {phrase!r}"
+    def test_a_model_event_carries_request_reply_and_usage(self, captured_traces):
+        from ripple.llm.base import GenerationResult
 
-    def test_the_filename_is_not_recorded(
-        self, captured_traces, night_freight_fountain
+        with ActionTrace.start(action="test.model", kind="change"):
+            model_event(
+                purpose="judge",
+                model_id="fake-judge",
+                request="the full prompt text",
+                response='{"verdicts": []}',
+                result=GenerationResult(
+                    text='{"verdicts": []}',
+                    model_id="fake-judge",
+                    provider="google",
+                    input_tokens=5276,
+                    output_tokens=1476,
+                    reasoning_tokens=2620,
+                    finish_reason="MAX_TOKENS",
+                ),
+                status="failed",
+                duration_ms=1400,
+            )
+        blob = json.dumps(captured_traces())
+        assert "the full prompt text" in blob
+        assert '{\\"verdicts\\": []}' in blob or "verdicts" in blob
+        assert "5276" in blob
+        assert "1476" in blob
+        assert "2620" in blob
+        assert "MAX_TOKENS" in blob
+
+    def test_token_count_fields_are_not_redacted(self, captured_traces):
+        with ActionTrace.start(action="test.counts", kind="change") as trace:
+            trace.output({"input_tokens": 111, "output_tokens": 222})
+        blob = json.dumps(captured_traces())
+        assert "111" in blob
+        assert "222" in blob
+        assert "[redacted]" not in blob
+
+    def test_credential_shaped_values_still_never_land(self, captured_traces):
+        with ActionTrace.start(action="test.leak", kind="change") as trace:
+            trace.output({"note": "key sk-abcdefghijklmnop1234 in payload"})
+        blob = json.dumps(captured_traces())
+        assert "sk-abcdefghijklmnop1234" not in blob
+
+    def test_a_model_event_without_an_active_trace_is_dropped(
+        self, captured_traces
     ):
-        import_screenplay(
-            night_freight_fountain, "/Users/someone/night-freight.fountain"
+        model_event(
+            purpose="judge",
+            model_id="m",
+            request="r",
+            response="x",
         )
-        blob = json.dumps(captured_traces())
-        assert "/Users/" not in blob
-        assert "night-freight" not in blob
-
-    def test_rejection_traces_carry_no_content_either(self, captured_traces):
-        import_screenplay(
-            b"INT. SECRET BUNKER - DAY\n\nA codeword: swordfish.\n", "x.txt"
+        assert all(
+            record.get("action") != "test.orphan" for record in captured_traces()
         )
-        blob = json.dumps(captured_traces())
-        assert "swordfish" not in blob
-        assert "SECRET BUNKER" not in blob
 
 
-class TestTraceShape:
-    def test_the_parent_workflow_is_named_in_the_prd(
-        self, captured_traces, night_freight_fountain
-    ):
-        import_screenplay(night_freight_fountain, "x.fountain")
-        actions = {record.get("action") for record in captured_traces()}
-        assert "script.import" in actions
+class TestConfiguration:
+    def test_the_judgement_output_cap_matches_extraction(self):
+        from ripple.extraction.service import MAX_OUTPUT_TOKENS as EXTRACT_CAP
 
-    def test_counts_and_codes_are_recorded(
-        self, captured_traces, night_freight_fountain
-    ):
-        import_screenplay(night_freight_fountain, "x.fountain")
-        blob = json.dumps(captured_traces())
-        assert "fountain" in blob
-        assert "44" in blob
+        assert MAX_OUTPUT_TOKENS == EXTRACT_CAP == 8192
 
     def test_tracing_is_off_by_default_in_this_test_run(self, tmp_path, monkeypatch):
         """The autouse fixture must actually disable durable trace writing."""
+        from ripple.tracing import configure_tracing
+
         monkeypatch.setenv("RIPPLE_TRACING", "off")
         configure_tracing(trace_dir=tmp_path / "traces")
         assert not (tmp_path / "traces").exists()

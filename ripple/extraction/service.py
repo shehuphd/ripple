@@ -64,7 +64,7 @@ from ripple.extraction.validate import (
 from ripple.graph.predicates import canonical_endpoints
 from ripple.llm.base import AVAILABILITY_CODES, LLMProvider, ProviderError
 from ripple.services.spend import BudgetExceeded, check_budget
-from ripple.tracing import ensure_configured
+from ripple.tracing import ensure_configured, model_event
 
 logger = logging.getLogger(__name__)
 
@@ -370,17 +370,17 @@ def extract_scene(
         call.response_text = result.text
         call.input_tokens = result.input_tokens
         call.output_tokens = result.output_tokens
+        call.reasoning_tokens = getattr(result, "reasoning_tokens", None)
         call.duration_ms = int((time.perf_counter() - call_started) * 1000)
 
-        trace.event(
-            kind="model",
-            operation="generate",
-            target=call.model_id,
-            data={
-                "input_tokens": result.input_tokens,
-                "output_tokens": result.output_tokens,
-                "truncated": result.truncated,
-            },
+        model_event(
+            purpose="extract",
+            model_id=call.model_id,
+            request=prompt,
+            response=result.text,
+            result=result,
+            status="failed" if result.truncated else "completed",
+            duration_ms=call.duration_ms,
         )
         if result.truncated:
             call.outcome = "truncated"

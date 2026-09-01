@@ -21,8 +21,11 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from traceact import ActionTrace
+
 from ripple.graph.diff import GraphDiff
 from ripple.llm.base import GenerationResult, LLMProvider, ProviderError
+from ripple.tracing import ensure_configured, model_event
 
 logger = logging.getLogger(__name__)
 
@@ -99,9 +102,18 @@ def _call_model(
     call.response_text = result.text
     call.input_tokens = result.input_tokens
     call.output_tokens = result.output_tokens
+    call.reasoning_tokens = getattr(result, "reasoning_tokens", None)
     call.duration_ms = int((time.perf_counter() - started) * 1000)
     session.add(call)
     session.flush()
+    model_event(
+        purpose=purpose,
+        model_id=model_id,
+        request=prompt,
+        response=result.text,
+        result=result,
+        duration_ms=call.duration_ms,
+    )
     return result
 
 SYNTHESIS_PROMPT_VERSION = "synthesize.v1"
@@ -243,18 +255,22 @@ def synthesize(
 
     from ripple.services.spend import BudgetExceeded
 
+    ensure_configured()
     try:
-        result = _call_model(
-            provider,
-            model_id,
-            json.dumps(payload, indent=2),
-            SYNTHESIS_SYSTEM,
-            400,
-            "synthesize",
-            SYNTHESIS_PROMPT_VERSION,
-            session,
-            script_id,
-        )
+        with ActionTrace.start(action="ripple.explain", kind="explain") as trace:
+            trace.input(payload)
+            result = _call_model(
+                provider,
+                model_id,
+                json.dumps(payload, indent=2),
+                SYNTHESIS_SYSTEM,
+                400,
+                "synthesize",
+                SYNTHESIS_PROMPT_VERSION,
+                session,
+                script_id,
+            )
+            trace.output({"summary": result.text.strip()})
     except BudgetExceeded as error:
         return Synthesis(
             summary=fallback, severity=severity, generated=False, error=error.message

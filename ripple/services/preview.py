@@ -78,7 +78,7 @@ from ripple.llm.base import (
 )
 from ripple.services import changeset, spend
 from ripple.services.synthesizer import deterministic_summary, severity_for
-from ripple.tracing import ensure_configured
+from ripple.tracing import ensure_configured, model_event
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +203,18 @@ def preview_changes(
     """
     ensure_configured()
     with ActionTrace.start(action="ripple.preview", kind="change") as trace:
-        trace.input({"edits": len(edits), "model_id": model_id})
+        trace.input(
+            {
+                "model_id": model_id,
+                "edits": [
+                    {
+                        "unit_id": edit.unit_id,
+                        "proposed_text": edit.proposed_text,
+                    }
+                    for edit in edits
+                ],
+            }
+        )
         audit: list[ModelCall] = []
         try:
             result = _preview(session, edits, provider, model_id, audit)
@@ -1030,13 +1041,32 @@ def _generate_verdicts(
             if error.code == "model_not_available":
                 mark_model_unavailable(session, provider.name, model_id)
             session.flush()
+            model_event(
+                purpose=purpose,
+                model_id=model_id,
+                request=prompt,
+                response=None,
+                status="failed",
+                error=f"{error.code}: {error.message}",
+                duration_ms=call.duration_ms,
+            )
             raise PreviewFailed(error.code, error.message) from error
 
     clear_model_unavailable(session, provider.name, model_id)
     call.response_text = result.text
     call.input_tokens = result.input_tokens
     call.output_tokens = result.output_tokens
+    call.reasoning_tokens = getattr(result, "reasoning_tokens", None)
     call.duration_ms = int((time.perf_counter() - started) * 1000)
+    model_event(
+        purpose=purpose,
+        model_id=model_id,
+        request=prompt,
+        response=result.text,
+        result=result,
+        status="failed" if result.truncated else "completed",
+        duration_ms=call.duration_ms,
+    )
     return call, result
 
 

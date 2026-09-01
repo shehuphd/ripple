@@ -61,7 +61,7 @@ Each script ships a `dependencies.md` recording the entities, assertions, and pl
 
 ## Tracing
 
-Meaningful actions are traced with [TraceAct](https://github.com/traceact/traceact). Automatic argument capture is off and the `ai_prompts`, `api_keys`, `http`, `filesystem_paths`, and `env_vars` redaction presets are on, so screenplay text, filenames, and uploaded bytes are never recorded. Traces are written to `data/traces/`.
+Meaningful actions are traced with [TraceAct](https://github.com/traceact/traceact), full payloads included: every model call records its complete prompt, reply, and token usage (answer, hidden reasoning, input) on the trace, so a failed run is diagnosed by reading its trace rather than reconstructing a cause. Traces are written to `data/traces/`, which stays on the local machine and out of version control. Credential-shaped values are still caught by TraceAct's value-pattern redaction.
 
 Set `RIPPLE_TRACING=off` to disable trace writing.
 

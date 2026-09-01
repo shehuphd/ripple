@@ -8,6 +8,7 @@ something else, as corrupted graph state.
 
 from __future__ import annotations
 
+import re
 import uuid
 
 import pytest
@@ -720,7 +721,12 @@ class TestOutcomeVocabularyMigration:
                 "SELECT sql FROM sqlite_master WHERE name='model_calls'"
             ).fetchone()[0]
             old = current.replace("'cached', ", "").replace("'incomplete', ", "")
+            # A database this old also predates the later ADD COLUMN
+            # migrations, which run after the rebuild; the copy must not
+            # select columns the old table never had.
+            old = re.sub(r"\s*reasoning_tokens INTEGER,", "", old)
             assert old != current
+            assert "reasoning_tokens" not in old
             connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
             connection.exec_driver_sql("DROP TABLE model_calls")
             connection.exec_driver_sql(old)

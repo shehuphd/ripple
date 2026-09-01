@@ -217,7 +217,7 @@ Final Draft XML is parsed through `defusedxml`; external entities and entity exp
 
 ## Tracing and debugging
 
-Meaningful actions (import, extraction, preview, accept, undo, query) are traced with TraceAct to `data/traces/traces.jsonl`. Automatic argument capture is off and redaction presets cover prompts, keys, HTTP, paths, and environment variables, so screenplay text, filenames, and uploaded bytes never reach a trace. These operational traces are separate from the Traces page, which is the application's own model-call audit.
+Meaningful actions (import, extraction, preview, accept, undo, query, draft linking, renames) are traced with TraceAct to `data/traces/traces.jsonl`, full payloads included: every model call's complete prompt, reply, and token usage (answer, hidden reasoning, input), every preview's edits, every query's question and answer. The traces are the debugging record; when something fails, its trace says why. They stay on the local machine, out of version control, and credential-shaped values are still caught by value-pattern redaction. The Traces page remains the application's own model-call audit; the reader's page decisions also mirror to the browser console, where the traceact-browser extension can capture them.
 
 In the browser, `ripple.debug()` in the console dumps the frontend decision log (API outcomes, preview results, draft transitions, settings changes), `ripple.debug('preview')` filters it, and `ripple.debug.table()` renders it as a table.
 
