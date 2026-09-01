@@ -24,22 +24,27 @@ _PROVIDER_NAMES = {"google": "google", "gemini": "google"}
 
 @lru_cache(maxsize=1)
 def _registry():
-    """The rates snapshot, loaded once per process (~300 ms, bundled data)."""
+    """The rates snapshot, loaded once per process (~300 ms).
+
+    rates bundles its registry and falls back through several sources, so
+    a load cannot fail on an installed package. The one absence is the
+    package itself not being installed, which _rate reports plainly.
+    """
     import rates.ai
 
     return rates.ai.load()
 
 
 @lru_cache(maxsize=64)
-def _lookup(name: str, model_id: str) -> tuple[float, float] | None:
-    """(input, output) USD per token from a loaded registry.
-
-    Raises when the registry itself cannot load, and lru_cache does not
-    cache exceptions, so a transient load failure is retried on the next
-    lookup instead of memoised as "no price". A model the loaded registry
-    does not know caches None, which is a stable answer.
-    """
-    for model in _registry().models:
+def _rate(provider: str, model_id: str) -> tuple[float, float] | None:
+    """(input, output) USD per token, or None when no price is known."""
+    try:
+        registry = _registry()
+    except ImportError:
+        logger.warning("rates is not installed, so costs cannot be shown")
+        return None
+    name = _PROVIDER_NAMES.get(provider, provider)
+    for model in registry.models:
         if model.provider != name or model.id != model_id:
             continue
         units = model.price.units if model.price else {}
@@ -49,15 +54,6 @@ def _lookup(name: str, model_id: str) -> tuple[float, float] | None:
             return None
         return (input_mtok / 1_000_000, output_mtok / 1_000_000)
     return None
-
-
-def _rate(provider: str, model_id: str) -> tuple[float, float] | None:
-    """(input, output) USD per token, or None when no price is known."""
-    try:
-        return _lookup(_PROVIDER_NAMES.get(provider, provider), model_id)
-    except Exception:  # a pricing lookup must never break the billable action
-        logger.exception("rates registry failed to load")
-        return None
 
 
 def cost_usd(
