@@ -966,6 +966,15 @@ wheels = [
 ]
 
 [[package]]
+name = "rates"
+version = "0.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/01/85/8868b3762e9def84ce881edf6d97f0f5868cacd5e4f9ca246be6cf738a03/rates-0.0.4.tar.gz", hash = "sha256:142f0355d97847ebfde9cbdae9c8714b2ea391bb141e960c5c63cacdd9b0bbc3", size = 331414, upload-time = "2026-09-01T15:23:39.17Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b9/cc/42145a043734dd65d36fa7b2e23e1365f7b66bce7a0135687a78772b90dc/rates-0.0.4-py3-none-any.whl", hash = "sha256:a4cf53de7ba0f7042fdbe012fc2db4d4b06b51224a213822b6673f1bb09b1606", size = 267041, upload-time = "2026-09-01T15:23:37.579Z" },
+]
+
+[[package]]
 name = "reportlab"
 version = "5.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -989,6 +998,7 @@ dependencies = [
     { name = "keycall", extra = ["traceact"] },
     { name = "pdf-inspector" },
     { name = "python-multipart" },
+    { name = "rates" },
     { name = "sqlalchemy" },
     { name = "traceact" },
     { name = "uvicorn", extra = ["standard"] },
@@ -1019,6 +1029,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-randomly", marker = "extra == 'dev'" },
     { name = "python-multipart", specifier = ">=0.0.9" },
+    { name = "rates", specifier = ">=0.0.4" },
     { name = "reportlab", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "screenplain", marker = "extra == 'dev'", specifier = "==0.12.0" },

@@ -54,6 +54,8 @@ Open **Settings** from the sidebar. It has three tabs.
 
 Open a script and press **Build graph**. Extraction runs one scene per model call, in the browser's control: each scene commits independently, so a failure late in a run keeps everything before it, and re-running resumes from the unfinished scenes instead of restarting. A scene already extracted from identical input under the same prompt and model is served from the cache with no call and no spend.
 
+A run reports its spend as it goes: the progress counter and the finished label carry the tokens used and, for a model the pricing registry knows, the dollar cost (from the bundled `rates` snapshot). A run served from cache reports nothing spent.
+
 The button is gated on billable work. Once the graph is built and every scene's content matches its cached extraction, it disables, with the reason in its tooltip. When scenes have changed since the last build (an accepted ripple, an added or restored scene, a linked draft, or a switched model), it reads **Update graph** and its tooltip counts the changed scenes; only those are billed, since the rest replay from cache.
 
 A run ends in one of three states:
@@ -109,6 +111,8 @@ A preview that fails after model contact persists nothing except its audit recor
 | `model_not_available` and other provider codes | The provider refused the call; the message carries the provider's reason and a next step. |
 
 Retryable provider errors are retried once, and a retried preview replays already-judged scenes from their recorded replies at no cost.
+
+The preview's footer reports what the run spent: total tokens (answer, hidden reasoning, and input) and, for a model the pricing registry knows, the dollar cost. A cached replay reports zero.
 
 A failed preview's warning banner also carries **Open trace**: it starts (or reuses) the local TraceAct viewer and opens it on that run's trace, map view, filtered to the one trace, so the failing step and its recorded error are one click away.
 

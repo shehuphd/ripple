@@ -63,6 +63,7 @@ from ripple.extraction.validate import (
 )
 from ripple.graph.predicates import canonical_endpoints
 from ripple.llm.base import AVAILABILITY_CODES, LLMProvider, ProviderError
+from ripple.services import pricing
 from ripple.services.spend import BudgetExceeded, check_budget
 from ripple.tracing import ensure_configured, model_event
 
@@ -91,7 +92,11 @@ class SceneOutcome:
 
 @dataclass(frozen=True)
 class RunProgress:
-    """Enough for the browser to draw a progress bar and decide to stop."""
+    """Enough for the browser to draw a progress bar and decide to stop.
+
+    `tokens` and `cost` are the run's spend so far, from its audit rows;
+    `cost` is None when the model has no rate in the pricing registry.
+    """
 
     run_id: str
     status: str
@@ -99,6 +104,9 @@ class RunProgress:
     completed: int
     failed: int
     pending: int
+    tokens: int = 0
+    cost_usd: float | None = None
+    cost: str | None = None
 
     @property
     def finished(self) -> bool:
@@ -772,6 +780,22 @@ def progress(session: Session, run_id) -> RunProgress:
         )
         or 0
     )
+    calls = list(
+        session.scalars(
+            select(ModelCall).where(
+                ModelCall.script_id == run.script_id,
+                ModelCall.purpose == "extract",
+                ModelCall.created_at >= run.started_at,
+            )
+        )
+    )
+    tokens = sum(
+        (call.input_tokens or 0)
+        + (call.output_tokens or 0)
+        + (call.reasoning_tokens or 0)
+        for call in calls
+    )
+    cost = pricing.calls_cost_usd(calls)
     return RunProgress(
         run_id=str(run_id),
         status=run.status,
@@ -779,4 +803,7 @@ def progress(session: Session, run_id) -> RunProgress:
         completed=run.completed_scenes,
         failed=run.failed_scenes,
         pending=outstanding,
+        tokens=tokens,
+        cost_usd=cost,
+        cost=pricing.display(cost),
     )

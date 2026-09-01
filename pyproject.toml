@@ -8,6 +8,7 @@ dependencies = [
     "pdf-inspector>=0.2.6",
     "traceact==1.0.0",
     "keycall[traceact]==1.8.0",
+    "rates>=0.0.4",
     "sqlalchemy>=2.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",

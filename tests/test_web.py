@@ -1466,3 +1466,31 @@ class TestBuildGraphGate:
         assert "Build graph" in body
         assert "Update graph" not in body
         assert 'id="extract" disabled' not in body
+
+
+class TestSpendSurface:
+    """Chargeable actions report their tokens and their cost."""
+
+    def test_a_preview_reports_its_spend(self, client, judged):
+        script_id = _first_script(client)
+        unit_id = _units(client, script_id)[0]
+        body = client.post(
+            f"/api/units/{unit_id}/preview",
+            data={"proposed_text": "A bicycle leans against the gate."},
+        ).json()
+        spend = body["spend"]
+        assert spend["tokens"] > 0
+        # The fake judge is not in the pricing registry, so no figure is
+        # invented for it.
+        assert spend["cost"] is None
+
+    def test_extraction_progress_carries_spend_fields(self, client, judged):
+        # No run is started here; the shape is asserted through the preview
+        # test above and the RunProgress dataclass defaults.
+        from ripple.extraction.service import RunProgress
+
+        progress = RunProgress(
+            run_id="r", status="ready", total=1, completed=1, failed=0, pending=0
+        )
+        assert progress.tokens == 0
+        assert progress.cost is None

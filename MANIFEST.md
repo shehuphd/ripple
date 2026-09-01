@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-01 18:24:31 UTC
+Last updated: 2026-09-01 18:44:30 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
 
@@ -94,6 +94,7 @@ Every file in the repository and what it does. Directories the application write
 | File | Purpose |
 |---|---|
 | `services/__init__.py` | Package marker. |
+| `services/pricing.py` | Money for the token counts, from the rates registry. |
 | `services/preview.py` | The judgement engine: one proposal across many lines, verdicts validated, calls audited and replayed. |
 | `services/changeset.py` | Atomic accept, reject, and latest-only undo of a proposal. |
 | `services/draft_report.py` | The cross-draft ripple report: entity deltas, lost introductions, judged conflicts. |
@@ -155,6 +156,7 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_layout.py` | Layout determinism. |
 | `tests/test_llm.py` | Provider contract and the KeyCall adapter. |
 | `tests/test_models.py` | Schema constraints and the outcome-vocabulary migration. |
+| `tests/test_pricing.py` | Cost lookup, reasoning at the output rate, and honest unknowns. |
 | `tests/test_preview.py` | The judgement engine end to end against the fixture provider. |
 | `tests/test_settings.py` | Credential validation and model selection. |
 | `tests/test_spend.py` | Budget gate and refusal auditing. |

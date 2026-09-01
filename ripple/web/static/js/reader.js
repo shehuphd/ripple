@@ -362,7 +362,8 @@ async function runPreview() {
     ].filter(Boolean).join(' · ');
 
     document.getElementById('pv-foot').textContent =
-      `${d.operations} graph operations · ${body.findings.length} continuity warnings`;
+      `${d.operations} graph operations · ${body.findings.length} continuity warnings`
+      + spendLabel(body.spend);
   } catch (error) {
     ripple.trace('preview.failed', {
       edits: state.drafts.size, error: error.message,
@@ -515,6 +516,15 @@ if (undoLast) {
   });
 }
 
+/* " · 12,345 tokens · $0.31" from a progress or preview spend payload;
+   empty when nothing was spent and cost-less when the model has no rate. */
+function spendLabel(spend) {
+  if (!spend || !spend.tokens) return '';
+  let label = ` · ${spend.tokens.toLocaleString()} tokens`;
+  if (spend.cost) label += ` · ${spend.cost}`;
+  return label;
+}
+
 /* Browser-driven extraction: one scene per request, each committed on its own,
    so a reload resumes rather than restarting. Shared by the Build graph
    button and the extraction of a freshly inserted scene. */
@@ -531,7 +541,8 @@ async function driveRun(runId) {
     bar.style.width =
       `${Math.round((done / Math.max(progress.total, 1)) * 100)}%`;
     count.textContent =
-      `${done} of ${progress.total} · ${progress.failed} failed`;
+      `${done} of ${progress.total} · ${progress.failed} failed`
+      + spendLabel(progress);
     if (step.done || progress.pending === 0) break;
   }
   return progress;
@@ -588,7 +599,7 @@ if (extract) {
         completed: progress ? progress.completed : null,
         failed: progress ? progress.failed : null,
       });
-      label.textContent = 'Extraction finished';
+      label.textContent = 'Extraction finished' + spendLabel(progress);
       setTimeout(() => window.location.reload(), 900);
     } catch (error) {
       ripple.trace('extract.stopped', { error: error.message });

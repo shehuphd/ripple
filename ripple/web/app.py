@@ -78,7 +78,7 @@ from ripple.graph.fixtures import seed_demo_graphs
 from ripple.graph.layout import DEPARTMENT_ORDER, script_layout
 from ripple.graph.layout import layout as graph_layout
 from ripple.llm import ProviderError, get_provider
-from ripple.services import changeset, spend
+from ripple.services import changeset, pricing, spend
 from ripple.services import draft_report as report_service
 from ripple.services import drafts as drafts_service
 from ripple.services import preview as preview_service
@@ -797,6 +797,17 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
         counts = f"{call.input_tokens or 0} in · {call.output_tokens or 0} out"
         if call.reasoning_tokens:
             counts += f" · {call.reasoning_tokens} reasoning"
+        cost = pricing.display(
+            pricing.cost_usd(
+                "google",
+                call.model_id,
+                call.input_tokens,
+                call.output_tokens,
+                call.reasoning_tokens,
+            )
+        )
+        if cost:
+            counts += f" · {cost}"
         return counts
 
     items = [
@@ -828,6 +839,24 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
         if budget
         else "no budget cap set"
     )
+    # The whole ledger's cost, grouped by model so pricing is looked up
+    # once per model rather than once per row.
+    grouped = session.execute(
+        select(
+            ModelCall.model_id,
+            func.coalesce(func.sum(ModelCall.input_tokens), 0),
+            func.coalesce(func.sum(ModelCall.output_tokens), 0),
+            func.coalesce(func.sum(ModelCall.reasoning_tokens), 0),
+        ).group_by(ModelCall.model_id)
+    ).all()
+    ledger_cost = None
+    for model_id, tokens_in, tokens_out, reasoning in grouped:
+        cost = pricing.cost_usd(
+            "google", model_id, tokens_in, tokens_out, reasoning
+        )
+        if cost is not None:
+            ledger_cost = (ledger_cost or 0.0) + cost
+    cost_note = pricing.display(ledger_cost)
     return _list_page(
         request,
         session,
@@ -835,7 +864,9 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
         active="traces",
         subtitle=(
             f"{ledger.calls} call(s) · {ledger.input_tokens:,} in · "
-            f"{ledger.output_tokens:,} out · {budget_note}"
+            f"{ledger.output_tokens:,} out"
+            + (f" · {cost_note} spent" if cost_note else "")
+            + f" · {budget_note}"
         ),
         items=items,
         empty="No model calls recorded yet. Every call is recorded here, "
@@ -1809,6 +1840,22 @@ def _preview_payload(
     unit = session.get(ScriptUnit, _uuid(first["unit_id"]))
     anchor = unit.anchors[0] if unit.anchors else None
     diff = result.diff
+    # What this preview spent: the audit rows linked to its change set,
+    # tokens and money both. A cached replay sums to zero and says so.
+    calls = list(
+        session.scalars(
+            select(ModelCall).where(
+                ModelCall.change_set_id == result.change_set.id
+            )
+        )
+    )
+    spent_tokens = sum(
+        (call.input_tokens or 0)
+        + (call.output_tokens or 0)
+        + (call.reasoning_tokens or 0)
+        for call in calls
+    )
+    cost = pricing.calls_cost_usd(calls)
     return {
         "change_set_id": str(result.change_set.id),
         "unit_id": first["unit_id"],
@@ -1839,6 +1886,11 @@ def _preview_payload(
         "findings": [_finding_payload(finding) for finding in result.findings],
         "continuity_error": result.continuity_error,
         "evidence_count": result.evidence_count,
+        "spend": {
+            "tokens": spent_tokens,
+            "cost_usd": cost,
+            "cost": pricing.display(cost),
+        },
         "pipeline": result.stages,
         "judgement": result.judgement.summary() if result.judgement else None,
         "origin": {
