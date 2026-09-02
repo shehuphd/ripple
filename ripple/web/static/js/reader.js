@@ -251,7 +251,7 @@ function openPreview() {
   preview.classList.remove('hide');
   const count = state.drafts.size;
   document.getElementById('pv-crumb').textContent =
-    `${count} edited line${count === 1 ? '' : 's'} · nothing is applied until you accept`;
+    `${count} edited line${count === 1 ? '' : 's'}`;
   runPreview();
 }
 
