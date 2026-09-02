@@ -530,3 +530,43 @@ class TestAttributeReach:
         )
         assert report.attribute_verdicts[0].verdict == "changed"
         assert report.attribute_verdicts[0].new_value == "crimson"
+
+
+class TestUntouchedFactRemoval:
+    """A fact cited to an untouched line is removable only when the edit
+    names its entity: an edit that never speaks of it did not undo it."""
+
+    OTHER_UNIT = "22222222-2222-2222-2222-222222222222"
+
+    def _listed(self):
+        listed = listed_assertion(A1)
+        row = listed[A1]
+        row["source_unit_id"] = self.OTHER_UNIT
+        row["subject"] = "Brass knife"
+        row["subject_names"] = ["the knife"]
+        return listed
+
+    def test_a_contradiction_naming_the_entity_removes(self):
+        report = validate_judgement(
+            reply(
+                assertion_verdicts=[{"assertion_id": A1, "verdict": "removed"}]
+            ),
+            self._listed(),
+            {},
+            {UNIT: "Mara sets the knife down and steps back."},
+            {UNIT: "Mara grips the knife."},
+        )
+        assert report.assertion_verdicts[0].verdict == "removed"
+
+    def test_a_removal_the_edit_never_names_downgrades_to_holds(self):
+        report = validate_judgement(
+            reply(
+                assertion_verdicts=[{"assertion_id": A1, "verdict": "removed"}]
+            ),
+            self._listed(),
+            {},
+            {UNIT: "Rain hammers the corrugated roof."},
+            {UNIT: "Rain taps the corrugated roof."},
+        )
+        assert report.assertion_verdicts[0].verdict == "holds"
+        assert any("never names" in why for _, why in report.rejected)

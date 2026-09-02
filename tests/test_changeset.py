@@ -485,3 +485,83 @@ class TestDurableStatusCarriers:
             accept(session, proposal.id)
         assert caught.value.change_set_id == str(proposal.id)
         assert caught.value.durable_status == "stale"
+
+
+class TestCacheStamp:
+    """An accepted judged edit stamps its scene as already extracted."""
+
+    MODEL = "fixture-cheap"
+
+    def _extract_current(self, session, world):
+        from datetime import UTC, datetime
+
+        from ripple.db.models import ExtractionRun, SceneExtraction
+        from ripple.extraction.prompt import PROMPT_VERSION, input_hash
+
+        scene = world["scene"]
+        digest = input_hash(
+            scene.heading,
+            [(str(world["unit"].id), "action", world["unit"].current_text)],
+        )
+        now = datetime.now(UTC)
+        run = ExtractionRun(
+            script_id=world["script"].id,
+            status="ready",
+            prompt_version=PROMPT_VERSION,
+            model_id=self.MODEL,
+            total_scenes=1,
+            completed_scenes=1,
+            started_at=now,
+            completed_at=now,
+        )
+        session.add(run)
+        session.flush()
+        session.add(
+            SceneExtraction(
+                extraction_run_id=run.id,
+                scene_id=scene.id,
+                status="completed",
+                input_hash=digest,
+                prompt_version=PROMPT_VERSION,
+                model_id=self.MODEL,
+                started_at=now,
+                completed_at=now,
+            )
+        )
+        session.flush()
+
+    def test_an_accepted_edit_leaves_no_pending_scene(self, session, world):
+        from ripple.db.repository import set_active_model
+        from ripple.extraction.service import pending_scene_count
+
+        self._extract_current(session, world)
+        set_active_model(session, "fixture", self.MODEL)
+        assert pending_scene_count(session, world["script"].id, self.MODEL) == 0
+
+        proposal = create_proposal(
+            session, world["unit"].id, "A bicycle leans by the gate.", []
+        )
+        accept(session, proposal.id)
+        assert pending_scene_count(session, world["script"].id, self.MODEL) == 0
+
+    def test_a_never_extracted_scene_is_not_stamped(self, session, world):
+        from ripple.db.repository import set_active_model
+        from ripple.extraction.service import pending_scene_count
+
+        set_active_model(session, "fixture", self.MODEL)
+        proposal = create_proposal(
+            session, world["unit"].id, "A bicycle leans by the gate.", []
+        )
+        accept(session, proposal.id)
+        # The stamp extends an extracted graph, never invents one.
+        assert pending_scene_count(session, world["script"].id, self.MODEL) == 1
+
+    def test_no_selected_model_stamps_nothing(self, session, world):
+        from ripple.extraction.service import pending_scene_count
+
+        self._extract_current(session, world)
+        proposal = create_proposal(
+            session, world["unit"].id, "A bicycle leans by the gate.", []
+        )
+        accept(session, proposal.id)
+        assert pending_scene_count(session, world["script"].id, self.MODEL) == 1

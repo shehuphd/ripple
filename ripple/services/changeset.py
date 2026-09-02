@@ -33,11 +33,14 @@ from ripple.db.models import (
     ContinuityFinding,
     Entity,
     EntityAttribute,
+    ExtractionRun,
     Scene,
+    SceneExtraction,
     Script,
     ScriptUnit,
 )
 from ripple.db.naming import normalize, normalize_key
+from ripple.extraction.prompt import PROMPT_VERSION, input_hash
 from ripple.graph.predicates import SignatureError, validate_edge
 from ripple.tracing import ensure_configured
 
@@ -238,6 +241,15 @@ def accept(session: Session, change_set_id) -> AcceptanceResult:
         script = session.get(Script, change_set.script_id)
         _check_versions(session, change_set, script)
 
+        # The pre-edit content hashes, taken before anything applies: the
+        # cache stamp below must prove the content this edit started from
+        # was itself extracted.
+        pre_hashes = (
+            _affected_scene_hashes(session, change_set)
+            if change_set.kind in JUDGED_KINDS
+            else {}
+        )
+
         created = 0
         applied = 0
         for operation in change_set.operations:
@@ -255,6 +267,10 @@ def accept(session: Session, change_set_id) -> AcceptanceResult:
         change_set.accepted_at = _now()
         session.flush()
 
+        stamped = _stamp_extractions(session, script, pre_hashes)
+        if stamped:
+            trace.step(f"Stamped {stamped} scenes as extracted")
+
         trace.step(f"Applied {applied} operations")
         trace.output(
             {
@@ -269,6 +285,115 @@ def accept(session: Session, change_set_id) -> AcceptanceResult:
             operations_applied=applied,
             entities_created=created,
         )
+
+
+# The change-set kinds whose acceptance already carried the graph deltas
+# through judged verdicts, so their scenes need no re-extraction.
+JUDGED_KINDS = frozenset({"edit", "multi_unit_edit"})
+
+
+def _scene_content(session: Session, scene: Scene) -> list[tuple[str, str, str]]:
+    units = session.scalars(
+        select(ScriptUnit)
+        .where(ScriptUnit.scene_id == scene.id)
+        .order_by(ScriptUnit.sequence_index)
+    )
+    return [(str(unit.id), unit.unit_type, unit.current_text) for unit in units]
+
+
+def _affected_scene_hashes(session: Session, change_set: ChangeSet) -> dict:
+    """Each edited scene's current content hash, before the edit applies."""
+    scene_ids = {
+        session.get(ScriptUnit, unit_link.script_unit_id).scene_id
+        for unit_link in change_set.units
+    }
+    hashes = {}
+    for scene_id in scene_ids:
+        scene = session.get(Scene, scene_id)
+        if scene is None or scene.omitted:
+            continue
+        hashes[scene_id] = input_hash(
+            scene.heading, _scene_content(session, scene)
+        )
+    return hashes
+
+
+def _stamp_extractions(session: Session, script: Script, pre_hashes: dict) -> int:
+    """Mark an accepted edit's scenes as already extracted.
+
+    The judgement whose acceptance this is has applied its verdicts and new
+    items to the graph, so re-extracting the scene would re-bill work the
+    accept already did. A scene qualifies only when its pre-edit content
+    had a completed extraction under the current prompt and selected model:
+    the stamp extends an extracted graph, never invents one. The rows are
+    written under a synthetic ready run, the same shape the draft link uses
+    to carry a cache.
+    """
+    if not pre_hashes:
+        return 0
+    from ripple.services.settings import SettingsService
+
+    _, model = SettingsService().selected_model(session)
+    if not model:
+        return 0
+
+    stampable = []
+    for scene_id, pre_hash in pre_hashes.items():
+        prior = session.scalar(
+            select(SceneExtraction.id).where(
+                SceneExtraction.scene_id == scene_id,
+                SceneExtraction.input_hash == pre_hash,
+                SceneExtraction.prompt_version == PROMPT_VERSION,
+                SceneExtraction.model_id == model,
+                SceneExtraction.status == "completed",
+            )
+        )
+        if prior is None:
+            continue
+        scene = session.get(Scene, scene_id)
+        new_hash = input_hash(scene.heading, _scene_content(session, scene))
+        already = session.scalar(
+            select(SceneExtraction.id).where(
+                SceneExtraction.scene_id == scene_id,
+                SceneExtraction.input_hash == new_hash,
+                SceneExtraction.prompt_version == PROMPT_VERSION,
+                SceneExtraction.model_id == model,
+                SceneExtraction.status == "completed",
+            )
+        )
+        if already is None:
+            stampable.append((scene_id, new_hash))
+    if not stampable:
+        return 0
+
+    now = _now()
+    run = ExtractionRun(
+        script_id=script.id,
+        status="ready",
+        prompt_version=PROMPT_VERSION,
+        model_id=model,
+        total_scenes=len(stampable),
+        completed_scenes=len(stampable),
+        started_at=now,
+        completed_at=now,
+    )
+    session.add(run)
+    session.flush()
+    for scene_id, new_hash in stampable:
+        session.add(
+            SceneExtraction(
+                extraction_run_id=run.id,
+                scene_id=scene_id,
+                status="completed",
+                input_hash=new_hash,
+                prompt_version=PROMPT_VERSION,
+                model_id=model,
+                started_at=now,
+                completed_at=now,
+            )
+        )
+    session.flush()
+    return len(stampable)
 
 
 def reject(session: Session, change_set_id, reason: str | None = None) -> ChangeSet:

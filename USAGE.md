@@ -56,7 +56,7 @@ Open a script and press **Build graph**. Extraction runs one scene per model cal
 
 A run reports its spend as it goes: the progress counter and the finished label carry the tokens used and, for a model the pricing registry knows, the dollar cost (from the bundled `rates` snapshot). A run served from cache reports nothing spent.
 
-The button is gated on billable work. Once the graph is built and every scene's content matches its cached extraction, it disables, with the reason in its tooltip. When scenes have changed since the last build (an accepted ripple, an added or restored scene, a linked draft, or a switched model), it reads **Update graph** and its tooltip counts the changed scenes; only those are billed, since the rest replay from cache.
+The button is gated on billable work. Once the graph is built and every scene's content matches its cached extraction, it disables, with the reason in its tooltip. When scenes have changed since the last build (an added or restored scene, a linked draft, or a switched model), it reads **Update graph** and its tooltip counts the changed scenes; only those are billed, since the rest replay from cache. An accepted ripple does not count: its judgement already applied the graph changes, so acceptance marks the scene's new content as extracted, provided the pre-edit content had been extracted under the same prompt and model.
 
 A run ends in one of three states:
 

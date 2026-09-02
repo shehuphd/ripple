@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from traceact import ActionTrace
 
@@ -64,6 +64,7 @@ from ripple.extraction.judge import (
     JUDGE_SCHEMA,
     JUDGE_SYSTEM,
     JudgementReport,
+    _significant_words,
     build_judge_prompt,
     validate_judgement,
 )
@@ -723,10 +724,67 @@ def _rebuild(
     )
 
 
+def _mentioned_rows(
+    session: Session,
+    scene_edits: list[tuple[ScriptUnit, str]],
+    already: set,
+) -> list[Assertion]:
+    """Active assertions in the edited scenes about mentioned entities.
+
+    An edit can undo a fact stated on a line it does not touch ("she sets
+    the knife down" against a carries edge cited two lines up), so every
+    entity the edited lines name, in current or proposed text, brings its
+    scene-local assertions to the judgement. The judge holds them unless
+    the proposed text explicitly contradicts them, and the validator
+    requires the edit to name the entity before a removal is admitted.
+    """
+    if not scene_edits:
+        return []
+    scene_ids = {unit.scene_id for unit, _ in scene_edits}
+    script_id = session.get(Scene, next(iter(scene_ids))).script_id
+    text_words = _significant_words(
+        " ".join(
+            f"{unit.current_text} {proposed}" for unit, proposed in scene_edits
+        )
+    )
+    if not text_words:
+        return []
+    mentioned = set()
+    for entity_id, name in session.execute(
+        select(EntityAlias.entity_id, EntityAlias.alias)
+        .join(Entity, EntityAlias.entity_id == Entity.id)
+        .where(Entity.script_id == script_id)
+    ):
+        words = _significant_words(name)
+        if words and words <= text_words:
+            mentioned.add(entity_id)
+    for entity in session.execute(
+        select(Entity.id, Entity.canonical_name).where(
+            Entity.script_id == script_id
+        )
+    ):
+        words = _significant_words(entity.canonical_name)
+        if words and words <= text_words:
+            mentioned.add(entity.id)
+    if not mentioned:
+        return []
+    scene_units = select(ScriptUnit.id).where(ScriptUnit.scene_id.in_(scene_ids))
+    query = select(Assertion).where(
+        Assertion.active.is_(True),
+        Assertion.source_unit_id.in_(scene_units),
+        or_(
+            Assertion.subject_entity_id.in_(mentioned),
+            Assertion.object_entity_id.in_(mentioned),
+        ),
+    )
+    return [row for row in session.scalars(query) if row.id not in already]
+
+
 def _listed(
     session: Session, scene_edits: list[tuple[ScriptUnit, str]]
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    """The assertions and attributes the edited units support, as sent."""
+    """The assertions and attributes the edited units support, as sent,
+    widened to the edited scenes' assertions about mentioned entities."""
     unit_ids = [unit.id for unit, _ in scene_edits]
     texts = {str(unit.id): unit.current_text for unit, _ in scene_edits}
 
@@ -738,6 +796,7 @@ def _listed(
             )
         )
     )
+    rows.extend(_mentioned_rows(session, scene_edits, {row.id for row in rows}))
     labels = {}
     if rows:
         script_id = rows[0].script_id

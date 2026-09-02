@@ -874,3 +874,60 @@ class TestHonestSummary:
             "fake-judge",
         )
         assert "holds nothing extracted" in result.summary
+
+
+class TestMentionedListing:
+    """An edit naming an entity brings its scene-local facts to the judge."""
+
+    def _knife_world(self, session):
+        world = build_world(session)
+        other = ScriptUnit(
+            scene_id=world["scene"].id,
+            unit_type="action",
+            sequence_index=1,
+            current_text="Vera grips the brass knife.",
+            parser_method="fountain",
+        )
+        session.add(other)
+        session.flush()
+        knife = Entity(
+            script_id=world["script"].id,
+            entity_type="prop",
+            canonical_name="Brass knife",
+            normalized_name=normalize("Brass knife"),
+        )
+        session.add(knife)
+        session.flush()
+        fact = Assertion(
+            script_id=world["script"].id,
+            subject_kind="entity",
+            subject_entity_id=knife.id,
+            predicate="appears_in",
+            object_kind="scene",
+            object_scene_id=world["scene"].id,
+            source_unit_id=other.id,
+            confidence=0.9,
+        )
+        session.add(fact)
+        session.flush()
+        return world, fact
+
+    def test_a_named_entity_lists_its_untouched_facts(self, session):
+        from ripple.services.preview import _listed
+
+        world, fact = self._knife_world(session)
+        listed, _ = _listed(
+            session,
+            [(world["unit"], "The gown falls as the brass knife clatters.")],
+        )
+        assert str(fact.id) in listed
+
+    def test_an_unmentioned_entity_stays_unlisted(self, session):
+        from ripple.services.preview import _listed
+
+        world, fact = self._knife_world(session)
+        listed, _ = _listed(
+            session,
+            [(world["unit"], "The gown falls from the rail.")],
+        )
+        assert str(fact.id) not in listed

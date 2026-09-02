@@ -149,7 +149,10 @@ Reserve `removed` for facts the proposed text drops with no replacement.
 An entity the proposed text still names keeps its presence and establishes
 edges; a changed count, colour, or descriptor on a still-present object is an
 attribute change, never a removal. A fact whose stated support lives on a
-line this edit does not touch holds: it is out of this edit's reach.
+line this edit does not touch holds, with one exception: when the proposed
+text explicitly contradicts or undoes what it states (the object is put
+down, destroyed, taken away, or replaced), report it removed. An untouched
+fact the proposed text merely stops mentioning holds.
 
 Then report anything the proposed text newly supports, under the same rules
 as extraction. Judge only what you were given plus what the proposed text
@@ -317,24 +320,36 @@ def validate_judgement(
                 (verdict_id, "holds on vanished evidence, downgraded to removed")
             )
             verdict = "removed"
-        # The symmetric guard: a removal must be visible in the edit. A fact
-        # whose endpoints the proposed text still names, or that the current
-        # text never named, was not removed by these lines; a changed count
-        # or descriptor on a still-present object is an attribute change.
-        if verdict == "removed" and not _removal_is_visible(
-            listed_assertions[verdict_id],
-            current_all,
-            proposed_all,
-            values_by_entity,
-        ):
-            report.rejected.append(
-                (
-                    verdict_id,
-                    "removal not visible in the edited lines, "
-                    "downgraded to holds",
-                )
+        # The symmetric guard: a removal must be visible in the edit. For a
+        # fact cited to an edited line, its endpoint names must vanish or
+        # degrade; a changed count or descriptor on a still-present object
+        # is an attribute change. For a fact cited to an untouched line
+        # (listed because the edit mentions its entity), the edit cannot
+        # make its names vanish, so the guard is that the proposed text
+        # names the entity at all: an edit that never speaks of the entity
+        # did not undo its fact.
+        if verdict == "removed":
+            cited_unit = str(
+                listed_assertions[verdict_id].get("source_unit_id", "")
             )
-            verdict = "holds"
+            if cited_unit in edited_units:
+                visible = _removal_is_visible(
+                    listed_assertions[verdict_id],
+                    current_all,
+                    proposed_all,
+                    values_by_entity,
+                )
+                reason = "removal not visible in the edited lines"
+            else:
+                visible = _entity_named(
+                    listed_assertions[verdict_id], proposed_all
+                )
+                reason = "removal of an untouched fact the edit never names"
+            if not visible:
+                report.rejected.append(
+                    (verdict_id, f"{reason}, downgraded to holds")
+                )
+                verdict = "holds"
         report.assertion_verdicts.append(
             AssertionVerdict(
                 assertion_id=verdict_id,
@@ -491,6 +506,20 @@ _LABEL_WORD = re.compile(r"[^\W\d_]{4,}")
 
 def _significant_words(label: str) -> set[str]:
     return {word.casefold() for word in _LABEL_WORD.findall(label or "")}
+
+
+def _entity_named(listed: dict[str, Any], proposed_all: str) -> bool:
+    """Whether the proposed text names either endpoint of this assertion."""
+    proposed_words = _significant_words(proposed_all)
+    for label, aliases in (
+        (listed.get("subject", ""), listed.get("subject_names") or []),
+        (listed.get("object", ""), listed.get("object_names") or []),
+    ):
+        for name in [label, *aliases]:
+            words = _significant_words(name)
+            if words and words <= proposed_words:
+                return True
+    return False
 
 
 def _removal_is_visible(
