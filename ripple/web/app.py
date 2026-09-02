@@ -74,6 +74,7 @@ from ripple.extraction.service import (
     progress,
     start_run,
 )
+from ripple.graph.alignment import align_revisions
 from ripple.graph.diff import Edge, GraphDiff
 from ripple.graph.fixtures import seed_demo_graphs
 from ripple.graph.layout import DEPARTMENT_ORDER, script_layout
@@ -524,21 +525,68 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
         if target not in revised:
             revised[target] = (operation.before_json or {}).get("text", "")
 
-    def revision_segments(unit) -> list[dict[str, str]] | None:
-        original = revised.get(str(unit.id))
-        if original is None or original == unit.current_text:
+    # A linked draft marks what changed against the predecessor draft too,
+    # through the same rendering. In each modified scene, the lines the link
+    # left unlinked are the edited ones; align_revisions pairs each with the
+    # old wording it revises, and a line with no counterpart marks whole.
+    # This baseline predates any in-draft edit, so it wins over `revised`.
+    draft_baseline: dict[str, str] = {}
+    heading_baseline: dict[str, str] = {}
+    new_scene_ids: set[str] = set()
+    if script.predecessor_script_id is not None:
+        for scene in script.scenes:
+            if scene.omitted or scene.lineage_kind == "unchanged":
+                continue
+            if scene.predecessor_scene_id is None:
+                new_scene_ids.add(str(scene.id))
+                continue
+            old_scene = session.get(Scene, scene.predecessor_scene_id)
+            if old_scene is None:
+                continue
+            if old_scene.heading != scene.heading:
+                heading_baseline[str(scene.id)] = old_scene.heading
+            old_units = [
+                unit
+                for unit in old_scene.units
+                if unit.unit_type != "scene_heading"
+            ]
+            new_units = [
+                unit for unit in scene.units if unit.unit_type != "scene_heading"
+            ]
+            mapping = align_revisions(
+                [unit.current_text for unit in old_units],
+                [unit.current_text for unit in new_units],
+            )
+            for unit, source in zip(new_units, mapping, strict=True):
+                if unit.predecessor_unit_id is not None:
+                    continue
+                draft_baseline[str(unit.id)] = (
+                    "" if source is None else old_units[source].current_text
+                )
+
+    def marked_segments(
+        original: str | None, current: str
+    ) -> list[dict[str, str]] | None:
+        if original is None or original == current:
             return None
         segments = [
             segment
-            for segment in preview_service.word_diff(original, unit.current_text)
+            for segment in preview_service.word_diff(original, current)
             if segment["op"] != "del"
         ]
-        # The rendered text must reproduce current_text to the byte, or the
-        # reader would mark the unit as an unapplied draft. Unusual spacing
-        # falls back to plain rendering rather than risking that.
-        if " ".join(segment["text"] for segment in segments) != unit.current_text:
+        # The rendered text must reproduce the current text to the byte, or
+        # the reader would mark the unit as an unapplied draft. Unusual
+        # spacing falls back to plain rendering rather than risking that.
+        if " ".join(segment["text"] for segment in segments) != current:
             return None
         return segments
+
+    def revision_segments(unit) -> list[dict[str, str]] | None:
+        key = str(unit.id)
+        original = draft_baseline.get(key)
+        if original is None:
+            original = revised.get(key)
+        return marked_segments(original, unit.current_text)
 
     scenes = []
     running = 0
@@ -569,6 +617,10 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
                 # with the scene that carries that number later in the script.
                 "number": scene.display_scene_number or "",
                 "heading": scene.heading,
+                "heading_segments": marked_segments(
+                    heading_baseline.get(str(scene.id)), scene.heading
+                ),
+                "new_in_draft": str(scene.id) in new_scene_ids,
                 "omitted": scene.omitted,
                 "page": page_of(running),
                 "eighths": eighths(characters),

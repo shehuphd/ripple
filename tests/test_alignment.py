@@ -9,6 +9,7 @@ from __future__ import annotations
 from ripple.graph.alignment import (
     Alignment,
     SceneContent,
+    align_revisions,
     align_scenes,
     align_units,
 )
@@ -181,3 +182,35 @@ class TestForcedPairs:
         new = [scene("n1", None, "INT. A - DAY", "One.")]
         result = align_scenes(old, new, forced_pairs={"nx": "o1"})
         assert kinds(result) == {"n1": ("o1", "unchanged")}
+
+
+class TestRevisionAlignment:
+    """align_revisions pairs edited lines with the wording they revise."""
+
+    def test_identical_lists_map_positionally(self):
+        assert align_revisions(["A.", "B."], ["A.", "B."]) == [0, 1]
+
+    def test_an_edited_line_pairs_with_its_old_wording(self):
+        old = ["The rain stops.", "Mara opens the ledger.", "Dev waits."]
+        new = ["The rain stops.", "Mara slams the ledger shut.", "Dev waits."]
+        assert align_revisions(old, new) == [0, 1, 2]
+
+    def test_a_wholly_new_line_maps_to_nothing(self):
+        old = ["The rain stops.", "Dev waits."]
+        new = ["The rain stops.", "A phone buzzes on the desk.", "Dev waits."]
+        assert align_revisions(old, new) == [0, None, 1]
+
+    def test_crossed_edits_pair_by_similarity_not_position(self):
+        old = ["Mara opens the ledger.", "Dev checks his phone."]
+        new = ["Dev checks his watch.", "Mara opens the ledger slowly."]
+        assert align_revisions(old, new) == [1, 0]
+
+    def test_unrelated_replacement_text_maps_to_nothing(self):
+        old = ["The seal cracks under the pry bar."]
+        new = ["A kite drifts over the long grass."]
+        assert align_revisions(old, new) == [None]
+
+    def test_a_deleted_line_consumes_no_pairing(self):
+        old = ["The rain stops.", "Mara opens the ledger.", "Dev waits."]
+        new = ["The rain stops.", "Dev waits, checking his phone."]
+        assert align_revisions(old, new) == [0, 2]

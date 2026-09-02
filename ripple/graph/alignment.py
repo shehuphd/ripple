@@ -287,6 +287,44 @@ def _sequence_align(
     return links
 
 
+def align_revisions(old_texts: list[str], new_texts: list[str]) -> list[int | None]:
+    """For each new unit, the old unit its wording revises, or None.
+
+    Where `align_units` links only identical lines, this pass also pairs the
+    edited ones, so a renderer can word-diff each new line against the old
+    wording it replaced. Within each block of differing lines, every new line
+    takes its best-scoring old counterpart above a similarity floor; a line
+    with no plausible counterpart is new, and its None tells the renderer to
+    treat the whole line as inserted.
+    """
+    mapping: list[int | None] = [None] * len(new_texts)
+    matcher = SequenceMatcher(None, old_texts, new_texts, autojunk=False)
+    for tag, a_start, a_end, b_start, b_end in matcher.get_opcodes():
+        if tag == "equal":
+            for offset in range(b_end - b_start):
+                mapping[b_start + offset] = a_start + offset
+            continue
+        if b_start == b_end:
+            continue
+        pool = list(range(a_start, a_end))
+        for new_index in range(b_start, b_end):
+            if not pool:
+                break
+            scored = max(
+                pool,
+                key=lambda old_index: SequenceMatcher(
+                    None, old_texts[old_index], new_texts[new_index]
+                ).ratio(),
+            )
+            ratio = SequenceMatcher(
+                None, old_texts[scored], new_texts[new_index]
+            ).ratio()
+            if ratio >= WEAK_MATCH:
+                mapping[new_index] = scored
+                pool.remove(scored)
+    return mapping
+
+
 def align_units(old_texts: list[str], new_texts: list[str]) -> list[int | None]:
     """For each new unit, the index of the old unit it continues, or None.
 

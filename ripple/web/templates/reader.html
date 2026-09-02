@@ -94,7 +94,8 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
     <section data-scene-body="{{ scene.id }}"
              {% if scene.omitted %}class="omitted"{% endif %}>
       <div class="sh"><span class="no num">{{ scene.number }}</span>
-        <span>{{ scene.heading }}</span>
+        <span>{% if scene.heading_segments %}{% for seg in scene.heading_segments %}{% if seg.op == 'ins' %}<mark class="rev">{{ seg.text }}</mark>{% else %}{{ seg.text }}{% endif %}{% if not loop.last %} {% endif %}{% endfor %}{% else %}{{ scene.heading }}{% endif %}</span>
+        {% if scene.new_in_draft %}<span class="draft-new">NEW IN THIS DRAFT</span>{% endif %}
         {% if scene.omitted %}<span class="omit-tag">OMITTED</span>{% endif %}
         <span class="sctl">
         {% if scene.omitted %}

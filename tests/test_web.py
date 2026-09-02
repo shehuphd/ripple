@@ -1279,6 +1279,39 @@ class TestDraftLinking:
         )
         assert again.status_code == 409
 
+    def test_a_linked_draft_marks_its_revisions_in_the_reader(
+        self, client, night_freight_fountain
+    ):
+        revised = night_freight_fountain.replace(
+            b"Six monitors", b"Twelve monitors"
+        ).replace(
+            b"INT. DISPATCH OFFICE - NIGHT #3#",
+            b"INT. DISPATCH OFFICE - DAY #3#",
+        )
+        revised += b"\nINT. LOCKER ROOM - NIGHT\n\nA row of dented lockers.\n"
+        uploaded = client.post(
+            "/api/scripts",
+            files={"file": ("night-freight-d2.fountain", revised)},
+        ).json()
+        predecessor = uploaded["draft_candidates"][0]["id"]
+        linked = client.post(
+            f"/api/scripts/{uploaded['id']}/link-draft",
+            json={"predecessor_script_id": predecessor},
+        )
+        assert linked.status_code == 200, linked.text
+
+        page = client.get(f"/scripts/{uploaded['id']}").text
+        # The edited word is tinted; the untouched words around it are not.
+        assert '<mark class="rev">Twelve</mark> monitors, four of them dead' in page
+        # The heading edit is tinted in the scene header.
+        assert '<mark class="rev">DAY</mark>' in page
+        # The appended scene is chipped, never tinted word by word.
+        assert "NEW IN THIS DRAFT" in page
+        assert "A row of dented lockers." in page
+        assert "<mark" not in page.split("A row of dented lockers.")[0][-200:]
+        # The predecessor's own reader stays unmarked.
+        assert '<mark class="rev">' not in client.get(f"/scripts/{predecessor}").text
+
 
 class TestSceneEntityCounts:
     def test_a_seeded_scene_reports_its_entities(self, client):

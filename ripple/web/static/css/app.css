@@ -568,6 +568,11 @@ section.omitted .sh .omit-tag,section.omitted .sh .sctl{text-decoration:none}
 /* Words an accepted ripple changed, so a skim shows what moved. The tint
    is the accent (an applied change), distinct from the amber of an
    unapplied draft. Editing the line strips the marks to plain text. */
-.u mark.rev{background:rgba(47,168,199,.16);color:inherit;
+.u mark.rev,.sh mark.rev{background:rgba(47,168,199,.16);color:inherit;
   border-radius:3px;padding:0 2px;
   box-shadow:0 0 0 .5px rgba(47,168,199,.25)}
+
+/* A scene the linked predecessor draft did not have. */
+.draft-new{font-size:10.5px;letter-spacing:.08em;color:#2fa8c7;
+  border:.5px solid rgba(47,168,199,.55);border-radius:5px;padding:1px 6px;
+  font-weight:600;align-self:center;white-space:nowrap}

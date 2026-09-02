@@ -141,6 +141,8 @@ Linking aligns the two drafts in code, with no model call: scenes with identical
 
 With a model selected, the changed scenes extract as soon as the link completes, and the reader opens on the new draft driving that run. The previous draft is untouched, and the new draft's toolbar links back to it ("Draft 2 · open draft 1").
 
+A linked draft's reader also tints what changed against the predecessor: edited words in changed scenes and their headings carry the same revision tint accepted ripples get, and a scene the previous draft did not have is chipped "NEW IN THIS DRAFT" rather than tinted word by word. The previous draft's reader stays unmarked.
+
 **Uncertain matches ask you.** A pair of scenes that look related but not similar enough to link automatically comes up for review before the link runs: both headings, first lines, and the similarity, each with a checkbox. Ticked pairs carry their identity across as rewrites; anything unticked is treated as a new scene and re-read. Cancelling the review cancels the whole link, leaving the upload as a separate script.
 
 **The draft report.** Once the changed scenes are extracted, Ripple compares the drafts and writes a report (on the Reports page, its findings on the Findings page):
