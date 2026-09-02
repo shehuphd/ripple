@@ -56,7 +56,11 @@ def _call_model(
         )
 
     from ripple.db.models import ModelCall
-    from ripple.db.repository import get_fallback_model
+    from ripple.db.repository import (
+        clear_model_unavailable,
+        get_fallback_model,
+        mark_model_unavailable,
+    )
     from ripple.llm.base import AVAILABILITY_CODES
     from ripple.services.spend import check_budget
 
@@ -79,6 +83,10 @@ def _call_model(
         call.error_message = error.message
         call.duration_ms = int((time.perf_counter() - started) * 1000)
         session.add(call)
+        if error.code == "model_not_available":
+            # The picker reads these marks; extraction and preview record
+            # them too, so a dead model found here disables the same entry.
+            mark_model_unavailable(session, provider.name, model_id)
         session.flush()
         _, fallback = get_fallback_model(session)
         if (
@@ -99,6 +107,7 @@ def _call_model(
                 script_id,
             )
         raise
+    clear_model_unavailable(session, provider.name, model_id)
     call.response_text = result.text
     call.input_tokens = result.input_tokens
     call.output_tokens = result.output_tokens

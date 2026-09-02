@@ -102,7 +102,11 @@ def parse_response(text: str) -> dict:
 
 
 def validate_response(
-    text: str, valid_unit_ids: set[str], scene_local_id: str = "scene"
+    text: str,
+    valid_unit_ids: set[str],
+    scene_local_id: str = "scene",
+    provided: dict[str, tuple[str, str]] | None = None,
+    unit_texts: dict[str, str] | None = None,
 ) -> ValidationReport:
     """Check a reply against the schema rules and return what is admissible.
 
@@ -110,9 +114,19 @@ def validate_response(
     assertion citing anything else is dropped: an evidence pointer into a unit
     that was not shown to the model is fabricated, whatever else is right
     about the assertion.
+
+    `provided` maps the pre-registered local ids (the deterministic pass's
+    cast and location) to (entity_type, name). The model references those
+    ids without declaring them; a redeclaration is admitted only to carry
+    attrs and aliases, with its type and name pinned to the provided values.
+
+    `unit_texts` maps unit ids to their text. When given, an evidence span
+    reaching past its unit's end is dropped to no-span rather than carried:
+    a wrong span misquotes the text it cites, and no span is honest.
     """
     payload = parse_response(text)
     report = ValidationReport()
+    provided = provided or {}
 
     entities_raw = payload.get("entities")
     assertions_raw = payload.get("assertions")
@@ -121,7 +135,7 @@ def validate_response(
 
     by_local_id: dict[str, ValidatedEntity] = {}
     for item in entities_raw:
-        entity = _validate_entity(item, valid_unit_ids, report)
+        entity = _validate_entity(item, valid_unit_ids, provided, report, unit_texts)
         if entity is None:
             continue
         if entity.local_id in by_local_id:
@@ -129,16 +143,26 @@ def validate_response(
             continue
         by_local_id[entity.local_id] = entity
 
+    endpoint_types = {
+        local_id: entity_type for local_id, (entity_type, _) in provided.items()
+    }
     for item in assertions_raw:
         assertion = _validate_assertion(
-            item, by_local_id, valid_unit_ids, scene_local_id, report
+            item,
+            by_local_id,
+            endpoint_types,
+            valid_unit_ids,
+            scene_local_id,
+            report,
+            unit_texts,
         )
         if assertion is not None:
             report.assertions.append(assertion)
 
     # An entity nothing points at is not a production requirement, it is a
     # noun the model noticed. Keeping it would inflate the graph with nodes
-    # that have no evidence.
+    # that have no evidence. A provided id is exempt: its row already exists,
+    # and its redeclaration is here only for the attrs it carries.
     referenced = {
         local_id
         for assertion in report.assertions
@@ -149,7 +173,7 @@ def validate_response(
         if kind == "entity"
     }
     for local_id, entity in by_local_id.items():
-        if local_id in referenced:
+        if local_id in referenced or local_id in provided:
             report.entities.append(entity)
         else:
             report.reject("entity", "unreferenced")
@@ -158,28 +182,42 @@ def validate_response(
 
 
 def _validate_entity(
-    item: object, valid_unit_ids: set[str], report: ValidationReport
+    item: object,
+    valid_unit_ids: set[str],
+    provided: dict[str, tuple[str, str]],
+    report: ValidationReport,
+    unit_texts: dict[str, str] | None = None,
 ) -> ValidatedEntity | None:
-    """Check one proposed entity."""
+    """Check one proposed entity.
+
+    A redeclaration of a provided id keeps the provided type and name
+    whatever the model restated: the row already exists, and letting a
+    restatement rename it would fork one entity into two.
+    """
     if not isinstance(item, dict):
         report.reject("entity", "not_an_object")
         return None
 
-    local_id = item.get("local_id")
-    entity_type = item.get("entity_type")
-    name = item.get("canonical_name")
+    local_id = item.get("id")
+    entity_type = item.get("type")
+    name = item.get("name")
 
     if not isinstance(local_id, str) or not local_id.strip():
         report.reject("entity", "missing_local_id")
         return None
-    if entity_type not in ENTITY_TYPES:
-        report.reject("entity", "unknown_entity_type")
-        return None
-    if not isinstance(name, str) or not name.strip():
-        report.reject("entity", "missing_canonical_name")
-        return None
+    local_id = local_id.strip()
 
-    confidence = _confidence(item.get("confidence"))
+    if local_id in provided:
+        entity_type, name = provided[local_id]
+    else:
+        if entity_type not in ENTITY_TYPES:
+            report.reject("entity", "unknown_entity_type")
+            return None
+        if not isinstance(name, str) or not name.strip():
+            report.reject("entity", "missing_canonical_name")
+            return None
+
+    confidence = _confidence(item.get("conf"))
     if confidence is None:
         report.reject("entity", "bad_confidence")
         return None
@@ -189,22 +227,25 @@ def _validate_entity(
         for alias in item.get("aliases", []) or []
         if isinstance(alias, str) and alias.strip()
     ]
-    description = item.get("description")
+    description = item.get("desc")
     return ValidatedEntity(
-        local_id=local_id.strip(),
+        local_id=local_id,
         entity_type=entity_type,
         canonical_name=name.strip(),
         aliases=aliases,
         description=description.strip() if isinstance(description, str) else None,
         confidence=confidence,
         attributes=_validate_attributes(
-            item.get("attributes"), valid_unit_ids, report
+            item.get("attrs"), valid_unit_ids, report, unit_texts
         ),
     )
 
 
 def _validate_attributes(
-    raw: object, valid_unit_ids: set[str], report: ValidationReport
+    raw: object,
+    valid_unit_ids: set[str],
+    report: ValidationReport,
+    unit_texts: dict[str, str] | None = None,
 ) -> list[ValidatedAttribute]:
     """Check an entity's proposed attributes. One bad row never drops the rest.
 
@@ -220,9 +261,9 @@ def _validate_attributes(
         if not isinstance(item, dict):
             report.reject("attribute", "not_an_object")
             continue
-        key = item.get("key")
-        value = item.get("value")
-        source_unit_id = item.get("source_unit_id")
+        key = item.get("k")
+        value = item.get("v")
+        source_unit_id = item.get("unit")
         if not isinstance(key, str) or not key.strip():
             report.reject("attribute", "missing_key")
             continue
@@ -232,7 +273,7 @@ def _validate_attributes(
         if not isinstance(source_unit_id, str) or source_unit_id not in valid_unit_ids:
             report.reject("attribute", "unknown_source_unit")
             continue
-        confidence = _confidence(item.get("confidence"))
+        confidence = _confidence(item.get("conf"))
         if confidence is None:
             report.reject("attribute", "bad_confidence")
             continue
@@ -241,7 +282,7 @@ def _validate_attributes(
             report.reject("attribute", "duplicate_key")
             continue
         seen.add(normalized)
-        start, end = _evidence_span(item)
+        start, end = _evidence_span(item, source_unit_id, unit_texts)
         kept.append(
             ValidatedAttribute(
                 key=normalized,
@@ -258,34 +299,41 @@ def _validate_attributes(
 def _validate_assertion(
     item: object,
     entities: dict[str, ValidatedEntity],
+    provided_types: dict[str, str],
     valid_unit_ids: set[str],
     scene_local_id: str,
     report: ValidationReport,
+    unit_texts: dict[str, str] | None = None,
 ) -> ValidatedAssertion | None:
-    """Check one proposed assertion against its predicate signature."""
+    """Check one proposed assertion against its predicate signature.
+
+    The format carries no endpoint kinds: the scene local id is the scene,
+    and every other id is an entity, declared in this reply or provided.
+    """
     if not isinstance(item, dict):
         report.reject("assertion", "not_an_object")
         return None
 
-    predicate = item.get("predicate")
-    subject_kind = item.get("subject_kind")
-    object_kind = item.get("object_kind")
-    subject_local = item.get("subject_local_id")
-    object_local = item.get("object_local_id")
-    source_unit_id = item.get("source_unit_id")
+    predicate = item.get("p")
+    subject_local = item.get("s")
+    object_local = item.get("o")
+    source_unit_id = item.get("unit")
 
     if not all(
         isinstance(value, str)
-        for value in (predicate, subject_kind, object_kind, subject_local, object_local)
+        for value in (predicate, subject_local, object_local)
     ):
         report.reject("assertion", "missing_field")
         return None
+
+    subject_kind = "scene" if subject_local == scene_local_id else "entity"
+    object_kind = "scene" if object_local == scene_local_id else "entity"
 
     if not isinstance(source_unit_id, str) or source_unit_id not in valid_unit_ids:
         report.reject("assertion", "unknown_source_unit")
         return None
 
-    confidence = _confidence(item.get("confidence"))
+    confidence = _confidence(item.get("conf"))
     if confidence is None:
         report.reject("assertion", "bad_confidence")
         return None
@@ -293,8 +341,12 @@ def _validate_assertion(
         report.reject("assertion", "below_confidence_floor")
         return None
 
-    subject_type = _endpoint_type(subject_kind, subject_local, entities, scene_local_id)
-    object_type = _endpoint_type(object_kind, object_local, entities, scene_local_id)
+    subject_type = _endpoint_type(
+        subject_kind, subject_local, entities, provided_types, scene_local_id
+    )
+    object_type = _endpoint_type(
+        object_kind, object_local, entities, provided_types, scene_local_id
+    )
     if subject_type is _UNRESOLVED or object_type is _UNRESOLVED:
         report.reject("assertion", "unresolved_endpoint")
         return None
@@ -306,7 +358,7 @@ def _validate_assertion(
         report.reject("assertion", "signature_mismatch")
         return None
 
-    start, end = _evidence_span(item)
+    start, end = _evidence_span(item, source_unit_id, unit_texts)
 
     return ValidatedAssertion(
         subject_kind=subject_kind,
@@ -321,15 +373,20 @@ def _validate_assertion(
     )
 
 
-def _evidence_span(item: dict) -> tuple[int | None, int | None]:
+def _evidence_span(
+    item: dict,
+    source_unit_id: str | None = None,
+    unit_texts: dict[str, str] | None = None,
+) -> tuple[int | None, int | None]:
     """Both evidence offsets, or neither.
 
     A half pair cannot address a span, and passing one side through makes
     downstream slicing silently read from the start or to the end of the
-    unit. Order and sign are checked here; the upper bound is the caller's
-    to check once it holds the unit's text.
+    unit. When the cited unit's text is available, a span reaching past its
+    end or addressing nothing is dropped the same way: the item survives,
+    the misquote does not.
     """
-    start, end = item.get("evidence_start"), item.get("evidence_end")
+    start, end = item.get("start"), item.get("end")
     if (
         isinstance(start, int)
         and not isinstance(start, bool)
@@ -337,6 +394,10 @@ def _evidence_span(item: dict) -> tuple[int | None, int | None]:
         and not isinstance(end, bool)
         and 0 <= start <= end
     ):
+        if unit_texts is not None and source_unit_id in unit_texts:
+            text = unit_texts[source_unit_id]
+            if end > len(text) or start == end:
+                return None, None
         return start, end
     return None, None
 
@@ -352,13 +413,16 @@ def _endpoint_type(
     kind: str,
     local_id: str,
     entities: dict[str, ValidatedEntity],
+    provided_types: dict[str, str],
     scene_local_id: str,
 ) -> str | _Unresolved | None:
     """The entity type of one endpoint, None for a scene, sentinel if unknown."""
     if kind == "scene":
         return None if local_id == scene_local_id else _UNRESOLVED
     entity = entities.get(local_id)
-    return entity.entity_type if entity else _UNRESOLVED
+    if entity is not None:
+        return entity.entity_type
+    return provided_types.get(local_id, _UNRESOLVED)
 
 
 def _confidence(value: object) -> float | None:

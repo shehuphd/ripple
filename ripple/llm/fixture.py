@@ -92,6 +92,7 @@ class FixtureProvider:
         system: str | None = None,
         max_output_tokens: int = 2048,
         json_schema: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
     ) -> GenerationResult:
         """Return the recorded reply for this prompt."""
         self.calls.append(

@@ -76,6 +76,12 @@ def _units_of(session, scene_id):
     )
 
 
+def _short_id(session, scene_id, unit_id) -> str:
+    """The prompt-facing id of one unit: u1, u2, ... in scene order."""
+    units = _units_of(session, scene_id)
+    return f"u{[u.id for u in units].index(unit_id) + 1}"
+
+
 class TestOutputValidation:
     def test_a_non_json_reply_is_malformed(self):
         with pytest.raises(MalformedResponse):
@@ -94,10 +100,10 @@ class TestOutputValidation:
             _reply(
                 entities=[
                     {
-                        "local_id": "e1",
-                        "entity_type": "catering",
-                        "canonical_name": "Sandwiches",
-                        "confidence": 0.9,
+                        "id": "e1",
+                        "type": "catering",
+                        "name": "Sandwiches",
+                        "conf": 0.9,
                     }
                 ]
             ),
@@ -112,21 +118,19 @@ class TestOutputValidation:
             _reply(
                 entities=[
                     {
-                        "local_id": "e1",
-                        "entity_type": "prop",
-                        "canonical_name": "Torch",
-                        "confidence": 0.9,
+                        "id": "e1",
+                        "type": "prop",
+                        "name": "Torch",
+                        "conf": 0.9,
                     }
                 ],
                 assertions=[
                     {
-                        "subject_kind": "entity",
-                        "subject_local_id": "e1",
-                        "predicate": "appears_in",
-                        "object_kind": "scene",
-                        "object_local_id": "scene",
-                        "source_unit_id": "a-unit-that-was-never-shown",
-                        "confidence": 0.9,
+                        "s": "e1",
+                        "p": "appears_in",
+                        "o": "scene",
+                        "unit": "a-unit-that-was-never-shown",
+                        "conf": 0.9,
                     }
                 ],
             ),
@@ -141,21 +145,19 @@ class TestOutputValidation:
             _reply(
                 entities=[
                     {
-                        "local_id": "e1",
-                        "entity_type": "cast",
-                        "canonical_name": "Mara",
-                        "confidence": 0.95,
+                        "id": "e1",
+                        "type": "cast",
+                        "name": "Mara",
+                        "conf": 0.95,
                     }
                 ],
                 assertions=[
                     {
-                        "subject_kind": "scene",
-                        "subject_local_id": "scene",
-                        "predicate": "requires",
-                        "object_kind": "entity",
-                        "object_local_id": "e1",
-                        "source_unit_id": "u1",
-                        "confidence": 0.9,
+                        "s": "scene",
+                        "p": "requires",
+                        "o": "e1",
+                        "unit": "u1",
+                        "conf": 0.9,
                     }
                 ],
             ),
@@ -169,21 +171,19 @@ class TestOutputValidation:
             _reply(
                 entities=[
                     {
-                        "local_id": "e1",
-                        "entity_type": "prop",
-                        "canonical_name": "Torch",
-                        "confidence": 0.9,
+                        "id": "e1",
+                        "type": "prop",
+                        "name": "Torch",
+                        "conf": 0.9,
                     }
                 ],
                 assertions=[
                     {
-                        "subject_kind": "entity",
-                        "subject_local_id": "e1",
-                        "predicate": "appears_in",
-                        "object_kind": "scene",
-                        "object_local_id": "scene",
-                        "source_unit_id": "u1",
-                        "confidence": 0.4,
+                        "s": "e1",
+                        "p": "appears_in",
+                        "o": "scene",
+                        "unit": "u1",
+                        "conf": 0.4,
                     }
                 ],
             ),
@@ -197,21 +197,19 @@ class TestOutputValidation:
             _reply(
                 entities=[
                     {
-                        "local_id": "e1",
-                        "entity_type": "prop",
-                        "canonical_name": "Torch",
-                        "confidence": 0.9,
+                        "id": "e1",
+                        "type": "prop",
+                        "name": "Torch",
+                        "conf": 0.9,
                     }
                 ],
                 assertions=[
                     {
-                        "subject_kind": "entity",
-                        "subject_local_id": "e1",
-                        "predicate": "appears_in",
-                        "object_kind": "scene",
-                        "object_local_id": "scene",
-                        "source_unit_id": "u1",
-                        "confidence": 0.9,
+                        "s": "e1",
+                        "p": "appears_in",
+                        "o": "scene",
+                        "unit": "u1",
+                        "conf": 0.9,
                     },
                     "a bare string, not an object",
                 ],
@@ -226,10 +224,10 @@ class TestOutputValidation:
             _reply(
                 entities=[
                     {
-                        "local_id": "e1",
-                        "entity_type": "prop",
-                        "canonical_name": "Unmentioned",
-                        "confidence": 0.9,
+                        "id": "e1",
+                        "type": "prop",
+                        "name": "Unmentioned",
+                        "conf": 0.9,
                     }
                 ]
             ),
@@ -352,39 +350,35 @@ class TestWritingTheGraph:
         return _reply(
             entities=[
                 {
-                    "local_id": "e1",
-                    "entity_type": "transportation",
-                    "canonical_name": "Blue sedan",
+                    "id": "e1",
+                    "type": "transportation",
+                    "name": "Blue sedan",
                     "aliases": ["the sedan"],
-                    "confidence": 0.91,
+                    "conf": 0.91,
                 },
                 {
-                    "local_id": "e2",
-                    "entity_type": "location",
-                    "canonical_name": "Loading dock",
-                    "confidence": 0.9,
+                    "id": "e2",
+                    "type": "location",
+                    "name": "Loading dock",
+                    "conf": 0.9,
                 },
             ],
             assertions=[
                 {
-                    "subject_kind": "entity",
-                    "subject_local_id": "e1",
-                    "predicate": "appears_in",
-                    "object_kind": "scene",
-                    "object_local_id": "scene",
-                    "source_unit_id": str(action.id),
-                    "evidence_start": 0,
-                    "evidence_end": 10,
-                    "confidence": 0.88,
+                    "s": "e1",
+                    "p": "appears_in",
+                    "o": "scene",
+                    "unit": _short_id(session, scene.id, action.id),
+                    "start": 0,
+                    "end": 10,
+                    "conf": 0.88,
                 },
                 {
-                    "subject_kind": "scene",
-                    "subject_local_id": "scene",
-                    "predicate": "occurs_at",
-                    "object_kind": "entity",
-                    "object_local_id": "e2",
-                    "source_unit_id": str(action.id),
-                    "confidence": 0.9,
+                    "s": "scene",
+                    "p": "occurs_at",
+                    "o": "e2",
+                    "unit": _short_id(session, scene.id, action.id),
+                    "conf": 0.9,
                 },
             ],
         )
@@ -406,9 +400,11 @@ class TestWritingTheGraph:
 
         assert outcome.status == "completed"
         assert outcome.entities_written == 2
-        assert outcome.assertions_written == 2
+        # The model's two edges plus the pre-pass's occurs_at; the model's
+        # location resolves to the same row the pre-pass wrote.
+        assert outcome.assertions_written == 3
         assert session.scalar(select(func.count()).select_from(Entity)) == 2
-        assert session.scalar(select(func.count()).select_from(Assertion)) == 2
+        assert session.scalar(select(func.count()).select_from(Assertion)) == 3
         aliases = set(session.scalars(select(EntityAlias.normalized_alias)))
         assert {"blue sedan", "sedan"} <= aliases
 
@@ -427,28 +423,31 @@ class TestWritingTheGraph:
                 _reply(
                     entities=[
                         {
-                            "local_id": "e1",
-                            "entity_type": "transportation",
-                            "canonical_name": "THE BLUE SEDAN",
-                            "confidence": 0.9,
+                            "id": "e1",
+                            "type": "transportation",
+                            "name": "THE BLUE SEDAN",
+                            "conf": 0.9,
                         }
                     ],
                     assertions=[
                         {
-                            "subject_kind": "entity",
-                            "subject_local_id": "e1",
-                            "predicate": "appears_in",
-                            "object_kind": "scene",
-                            "object_local_id": "scene",
-                            "source_unit_id": str(units[0].id),
-                            "confidence": 0.9,
+                            "s": "e1",
+                            "p": "appears_in",
+                            "o": "scene",
+                            "unit": _short_id(session, job.scene_id, units[0].id),
+                            "conf": 0.9,
                         }
                     ],
                 ),
             )
             extract_scene(session, job, provider)
 
-        assert session.scalar(select(func.count()).select_from(Entity)) == 1
+        transportation = session.scalar(
+            select(func.count())
+            .select_from(Entity)
+            .where(Entity.entity_type == "transportation")
+        )
+        assert transportation == 1
 
     def test_a_duplicate_edge_from_one_unit_is_skipped_not_fatal(
         self, session, script, tmp_path
@@ -456,21 +455,19 @@ class TestWritingTheGraph:
         scene = script.scenes[13]
         units = _units_of(session, scene.id)
         edge = {
-            "subject_kind": "entity",
-            "subject_local_id": "e1",
-            "predicate": "appears_in",
-            "object_kind": "scene",
-            "object_local_id": "scene",
-            "source_unit_id": str(units[0].id),
-            "confidence": 0.9,
+            "s": "e1",
+            "p": "appears_in",
+            "o": "scene",
+            "unit": _short_id(session, scene.id, units[0].id),
+            "conf": 0.9,
         }
         reply = _reply(
             entities=[
                 {
-                    "local_id": "e1",
-                    "entity_type": "prop",
-                    "canonical_name": "Pallet jack",
-                    "confidence": 0.9,
+                    "id": "e1",
+                    "type": "prop",
+                    "name": "Pallet jack",
+                    "conf": 0.9,
                 }
             ],
             assertions=[edge, dict(edge)],
@@ -485,7 +482,15 @@ class TestWritingTheGraph:
         )
         outcome = extract_scene(session, job, provider)
         assert outcome.status == "completed"
-        assert outcome.assertions_written == 1
+        # One model edge survives the duplicate; the pre-pass wrote the
+        # scene's occurs_at beside it.
+        assert outcome.assertions_written == 2
+        model_edges = session.scalar(
+            select(func.count())
+            .select_from(Assertion)
+            .where(Assertion.provenance == "model")
+        )
+        assert model_edges == 1
 
 
 class TestResumeAndCache:
@@ -555,7 +560,7 @@ class TestPrompt:
 
 
 class TestAttributes:
-    """extract.v4: entities carry evidence-backed attributes."""
+    """extract.v5: entities carry evidence-backed attributes."""
 
     def _reply_with_attributes(self, session, scene, attributes) -> str:
         units = _units_of(session, scene.id)
@@ -563,13 +568,13 @@ class TestAttributes:
         return _reply(
             entities=[
                 {
-                    "local_id": "e1",
-                    "entity_type": "transportation",
-                    "canonical_name": "Blue sedan",
-                    "confidence": 0.91,
-                    "attributes": [
-                        {**attribute, "source_unit_id": str(action.id)}
-                        if "source_unit_id" not in attribute
+                    "id": "e1",
+                    "type": "transportation",
+                    "name": "Blue sedan",
+                    "conf": 0.91,
+                    "attrs": [
+                        {**attribute, "unit": _short_id(session, scene.id, action.id)}
+                        if "unit" not in attribute
                         else attribute
                         for attribute in attributes
                     ],
@@ -577,13 +582,11 @@ class TestAttributes:
             ],
             assertions=[
                 {
-                    "subject_kind": "entity",
-                    "subject_local_id": "e1",
-                    "predicate": "appears_in",
-                    "object_kind": "scene",
-                    "object_local_id": "scene",
-                    "source_unit_id": str(action.id),
-                    "confidence": 0.88,
+                    "s": "e1",
+                    "p": "appears_in",
+                    "o": "scene",
+                    "unit": _short_id(session, scene.id, action.id),
+                    "conf": 0.88,
                 }
             ],
         )
@@ -612,8 +615,8 @@ class TestAttributes:
         reply = self._reply_with_attributes(
             session,
             scene,
-            [{"key": "color", "value": "blue", "confidence": 0.9,
-              "evidence_start": 0, "evidence_end": 4}],
+            [{"k": "color", "v": "blue", "conf": 0.9,
+              "start": 0, "end": 4}],
         )
         outcome = self._extract(session, script, tmp_path, reply)
         assert outcome.attributes_written == 1
@@ -627,7 +630,7 @@ class TestAttributes:
     def test_a_key_is_normalized_before_writing(self, session, script, tmp_path):
         scene = script.scenes[13]
         reply = self._reply_with_attributes(
-            session, scene, [{"key": "  Color ", "value": "blue", "confidence": 0.9}]
+            session, scene, [{"k": "  Color ", "v": "blue", "conf": 0.9}]
         )
         self._extract(session, script, tmp_path, reply)
         assert self._rows(session)[0].key == "color"
@@ -639,8 +642,8 @@ class TestAttributes:
         reply = self._reply_with_attributes(
             session,
             scene,
-            [{"key": "color", "value": "blue", "confidence": 0.9,
-              "source_unit_id": "99999999-9999-9999-9999-999999999999"}],
+            [{"k": "color", "v": "blue", "conf": 0.9,
+              "unit": "99999999-9999-9999-9999-999999999999"}],
         )
         outcome = self._extract(session, script, tmp_path, reply)
         assert outcome.attributes_written == 0
@@ -649,7 +652,7 @@ class TestAttributes:
     def test_an_attribute_without_a_value_is_dropped(self, session, script, tmp_path):
         scene = script.scenes[13]
         reply = self._reply_with_attributes(
-            session, scene, [{"key": "color", "value": "  ", "confidence": 0.9}]
+            session, scene, [{"k": "color", "v": "  ", "conf": 0.9}]
         )
         outcome = self._extract(session, script, tmp_path, reply)
         assert outcome.attributes_written == 0
@@ -660,8 +663,8 @@ class TestAttributes:
             session,
             scene,
             [
-                {"key": "color", "value": "blue", "confidence": 0.9},
-                {"key": "Color", "value": "grey", "confidence": 0.9},
+                {"k": "color", "v": "blue", "conf": 0.9},
+                {"k": "Color", "v": "grey", "conf": 0.9},
             ],
         )
         outcome = self._extract(session, script, tmp_path, reply)
@@ -698,7 +701,7 @@ class TestAttributes:
         session.flush()
 
         reply = self._reply_with_attributes(
-            session, scene, [{"key": "color", "value": "grey", "confidence": 0.9}]
+            session, scene, [{"k": "color", "v": "grey", "conf": 0.9}]
         )
         outcome = self._extract(session, script, tmp_path, reply)
         assert outcome.attributes_written == 0
@@ -706,12 +709,12 @@ class TestAttributes:
         assert len(rows) == 1
         assert rows[0].value == "blue"
 
-    def test_the_schema_and_prompt_version_advertise_v4(self):
+    def test_the_schema_and_prompt_version_advertise_v5(self):
         from ripple.extraction.prompt import OUTPUT_SCHEMA
 
-        assert PROMPT_VERSION == "extract.v4"
+        assert PROMPT_VERSION == "extract.v5"
         entity_schema = OUTPUT_SCHEMA["properties"]["entities"]["items"]
-        assert "attributes" in entity_schema["properties"]
+        assert "attrs" in entity_schema["properties"]
 
 
 class TestDeadModelMarking:
@@ -821,8 +824,11 @@ class TestExtractionFallback:
         }
         assert outcomes[MODEL] == "provider_error"
         assert outcomes["fixture-mid"] == "ok"
-        # The written rows carry the model that answered.
-        row = session.scalars(select(Assertion)).first()
+        # The written model rows carry the model that answered; the
+        # pre-pass rows beside them carry none.
+        row = session.scalars(
+            select(Assertion).where(Assertion.provenance == "model")
+        ).first()
         assert row.model_id == "fixture-mid"
 
     def test_no_fallback_keeps_the_failure(self, session, script):
@@ -846,24 +852,163 @@ class TestExtractionFallback:
         return _reply(
             entities=[
                 {
-                    "local_id": "e1",
-                    "entity_type": "transportation",
-                    "canonical_name": "Blue sedan",
-                    "confidence": 0.9,
+                    "id": "e1",
+                    "type": "transportation",
+                    "name": "Blue sedan",
+                    "conf": 0.9,
                 }
             ],
             assertions=[
                 {
-                    "subject_kind": "entity",
-                    "subject_local_id": "e1",
-                    "predicate": "appears_in",
-                    "object_kind": "scene",
-                    "object_local_id": "scene",
-                    "source_unit_id": str(action.id),
-                    "confidence": 0.9,
+                    "s": "e1",
+                    "p": "appears_in",
+                    "o": "scene",
+                    "unit": _short_id(session, scene.id, action.id),
+                    "conf": 0.9,
                 }
             ],
         )
+
+
+class TestExtractionEscalation:
+    """A reply that fails validation escalates to the fallback model."""
+
+    class _ByModelProvider:
+        name = "fixture"
+        credential_variable = "FIXTURE_API_KEY"
+
+        def __init__(self, replies, finish_reasons=None):
+            self.replies = replies
+            self.finish_reasons = finish_reasons or {}
+            self.calls_by_model = {}
+
+        def is_configured(self):
+            return True
+
+        def list_models(self):
+            return []
+
+        def generate(self, model_id, prompt, **kwargs):
+            from ripple.llm.base import GenerationResult
+
+            self.calls_by_model[model_id] = (
+                self.calls_by_model.get(model_id, 0) + 1
+            )
+            return GenerationResult(
+                text=self.replies[model_id],
+                model_id=model_id,
+                provider=self.name,
+                finish_reason=self.finish_reasons.get(model_id),
+            )
+
+    def _job_for(self, session, script, scene):
+        run = start_run(session, script.id, MODEL)
+        return session.scalar(
+            select(SceneExtraction).where(
+                SceneExtraction.extraction_run_id == run.id,
+                SceneExtraction.scene_id == scene.id,
+            )
+        )
+
+    def _good_reply(self, session, scene) -> str:
+        units = _units_of(session, scene.id)
+        action = next(u for u in units if u.unit_type == "action")
+        return _reply(
+            entities=[
+                {
+                    "id": "e1",
+                    "type": "prop",
+                    "name": "Clipboard",
+                    "conf": 0.9,
+                }
+            ],
+            assertions=[
+                {
+                    "s": "e1",
+                    "p": "appears_in",
+                    "o": "scene",
+                    "unit": _short_id(session, scene.id, action.id),
+                    "conf": 0.9,
+                }
+            ],
+        )
+
+    def test_a_malformed_reply_escalates_to_the_fallback(self, session, script):
+        from ripple.db.models import ModelCall
+        from ripple.db.repository import set_fallback_model
+
+        set_fallback_model(session, "fixture", "fixture-mid")
+        scene = script.scenes[13]
+        provider = self._ByModelProvider(
+            {
+                MODEL: "this is not json",
+                "fixture-mid": self._good_reply(session, scene),
+            }
+        )
+        outcome = extract_scene(
+            session, self._job_for(session, script, scene), provider
+        )
+        assert outcome.status == "completed"
+        assert provider.calls_by_model == {MODEL: 1, "fixture-mid": 1}
+        outcomes = {
+            call.model_id: call.outcome
+            for call in session.scalars(select(ModelCall))
+        }
+        assert outcomes[MODEL] == "malformed"
+        assert outcomes["fixture-mid"] == "ok"
+
+    def test_a_truncated_reply_escalates_to_the_fallback(self, session, script):
+        from ripple.db.repository import set_fallback_model
+
+        set_fallback_model(session, "fixture", "fixture-mid")
+        scene = script.scenes[13]
+        provider = self._ByModelProvider(
+            {
+                MODEL: '{"entities": [',
+                "fixture-mid": self._good_reply(session, scene),
+            },
+            finish_reasons={MODEL: "max_tokens"},
+        )
+        outcome = extract_scene(
+            session, self._job_for(session, script, scene), provider
+        )
+        assert outcome.status == "completed"
+        assert provider.calls_by_model == {MODEL: 1, "fixture-mid": 1}
+
+    def test_an_empty_answer_on_a_scene_with_content_escalates(
+        self, session, script
+    ):
+        from ripple.db.models import ModelCall
+        from ripple.db.repository import set_fallback_model
+
+        set_fallback_model(session, "fixture", "fixture-mid")
+        scene = script.scenes[13]
+        provider = self._ByModelProvider(
+            {
+                MODEL: _reply(entities=[], assertions=[]),
+                "fixture-mid": self._good_reply(session, scene),
+            }
+        )
+        outcome = extract_scene(
+            session, self._job_for(session, script, scene), provider
+        )
+        assert outcome.status == "completed"
+        assert outcome.assertions_written == 2
+        outcomes = {
+            call.model_id: call.outcome
+            for call in session.scalars(select(ModelCall))
+        }
+        assert outcomes[MODEL] == "incomplete"
+
+    def test_no_fallback_keeps_the_malformed_failure(self, session, script):
+        scene = script.scenes[13]
+        provider = self._ByModelProvider({MODEL: "this is not json"})
+        outcome = extract_scene(
+            session, self._job_for(session, script, scene), provider
+        )
+        assert outcome.status in ("pending", "failed")
+        assert outcome.error_code == "malformed_response"
+        assert list(provider.calls_by_model) == [MODEL]
 
 
 class TestEvidenceOffsetPairs:
@@ -872,21 +1017,19 @@ class TestEvidenceOffsetPairs:
             _reply(
                 entities=[
                     {
-                        "local_id": "e1",
-                        "entity_type": "prop",
-                        "canonical_name": "Brass key",
-                        "confidence": 0.9,
+                        "id": "e1",
+                        "type": "prop",
+                        "name": "Brass key",
+                        "conf": 0.9,
                     }
                 ],
                 assertions=[
                     {
-                        "subject_kind": "entity",
-                        "subject_local_id": "e1",
-                        "predicate": "appears_in",
-                        "object_kind": "scene",
-                        "object_local_id": "scene",
-                        "source_unit_id": "u1",
-                        "confidence": 0.9,
+                        "s": "e1",
+                        "p": "appears_in",
+                        "o": "scene",
+                        "unit": "u1",
+                        "conf": 0.9,
                         **offsets,
                     }
                 ],
@@ -897,18 +1040,18 @@ class TestEvidenceOffsetPairs:
     def test_a_half_offset_pair_is_dropped_whole(self):
         """Regression: (None, 42) used to survive, and slicing with a None
         side silently read from the start of the unit."""
-        report = self._one_assertion(evidence_end=42)
+        report = self._one_assertion(end=42)
         assertion = report.assertions[0]
         assert assertion.evidence_start is None
         assert assertion.evidence_end is None
 
     def test_a_full_pair_survives(self):
-        report = self._one_assertion(evidence_start=4, evidence_end=13)
+        report = self._one_assertion(start=4, end=13)
         assertion = report.assertions[0]
         assert (assertion.evidence_start, assertion.evidence_end) == (4, 13)
 
     def test_a_reversed_pair_is_dropped_whole(self):
-        report = self._one_assertion(evidence_start=13, evidence_end=4)
+        report = self._one_assertion(start=13, end=4)
         assertion = report.assertions[0]
         assert assertion.evidence_start is None
         assert assertion.evidence_end is None

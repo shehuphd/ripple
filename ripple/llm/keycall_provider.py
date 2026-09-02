@@ -17,6 +17,7 @@ from typing import Any
 from keycall import KeyCall, KeyCallError, Message, TextInput
 
 from ripple.llm.base import (
+    DEFAULT_REASONING_EFFORT,
     GenerationResult,
     ModelInfo,
     ProviderError,
@@ -94,6 +95,7 @@ class KeycallProvider:
         system: str | None = None,
         max_output_tokens: int = 2048,
         json_schema: dict[str, Any] | None = None,
+        reasoning_effort: str | None = DEFAULT_REASONING_EFFORT,
     ) -> GenerationResult:
         """Generate text, with native structured output when a schema is given."""
         messages = []
@@ -108,6 +110,7 @@ class KeycallProvider:
                     messages=messages,
                     max_output_tokens=max_output_tokens,
                     response_schema=json_schema,
+                    reasoning_effort=reasoning_effort,
                 )
             except KeyCallError as error:
                 raise _to_provider_error(error) from error

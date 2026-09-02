@@ -47,6 +47,11 @@ from ripple.db.repository import (
     get_fallback_model,
     mark_model_unavailable,
 )
+from ripple.extraction.prepass import (
+    RULE_CONFIDENCE,
+    ProvidedEntity,
+    provided_for_scene,
+)
 from ripple.extraction.prompt import (
     OUTPUT_SCHEMA,
     PROMPT_VERSION,
@@ -125,6 +130,15 @@ def _scene_units(session: Session, scene_id) -> list[tuple[str, str, str]]:
         .order_by(ScriptUnit.sequence_index)
     )
     return [(str(unit.id), unit.unit_type, unit.current_text) for unit in rows]
+
+
+def _has_content(units: list[tuple[str, str, str]]) -> bool:
+    """Whether the scene has any body text an extraction could read."""
+    return any(
+        text.strip()
+        for _, unit_type, text in units
+        if unit_type != "scene_heading"
+    )
 
 
 def pending_scene_count(
@@ -315,11 +329,35 @@ def extract_scene(
         if not units:
             return _complete(session, job, run, ValidationReport(), trace, empty=True)
 
-        prompt = build_prompt(scene.heading, scene.display_scene_number, units)
+        # What code can read, code records: the pre-pass derives the speaking
+        # cast and the location, and the prompt hands the model their ids and
+        # short unit ids instead of UUIDs. Repeating a 36-character UUID on
+        # every cited item was a measurable share of every answer's tokens.
+        provided = provided_for_scene(scene.heading, units)
+        unit_by_short = {
+            f"u{index + 1}": unit_id
+            for index, (unit_id, _, _) in enumerate(units)
+        }
+        prompt_units = [
+            (short, unit_type, text)
+            for short, (_, unit_type, text) in zip(
+                unit_by_short, units, strict=True
+            )
+        ]
+        unit_texts = {short: text for short, _, text in prompt_units}
+        prompt = build_prompt(
+            scene.heading,
+            scene.display_scene_number,
+            prompt_units,
+            provided=[(p.local_id, p.entity_type, p.name) for p in provided],
+        )
         job.attempt_count += 1
 
-        # The main model, then the configured fallback when the main refuses
-        # for an availability reason. Each attempt writes its own audit row.
+        # The main model, then the configured fallback. The fallback answers
+        # when the main refuses for an availability reason, and also when the
+        # main's reply fails validation: a cheap main model with an escalation
+        # path costs less over a whole build than running the stronger model
+        # everywhere. Each attempt writes its own audit row.
         candidates = [job.model_id]
         _, fallback = get_fallback_model(session)
         if fallback and fallback != job.model_id:
@@ -327,6 +365,7 @@ def extract_scene(
 
         result = None
         call = None
+        report = None
         for candidate in candidates:
             call = ModelCall(
                 script_id=run.script_id,
@@ -373,40 +412,61 @@ def extract_scene(
                     continue
                 return _fail(session, job, run, trace, error.code)
             clear_model_unavailable(session, provider.name, candidate)
-            break
 
-        call.response_text = result.text
-        call.input_tokens = result.input_tokens
-        call.output_tokens = result.output_tokens
-        call.reasoning_tokens = getattr(result, "reasoning_tokens", None)
-        call.duration_ms = int((time.perf_counter() - call_started) * 1000)
+            call.response_text = result.text
+            call.input_tokens = result.input_tokens
+            call.output_tokens = result.output_tokens
+            call.reasoning_tokens = getattr(result, "reasoning_tokens", None)
+            call.duration_ms = int((time.perf_counter() - call_started) * 1000)
 
-        model_event(
-            purpose="extract",
-            model_id=call.model_id,
-            request=prompt,
-            response=result.text,
-            result=result,
-            status="failed" if result.truncated else "completed",
-            duration_ms=call.duration_ms,
-        )
-        if result.truncated:
-            call.outcome = "truncated"
-            session.add(call)
-            session.flush()
-            return _fail(session, job, run, trace, "output_truncated")
-
-        try:
-            report = validate_response(
-                result.text, {unit_id for unit_id, _, _ in units}
+            model_event(
+                purpose="extract",
+                model_id=call.model_id,
+                request=prompt,
+                response=result.text,
+                result=result,
+                status="failed" if result.truncated else "completed",
+                duration_ms=call.duration_ms,
             )
-        except MalformedResponse as error:
-            logger.info("scene %s: %s", job.scene_id, error)
-            call.outcome = "malformed"
-            call.error_message = str(error)
-            session.add(call)
-            session.flush()
-            return _fail(session, job, run, trace, "malformed_response")
+            escalate = candidate != candidates[-1]
+            if result.truncated:
+                call.outcome = "truncated"
+                session.add(call)
+                session.flush()
+                if escalate:
+                    logger.info("extraction escalating after truncation")
+                    continue
+                return _fail(session, job, run, trace, "output_truncated")
+
+            try:
+                report = validate_response(
+                    result.text,
+                    set(unit_by_short),
+                    provided={
+                        p.local_id: (p.entity_type, p.name) for p in provided
+                    },
+                    unit_texts=unit_texts,
+                )
+            except MalformedResponse as error:
+                logger.info("scene %s: %s", job.scene_id, error)
+                call.outcome = "malformed"
+                call.error_message = str(error)
+                session.add(call)
+                session.flush()
+                if escalate:
+                    logger.info("extraction escalating after a malformed reply")
+                    continue
+                return _fail(session, job, run, trace, "malformed_response")
+
+            if escalate and not report.entities and _has_content(units):
+                # A scene with content and an answer naming nothing in it is
+                # a miss the schema cannot catch; the stronger model reads it.
+                call.outcome = "incomplete"
+                session.add(call)
+                session.flush()
+                logger.info("extraction escalating after an empty answer")
+                continue
+            break
 
         call.validation_json = {
             "entities": len(report.entities),
@@ -427,7 +487,21 @@ def extract_scene(
                 "rejection_codes": sorted(set(report.rejection_codes)),
             },
         )
-        return _complete(session, job, run, report, trace, model_used=call.model_id)
+        # The database cites units by UUID; the model cited the short ids.
+        for assertion in report.assertions:
+            assertion.source_unit_id = unit_by_short[assertion.source_unit_id]
+        for entity in report.entities:
+            for attribute in entity.attributes:
+                attribute.source_unit_id = unit_by_short[attribute.source_unit_id]
+        return _complete(
+            session,
+            job,
+            run,
+            report,
+            trace,
+            model_used=call.model_id,
+            provided=provided,
+        )
 
 
 def _reuse_cached(session: Session, job: SceneExtraction) -> SceneOutcome | None:
@@ -488,14 +562,34 @@ def _complete(
     trace: ActionTrace,
     empty: bool = False,
     model_used: str | None = None,
+    provided: list[ProvidedEntity] | None = None,
 ) -> SceneOutcome:
-    """Write the validated graph rows and mark the job completed."""
+    """Write the validated graph rows and mark the job completed.
+
+    The pre-pass's cast and location rows are written first, so a model
+    reply referencing a provided id resolves against a row that exists.
+    """
     resolved: dict[str, Entity] = {}
+    written = 0
+    for rule_entity in provided or []:
+        entity = _resolve_entity(
+            session,
+            run.script_id,
+            ValidatedEntity(
+                local_id=rule_entity.local_id,
+                entity_type=rule_entity.entity_type,
+                canonical_name=rule_entity.name,
+                confidence=RULE_CONFIDENCE,
+            ),
+        )
+        resolved[rule_entity.local_id] = entity
+        if _write_rule_assertion(session, run, job, rule_entity, entity):
+            written += 1
+
     for proposed in report.entities:
         resolved[proposed.local_id] = _resolve_entity(session, run.script_id, proposed)
 
     model_used = model_used or job.model_id
-    written = 0
     for proposed in report.assertions:
         if _write_assertion(session, run, job, proposed, resolved, model_used):
             written += 1
@@ -530,7 +624,9 @@ def _complete(
     return SceneOutcome(
         scene_id=str(job.scene_id),
         status="completed",
-        entities_written=len(resolved),
+        # Distinct rows, not local ids: the model referencing a provided
+        # entity under its own id must not count one row twice.
+        entities_written=len({entity.id for entity in resolved.values()}),
         assertions_written=written,
         attributes_written=attributes_written,
         rejected=len(report.rejected),
@@ -592,7 +688,16 @@ def _resolve_entity(session: Session, script_id, proposed: ValidatedEntity) -> E
     elif proposed.description and not entity.description:
         entity.description = proposed.description
 
-    known = {alias.normalized_alias for alias in entity.aliases}
+    # Queried, not read from the relationship: aliases added by an earlier
+    # resolve in this session (the pre-pass, or another scene) may not be in
+    # the loaded collection yet, and a stale set re-inserts a duplicate.
+    known = set(
+        session.scalars(
+            select(EntityAlias.normalized_alias).where(
+                EntityAlias.entity_id == entity.id
+            )
+        )
+    )
     for alias in [*proposed.aliases, proposed.canonical_name]:
         normalized = normalize(alias)
         if not normalized or normalized in known:
@@ -608,6 +713,45 @@ def _resolve_entity(session: Session, script_id, proposed: ValidatedEntity) -> E
         known.add(normalized)
     session.flush()
     return entity
+
+
+def _write_rule_assertion(
+    session: Session,
+    run: ExtractionRun,
+    job: SceneExtraction,
+    rule_entity: ProvidedEntity,
+    entity: Entity,
+) -> bool:
+    """Write one pre-pass edge: appears_in for cast, occurs_at for location.
+
+    Provenance "system" marks the row as rule-derived; no model saw it and
+    no model is credited. The dedupe index absorbs a re-extraction's copy.
+    """
+    scene_first = rule_entity.predicate == "occurs_at"
+    assertion = Assertion(
+        script_id=run.script_id,
+        subject_kind="scene" if scene_first else "entity",
+        subject_entity_id=None if scene_first else entity.id,
+        subject_scene_id=job.scene_id if scene_first else None,
+        predicate=rule_entity.predicate,
+        object_kind="entity" if scene_first else "scene",
+        object_entity_id=entity.id if scene_first else None,
+        object_scene_id=None if scene_first else job.scene_id,
+        source_unit_id=uuid_module.UUID(rule_entity.source_unit_id),
+        extraction_run_id=run.id,
+        evidence_start=rule_entity.evidence_start,
+        evidence_end=rule_entity.evidence_end,
+        confidence=RULE_CONFIDENCE,
+        provenance="system",
+        prompt_version=job.prompt_version,
+    )
+    try:
+        with session.begin_nested():
+            session.add(assertion)
+            session.flush()
+    except IntegrityError:
+        return False
+    return True
 
 
 def _write_assertion(

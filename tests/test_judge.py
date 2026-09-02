@@ -184,8 +184,8 @@ class TestNewItems:
         report = validate_judgement(
             reply(
                 new_attributes=[
-                    {"entity_local_id": "e1", "key": "color", "value": "red",
-                     "confidence": 0.2, "source_unit_id": UNIT}
+                    {"e": "e1", "k": "color", "v": "red",
+                     "conf": 0.2, "unit": UNIT}
                 ]
             ),
             {},
@@ -199,9 +199,9 @@ class TestNewItems:
         report = validate_judgement(
             reply(
                 new_attributes=[
-                    {"entity_local_id": "e1", "key": "color", "value": "red",
-                     "confidence": 0.9,
-                     "source_unit_id": "99999999-9999-9999-9999-999999999999"}
+                    {"e": "e1", "k": "color", "v": "red",
+                     "conf": 0.9,
+                     "unit": "99999999-9999-9999-9999-999999999999"}
                 ]
             ),
             {},
@@ -215,8 +215,8 @@ class TestNewItems:
         report = validate_judgement(
             reply(
                 new_attributes=[
-                    {"entity_local_id": "e1", "key": "color", "value": "red",
-                     "confidence": 0.9, "source_unit_id": UNIT}
+                    {"e": "e1", "k": "color", "v": "red",
+                     "conf": 0.9, "unit": UNIT}
                 ]
             ),
             {},

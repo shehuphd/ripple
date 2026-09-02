@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-02 08:03:27 UTC
+Last updated: 2026-09-02 08:41:28 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
 
@@ -62,6 +62,7 @@ Every file in the repository and what it does. Directories the application write
 | File | Purpose |
 |---|---|
 | `extraction/__init__.py` | Package marker. |
+| `extraction/prepass.py` | Deterministic pre-pass: cast from cues and the location from the heading, written without a model. |
 | `extraction/prompt.py` | Per-scene prompt, `OUTPUT_SCHEMA`, and the cache-key fingerprint. |
 | `extraction/service.py` | Resumable per-scene extraction runs with atomic scene claiming. |
 | `extraction/validate.py` | Schema and predicate-rule validation of model output before any row is written. |
@@ -157,6 +158,7 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_llm.py` | Provider contract and the KeyCall adapter. |
 | `tests/test_models.py` | Schema constraints and the outcome-vocabulary migration. |
 | `tests/test_pricing.py` | Cost lookup, reasoning at the output rate, and honest unknowns. |
+| `tests/test_prepass.py` | The deterministic pre-pass and the validator's provided-id and span-bound rules. |
 | `tests/test_preview.py` | The judgement engine end to end against the fixture provider. |
 | `tests/test_settings.py` | Credential validation and model selection. |
 | `tests/test_spend.py` | Budget gate and refusal auditing. |

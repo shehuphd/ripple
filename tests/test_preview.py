@@ -455,6 +455,46 @@ class TestDeadModelMarking:
         preview_changes(session, edit_for(world), FakeJudge(), "fake-judge")
         assert "fake-judge" not in unavailable_models(session, "google")
 
+    def test_a_dead_model_is_marked_by_a_failed_synthesis(self, session):
+        from ripple.db.repository import unavailable_models
+        from ripple.graph.diff import GraphDiff
+        from ripple.services.synthesizer import synthesize
+
+        judge = FakeJudge(
+            errors=[ProviderError("model_not_available", "dead model")]
+        )
+        synthesis = synthesize(GraphDiff(), [], judge, "fake-judge", session=session)
+        assert not synthesis.generated
+        assert "fake-judge" in unavailable_models(session, "google")
+
+    def test_a_successful_synthesis_clears_the_mark(self, session):
+        from ripple.db.repository import mark_model_unavailable, unavailable_models
+        from ripple.graph.diff import GraphDiff
+        from ripple.services.synthesizer import synthesize
+
+        class PlainSpeaker:
+            name = "google"
+            credential_variable = "GOOGLE_API_KEY"
+
+            def is_configured(self):
+                return True
+
+            def list_models(self):
+                return []
+
+            def generate(self, model_id, prompt, **kwargs):
+                return GenerationResult(
+                    text="A summary.",
+                    model_id=model_id,
+                    provider=self.name,
+                    input_tokens=10,
+                    output_tokens=5,
+                )
+
+        mark_model_unavailable(session, "google", "fake-judge")
+        synthesize(GraphDiff(), [], PlainSpeaker(), "fake-judge", session=session)
+        assert "fake-judge" not in unavailable_models(session, "google")
+
 
 class OneDeadModel:
     """A provider where one named model is down and every other one answers."""
@@ -654,21 +694,19 @@ class NewEntityJudge(FakeJudge):
                     ],
                     "new_entities": [
                         {
-                            "local_id": "e1",
-                            "entity_type": "prop",
-                            "canonical_name": "The Brass Key",
-                            "confidence": 0.9,
+                            "id": "e1",
+                            "type": "prop",
+                            "name": "The Brass Key",
+                            "conf": 0.9,
                         }
                     ],
                     "new_assertions": [
                         {
-                            "subject_kind": "entity",
-                            "subject_local_id": "e1",
-                            "predicate": "appears_in",
-                            "object_kind": "scene",
-                            "object_local_id": "scene",
-                            "source_unit_id": unit_id,
-                            "confidence": 0.9,
+                            "s": "e1",
+                            "p": "appears_in",
+                            "o": "scene",
+                            "unit": unit_id,
+                            "conf": 0.9,
                         }
                     ],
                     "new_attributes": [],

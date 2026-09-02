@@ -134,6 +134,12 @@ NON_TEXT_MARKERS = (
     "aqa",
 )
 
+# The thinking level every call carries unless a caller overrides it.
+# Extraction and judgement are transcription-shaped work; verified live
+# (2026-09-02, gemini-flash-lite-latest) that Gemini accepts "medium" and
+# "low" as thinkingLevel and thought-token counts follow the level.
+DEFAULT_REASONING_EFFORT = "medium"
+
 # Identifier substrings that suggest a cost tier.
 CHEAP_MARKERS = ("flash-lite", "mini", "nano", "haiku", "lite", "flash", "small")
 STRONG_MARKERS = ("opus", "ultra", "pro", "-o1", "o3", "reasoner", "thinking")
@@ -186,5 +192,13 @@ class LLMProvider(Protocol):
         system: str | None = None,
         max_output_tokens: int = 2048,
         json_schema: dict[str, Any] | None = None,
+        reasoning_effort: str | None = DEFAULT_REASONING_EFFORT,
     ) -> GenerationResult:
-        """Generate text, optionally constrained to a JSON schema."""
+        """Generate text, optionally constrained to a JSON schema.
+
+        `reasoning_effort` caps how much a model thinks before answering.
+        Hidden reasoning bills at the output rate, and on the default
+        (provider-chosen) budget it was the second-largest cost of a graph
+        build, so every call states a level; None restores the provider's
+        default for a caller that wants the model to think at length.
+        """

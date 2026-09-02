@@ -44,7 +44,7 @@ A rejected import changes nothing. Deleting a script first shows a deletion prev
 
 Open **Settings** from the sidebar. It has three tabs.
 
-**API keys** holds the provider credential and the model choice. Paste a Google AI Studio key and press Validate; the key is checked against the provider's own models endpoint, never against a guessed format, so any key Google issues works. A valid key is stored in `data/secrets.env` (owner-only file permissions), never in the database and never sent back to the browser. Then pick a **main model** and, optionally, a **fallback model**. When the main model refuses for an availability reason (dead on this key, an outage, a rate limit, a timeout), the same call runs once against the fallback. A model recorded as unavailable on your key is disabled in the picker until a later call succeeds on it.
+**API keys** holds the provider credential and the model choice. Paste a Google AI Studio key and press Validate; the key is checked against the provider's own models endpoint, never against a guessed format, so any key Google issues works. A valid key is stored in `data/secrets.env` (owner-only file permissions), never in the database and never sent back to the browser. Then pick a **main model** and, optionally, a **fallback model**. When the main model refuses for an availability reason (dead on this key, an outage, a rate limit, a timeout), the same call runs once against the fallback; during extraction the fallback also answers when the main model's reply fails validation (malformed, truncated, or naming nothing in a scene with content), so a cheap main model with a stronger fallback is the recommended pairing. A model recorded as unavailable on your key is disabled in the picker until a later call succeeds on it.
 
 **Spend** shows the recorded model spend (calls, tokens in, tokens out, by purpose) and takes one number: a cap on total recorded tokens. When the recorded total reaches the cap, every model call refuses before contacting the provider and tells you so. Raising or clearing the cap reopens the gate.
 
@@ -52,7 +52,7 @@ Open **Settings** from the sidebar. It has three tabs.
 
 ## Building a graph
 
-Open a script and press **Build graph**. Extraction runs one scene per model call, in the browser's control: each scene commits independently, so a failure late in a run keeps everything before it, and re-running resumes from the unfinished scenes instead of restarting. A scene already extracted from identical input under the same prompt and model is served from the cache with no call and no spend.
+Open a script and press **Build graph**. Extraction runs one scene per model call, in the browser's control: each scene commits independently, so a failure late in a run keeps everything before it, and re-running resumes from the unfinished scenes instead of restarting. A scene already extracted from identical input under the same prompt and model is served from the cache with no call and no spend. Before the model reads a scene, a deterministic pre-pass records what code can parse: the speaking cast from dialogue cues and the location from the heading, each citing its line, at no model cost.
 
 A run reports its spend as it goes: the progress counter and the finished label carry the tokens used and, for a model the pricing registry knows, the dollar cost (from the bundled `rates` snapshot). A run served from cache reports nothing spent.
 

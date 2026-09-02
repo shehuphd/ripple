@@ -27,7 +27,7 @@ from ripple.extraction.validate import (
 )
 
 # Bumped with any wording change: the audit rows record which prompt spoke.
-JUDGE_PROMPT_VERSION = "judge.v4"
+JUDGE_PROMPT_VERSION = "judge.v5"
 
 VERDICTS = ("holds", "changed", "removed")
 
@@ -73,18 +73,20 @@ JUDGE_SCHEMA: dict[str, Any] = {
                 },
             },
         },
+        # New items speak the extraction output format (extract.v5): short
+        # keys, and the endpoint kinds inferred from the ids.
         "new_entities": {
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["local_id", "entity_type", "canonical_name", "confidence"],
+                "required": ["id", "type", "name", "conf"],
                 "properties": {
-                    "local_id": {"type": "string"},
-                    "entity_type": {"type": "string", "enum": list(ENTITY_TYPES)},
-                    "canonical_name": {"type": "string"},
+                    "id": {"type": "string"},
+                    "type": {"type": "string", "enum": list(ENTITY_TYPES)},
+                    "name": {"type": "string"},
                     "aliases": {"type": "array", "items": {"type": "string"}},
-                    "description": {"type": "string"},
-                    "confidence": {"type": "number"},
+                    "desc": {"type": "string"},
+                    "conf": {"type": "number"},
                 },
             },
         },
@@ -92,29 +94,19 @@ JUDGE_SCHEMA: dict[str, Any] = {
             "type": "array",
             "items": {
                 "type": "object",
-                "required": [
-                    "subject_kind",
-                    "subject_local_id",
-                    "predicate",
-                    "object_kind",
-                    "object_local_id",
-                    "source_unit_id",
-                    "confidence",
-                ],
+                "required": ["s", "p", "o", "unit", "conf"],
                 "properties": {
-                    "subject_kind": {"type": "string", "enum": ["entity", "scene"]},
-                    "subject_local_id": {"type": "string"},
-                    "predicate": {"type": "string", "enum": list(PREDICATES)},
-                    "object_kind": {"type": "string", "enum": ["entity", "scene"]},
-                    "object_local_id": {"type": "string"},
-                    "source_unit_id": {"type": "string"},
-                    "evidence_start": {
+                    "s": {"type": "string"},
+                    "p": {"type": "string", "enum": list(PREDICATES)},
+                    "o": {"type": "string"},
+                    "unit": {"type": "string"},
+                    "start": {
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 100000,
                     },
-                    "evidence_end": {"type": "integer", "minimum": 0, "maximum": 100000},
-                    "confidence": {"type": "number"},
+                    "end": {"type": "integer", "minimum": 0, "maximum": 100000},
+                    "conf": {"type": "number"},
                 },
             },
         },
@@ -122,19 +114,19 @@ JUDGE_SCHEMA: dict[str, Any] = {
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["entity_local_id", "key", "value", "confidence"],
+                "required": ["e", "k", "v", "conf"],
                 "properties": {
-                    "entity_local_id": {"type": "string"},
-                    "key": {"type": "string"},
-                    "value": {"type": "string"},
-                    "source_unit_id": {"type": "string"},
-                    "evidence_start": {
+                    "e": {"type": "string"},
+                    "k": {"type": "string"},
+                    "v": {"type": "string"},
+                    "unit": {"type": "string"},
+                    "start": {
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 100000,
                     },
-                    "evidence_end": {"type": "integer", "minimum": 0, "maximum": 100000},
-                    "confidence": {"type": "number"},
+                    "end": {"type": "integer", "minimum": 0, "maximum": 100000},
+                    "conf": {"type": "number"},
                 },
             },
         },
@@ -445,17 +437,17 @@ def _validate_new_items(
     for raw in reply.get("new_attributes") or []:
         if not isinstance(raw, dict):
             continue
-        key = str(raw.get("key", "")).strip()
-        value = str(raw.get("value", "")).strip()
-        local = str(raw.get("entity_local_id", ""))
-        confidence = _confidence(raw.get("confidence"))
+        key = str(raw.get("k", "")).strip()
+        value = str(raw.get("v", "")).strip()
+        local = str(raw.get("e", ""))
+        confidence = _confidence(raw.get("conf"))
         if not key or not value:
             report.rejected.append((local or "?", "attribute missing key or value"))
             continue
         if confidence is None or confidence < MINIMUM_CONFIDENCE:
             report.rejected.append((local or "?", "attribute below the floor"))
             continue
-        source = raw.get("source_unit_id")
+        source = raw.get("unit")
         if source is not None and str(source) not in edited_units:
             report.rejected.append((local or "?", "attribute cites an unshown unit"))
             continue
@@ -466,8 +458,8 @@ def _validate_new_items(
                 "key": key,
                 "value": value,
                 "source_unit_id": str(source) if source else None,
-                "evidence_start": _int_or_none(raw.get("evidence_start")),
-                "evidence_end": _int_or_none(raw.get("evidence_end")),
+                "evidence_start": _int_or_none(raw.get("start")),
+                "evidence_end": _int_or_none(raw.get("end")),
                 "confidence": confidence,
             }
         )
