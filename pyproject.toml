@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "defusedxml>=0.7.1",
     "pdf-inspector>=0.2.6",
-    "traceact==1.0.0",
+    "traceact>=1.0,<2",
     "keycall[traceact]==1.8.0",
     "rates>=0.0.4",
     "sqlalchemy>=2.0",
