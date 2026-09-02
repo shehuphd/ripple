@@ -145,3 +145,34 @@ def _no_trace_files(tmp_path, monkeypatch):
     monkeypatch.setattr(tracing, "DEFAULT_TRACE_DIR", tmp_path / "traces")
     monkeypatch.setattr(tracing, "_configured", False)
     yield
+
+
+# Each run's results land in a gitignored per-run CSV: scrollback is not a
+# record, and rows sort by test id so files diff cleanly across randomized
+# orders.
+_run_results: list[tuple[str, str, float]] = []
+
+
+def pytest_runtest_logreport(report):
+    if report.when == "call" or (
+        report.when == "setup" and report.outcome != "passed"
+    ):
+        _run_results.append(
+            (report.nodeid, report.outcome, round(report.duration, 4))
+        )
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if not _run_results:
+        return
+    import csv
+    from datetime import UTC, datetime
+
+    out = Path(".test-runs")
+    out.mkdir(exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    with open(out / f"{stamp}.csv", "w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["test", "outcome", "duration_s"])
+        for row in sorted(_run_results):
+            writer.writerow(row)
