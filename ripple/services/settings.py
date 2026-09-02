@@ -18,6 +18,7 @@ from ripple.db.repository import (
     get_fallback_model,
     set_active_model,
     set_fallback_model,
+    unavailable_models,
 )
 from ripple.llm import PROVIDERS, ProviderError, get_provider
 from ripple.llm.base import ModelInfo
@@ -199,6 +200,7 @@ class SettingsService:
                 "unknown_model",
                 f"{model_id!r} is not offered by {provider_name}.",
             )
+        _refuse_dead_model(session, provider_name, model_id)
         set_active_model(session, provider_name, model_id)
 
     def selected_model(self, session: Session) -> tuple[str | None, str | None]:
@@ -227,6 +229,7 @@ class SettingsService:
                 "unknown_model",
                 f"{model_id!r} is not offered by {provider_name}.",
             )
+        _refuse_dead_model(session, provider_name, model_id)
         _, main = get_active_model(session)
         if model_id == main:
             raise ProviderError(
@@ -239,3 +242,22 @@ class SettingsService:
     def fallback_model(self, session: Session) -> tuple[str | None, str | None]:
         """The fallback provider and model, or (None, None) when none is set."""
         return get_fallback_model(session)
+
+
+def _refuse_dead_model(session: Session, provider_name: str, model_id: str) -> None:
+    """Refuse a model a live call has found dead on this account.
+
+    A provider's catalog can list models the account cannot invoke: Gemini
+    keeps retired models in its list response and withdraws them per account,
+    with no lifecycle field to filter on. The picker disables a marked entry,
+    and this is the same rule enforced where the choice is stored, so a direct
+    API call cannot select a model every extraction would then fail on. The
+    mark clears when a later call to the model succeeds.
+    """
+    if model_id in unavailable_models(session, provider_name):
+        raise ProviderError(
+            "model_not_available",
+            f"{provider_name} refused a live call to {model_id!r} on this "
+            "account's key, so it cannot be chosen. Pick a model the picker "
+            "does not mark unavailable.",
+        )

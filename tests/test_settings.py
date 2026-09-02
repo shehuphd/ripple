@@ -219,6 +219,45 @@ class TestModelSelection:
             service.select_model(session, "bard", "anything")
         assert caught.value.code == "unknown_provider"
 
+    def test_a_model_a_live_call_found_dead_is_refused(
+        self, session, service, monkeypatch
+    ):
+        """The catalog lists models the account cannot invoke, so the dead
+        mark gates the choice where it is stored, matching the disabled
+        picker entry."""
+        from ripple.db.repository import (
+            clear_model_unavailable,
+            mark_model_unavailable,
+        )
+        from ripple.llm.base import ModelInfo, Tier
+
+        class Catalog:
+            name = "google"
+            credential_variable = "GOOGLE_API_KEY"
+
+            def list_models(self, *, api_key=None):
+                return [
+                    ModelInfo(
+                        id="gemini-2.5-flash",
+                        provider="google",
+                        display_name="gemini-2.5-flash",
+                        tier=Tier.CHEAP,
+                    )
+                ]
+
+        monkeypatch.setattr(
+            "ripple.services.settings.get_provider", lambda name: Catalog()
+        )
+        mark_model_unavailable(session, "google", "gemini-2.5-flash")
+        with pytest.raises(ProviderError) as caught:
+            service.select_model(session, "google", "gemini-2.5-flash")
+        assert caught.value.code == "model_not_available"
+        assert service.selected_model(session) == (None, None)
+
+        clear_model_unavailable(session, "google", "gemini-2.5-flash")
+        service.select_model(session, "google", "gemini-2.5-flash")
+        assert service.selected_model(session) == ("google", "gemini-2.5-flash")
+
 
 class TestFixtureProvider:
     def test_it_is_absent_from_the_shipped_registry(self):
@@ -312,6 +351,17 @@ class TestFallbackSelection:
         service = SettingsService()
         service.select_fallback(db, "google", "backup-model")
         service.select_fallback(db, "google", None)
+        assert service.fallback_model(db) == (None, None)
+
+    def test_a_fallback_a_live_call_found_dead_is_refused(self, catalog, db):
+        from ripple.db.repository import mark_model_unavailable
+        from ripple.llm import ProviderError
+
+        service = SettingsService()
+        mark_model_unavailable(db, "google", "backup-model")
+        with pytest.raises(ProviderError) as caught:
+            service.select_fallback(db, "google", "backup-model")
+        assert caught.value.code == "model_not_available"
         assert service.fallback_model(db) == (None, None)
 
 
