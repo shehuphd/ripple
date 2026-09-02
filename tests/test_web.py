@@ -699,6 +699,84 @@ class TestEveryNavLinkResolves:
         assert f'href="/findings?script={script_id}"' in body
 
 
+class TestDuplicateReview:
+    """The entities page suggests suspected duplicates with Merge and
+    Keep separate, and the endpoints act on them."""
+
+    def _fork(self, client) -> tuple[str, str, str]:
+        import uuid
+
+        from ripple.db.models import Entity
+        from ripple.db.naming import normalize
+
+        script_id = _first_script(client)
+        with web._sessions() as session:
+            rows = []
+            for name in ("Cargo manifest", "Manifest"):
+                row = Entity(
+                    script_id=uuid.UUID(script_id),
+                    entity_type="prop",
+                    canonical_name=name,
+                    normalized_name=normalize(name),
+                )
+                session.add(row)
+                rows.append(row)
+            session.commit()
+            # Neither is cited, so the longer name is the suggested survivor.
+            return script_id, str(rows[0].id), str(rows[1].id)
+
+    def test_the_pair_is_suggested_and_merges(self, client):
+        from ripple.db.models import Entity
+
+        _, keeper_id, fork_id = self._fork(client)
+        page = client.get("/entities").text
+        assert "duplicate?" in page
+        assert f"/api/entities/{keeper_id}/merge/{fork_id}" in page
+        assert f"/api/entities/{keeper_id}/distinct/{fork_id}" in page
+
+        merged = client.post(f"/api/entities/{keeper_id}/merge/{fork_id}")
+        assert merged.status_code == 200, merged.text
+        with web._sessions() as session:
+            import uuid
+
+            assert session.get(Entity, uuid.UUID(fork_id)) is None
+        assert f"/merge/{fork_id}" not in client.get("/entities").text
+
+    def test_keep_separate_stops_the_suggestion(self, client):
+        from ripple.db.models import Entity
+
+        _, keeper_id, fork_id = self._fork(client)
+        kept = client.post(f"/api/entities/{keeper_id}/distinct/{fork_id}")
+        assert kept.status_code == 200
+        page = client.get("/entities").text
+        assert f"/merge/{fork_id}" not in page
+        with web._sessions() as session:
+            import uuid
+
+            assert session.get(Entity, uuid.UUID(fork_id)) is not None
+
+    def test_a_cross_type_merge_is_refused(self, client):
+        import uuid
+
+        from ripple.db.models import Entity
+        from ripple.db.naming import normalize
+
+        script_id, keeper_id, _ = self._fork(client)
+        with web._sessions() as session:
+            prop = Entity(
+                script_id=uuid.UUID(script_id),
+                entity_type="wardrobe",
+                canonical_name="Manifest pouch",
+                normalized_name=normalize("Manifest pouch"),
+            )
+            session.add(prop)
+            session.commit()
+            prop_id = str(prop.id)
+        refused = client.post(f"/api/entities/{keeper_id}/merge/{prop_id}")
+        assert refused.status_code == 409
+        assert "different types" in refused.json()["detail"]
+
+
 class TestListSearch:
     def test_a_populated_list_offers_search_and_pagination(self, client):
         body = client.get("/entities").text

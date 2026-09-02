@@ -676,6 +676,26 @@ def _resolve_entity(session: Session, script_id, proposed: ValidatedEntity) -> E
         )
     )
     if entity is None:
+        # No canonical match; a name already recorded as an alias resolves
+        # to its entity ("the sedan" against Blue sedan), so a rephrased
+        # extraction extends the entity instead of forking it. Two entities
+        # sharing the alias make the identity ambiguous, and an ambiguous
+        # match creates a fresh entity rather than guessing.
+        holders = list(
+            session.scalars(
+                select(EntityAlias.entity_id)
+                .join(Entity, EntityAlias.entity_id == Entity.id)
+                .where(
+                    Entity.script_id == script_id,
+                    Entity.entity_type == proposed.entity_type,
+                    EntityAlias.normalized_alias == key,
+                )
+                .distinct()
+            )
+        )
+        if len(holders) == 1:
+            entity = session.get(Entity, holders[0])
+    if entity is None:
         entity = Entity(
             script_id=script_id,
             entity_type=proposed.entity_type,

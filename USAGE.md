@@ -169,7 +169,7 @@ Findings appear in the preview overlay, where Review units jumps to the cited li
 ## Reports, entities, assertions, and traces
 
 - **Ripple reports** lists every preview's stored report.
-- **Entities** and **Assertions** list the graph row by row, with evidence.
+- **Entities** and **Assertions** list the graph row by row, with evidence. Suspected duplicate entities lead the Entities list: same-type pairs whose names or recorded aliases overlap, each with **Merge** and **Keep separate**. Merging moves every fact onto the more-cited entity, keeps the other name as an alias so later mentions resolve to it, and records the decision on the Reports page; keeping them separate stops the suggestion.
 - **Traces** lists every model call, newest first: purpose, model, token counts, duration, and outcome, with the spend ledger in the header. Rows are application data, deleted with their script.
 
 | Trace outcome | Meaning |

@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-02 08:50:50 UTC
+Last updated: 2026-09-02 09:32:52 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
 
@@ -96,6 +96,7 @@ Every file in the repository and what it does. Directories the application write
 |---|---|
 | `services/__init__.py` | Package marker. |
 | `services/pricing.py` | Money for the token counts, from the rates registry. |
+| `services/duplicates.py` | Suspected duplicate entities: deterministic detection, reviewed merges, keep-separate records. |
 | `services/preview.py` | The judgement engine: one proposal across many lines, verdicts validated, calls audited and replayed. |
 | `services/changeset.py` | Atomic accept, reject, and latest-only undo of a proposal. |
 | `services/draft_report.py` | The cross-draft ripple report: entity deltas, lost introductions, judged conflicts. |
@@ -151,6 +152,7 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_continuity_judge.py` | Continuity reply verification and prompt assembly. |
 | `tests/test_diff.py` | Diff engine identity and grouping rules. |
 | `tests/test_docs.py` | Docs hygiene: no internal references in public docs or shipped source, absolute README links, this manifest present. |
+| `tests/test_duplicates.py` | Duplicate detection, merge collisions and refusals, alias-aware resolution. |
 | `tests/test_extraction.py` | Extraction service, validation, caching, and run status. |
 | `tests/test_fixtures.py` | Judge-visible scene context assembly. |
 | `tests/test_judge.py` | Verdict verification rules. |

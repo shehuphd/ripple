@@ -356,11 +356,24 @@ def _absorb(session, survivor: Entity, absorbed: Entity) -> None:
         else:
             row.dedupe_key = replacement_key
         session.flush()
-    session.execute(
-        update(EntityAttribute)
-        .where(EntityAttribute.entity_id == absorbed.id)
-        .values(entity_id=survivor.id)
+    # Attributes move one at a time: only one active row per (entity, key)
+    # may exist, so an absorbed value whose key the survivor already holds
+    # deactivates instead of moving. The survivor's value wins; changing an
+    # active value is the judgement engine's job, never a merge side effect.
+    survivor_keys = set(
+        session.scalars(
+            select(EntityAttribute.key).where(
+                EntityAttribute.entity_id == survivor.id,
+                EntityAttribute.active.is_(True),
+            )
+        )
     )
+    for attribute in session.scalars(
+        select(EntityAttribute).where(EntityAttribute.entity_id == absorbed.id)
+    ):
+        if attribute.active and attribute.key in survivor_keys:
+            attribute.active = False
+        attribute.entity_id = survivor.id
     session.execute(
         update(ScriptUnit)
         .where(ScriptUnit.speaker_entity_id == absorbed.id)

@@ -117,6 +117,9 @@ CHANGE_KINDS = (
     # The anchor for a draft link's report and findings; carries no
     # operations, since linking writes lineage and copies rows directly.
     "link_draft",
+    # A reviewed duplicate-entity merge: one operation snapshots what the
+    # absorbed entity was, and the absorption itself writes rows directly.
+    "merge_entities",
 )
 CHANGE_STATUSES = ("pending", "accepted", "rejected", "stale", "reverted", "failed")
 OPERATION_TYPES = (
@@ -403,6 +406,32 @@ class EntityAlias(Base):
     provenance: Mapped[str] = mapped_column(String(32), default="model")
 
     entity: Mapped[Entity] = relationship(back_populates="aliases")
+
+
+class EntityDistinction(Base):
+    """A reviewed decision that two similarly named entities are different.
+
+    The duplicate review reads these to stop re-suggesting a pair a person
+    has already kept separate. The pair is stored with the lower id first,
+    so one row covers both orderings.
+    """
+
+    __tablename__ = "entity_distinctions"
+    __table_args__ = (
+        UniqueConstraint("entity_a_id", "entity_b_id", name="uq_distinction_pair"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    script_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scripts.id", ondelete="CASCADE"), index=True
+    )
+    entity_a_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("entities.id", ondelete="CASCADE")
+    )
+    entity_b_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("entities.id", ondelete="CASCADE")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class EntityAttribute(Base):

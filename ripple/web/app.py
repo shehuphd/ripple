@@ -83,6 +83,7 @@ from ripple.llm import ProviderError, get_provider
 from ripple.services import changeset, pricing, spend
 from ripple.services import draft_report as report_service
 from ripple.services import drafts as drafts_service
+from ripple.services import duplicates as duplicates_service
 from ripple.services import preview as preview_service
 from ripple.services import renames as renames_service
 from ripple.services import scenes as scenes_service
@@ -1063,13 +1064,53 @@ def choose_landing_view(
 
 @app.get("/entities")
 def entities_page(request: Request, session: Session = Depends(get_session)):
-    """Every extracted entity, with its aliases and how often it is asserted."""
+    """Every extracted entity, with its aliases and how often it is asserted.
+
+    Suspected duplicates lead the list: same-type pairs whose names or
+    aliases overlap, each with Merge and Keep separate. Merging is recorded
+    as an accepted change set; keeping separate stops the suggestion.
+    """
     rows = session.execute(
         select(Entity, Script)
         .join(Script, Entity.script_id == Script.id)
         .order_by(Entity.entity_type, Entity.canonical_name)
     ).all()
     items = []
+    for script_id in {script.id for _, script in rows}:
+        script = session.get(Script, script_id)
+        for pair in duplicates_service.detect(session, script_id):
+            items.append(
+                {
+                    "tag": "duplicate?",
+                    "tag_class": "duplicate",
+                    "title": (
+                        f"{pair.keep.canonical_name} and "
+                        f"{pair.absorb.canonical_name}"
+                    ),
+                    "sub": (
+                        f"{script.title} · {pair.keep.entity_type} · "
+                        f"{pair.reason}; merging keeps "
+                        f"{pair.keep.canonical_name} and records the other "
+                        "name as its alias"
+                    ),
+                    "actions": [
+                        {
+                            "url": (
+                                f"/api/entities/{pair.keep.id}"
+                                f"/merge/{pair.absorb.id}"
+                            ),
+                            "label": "Merge",
+                        },
+                        {
+                            "url": (
+                                f"/api/entities/{pair.keep.id}"
+                                f"/distinct/{pair.absorb.id}"
+                            ),
+                            "label": "Keep separate",
+                        },
+                    ],
+                }
+            )
     for entity, script in rows:
         aliases = list(
             session.scalars(
@@ -1790,6 +1831,32 @@ def add_scene(
         )
         run_progress = progress(session, run.id).__dict__
     return {"scene": inserted.__dict__, "run": run_progress}
+
+
+@app.post("/api/entities/{keep_id}/merge/{absorb_id}")
+def merge_entities(
+    keep_id: str, absorb_id: str, session: Session = Depends(get_session)
+):
+    """Join two entities the review suspects are one. Recorded, audited."""
+    try:
+        change = duplicates_service.merge(
+            session, _uuid(keep_id), _uuid(absorb_id)
+        )
+    except duplicates_service.MergeRefused as error:
+        raise HTTPException(409, str(error)) from None
+    return {"change_set_id": str(change.id)}
+
+
+@app.post("/api/entities/{keep_id}/distinct/{other_id}")
+def keep_entities_separate(
+    keep_id: str, other_id: str, session: Session = Depends(get_session)
+):
+    """Record that a suggested pair is two entities; the suggestion stops."""
+    try:
+        duplicates_service.keep_separate(session, _uuid(keep_id), _uuid(other_id))
+    except duplicates_service.MergeRefused as error:
+        raise HTTPException(409, str(error)) from None
+    return {"recorded": True}
 
 
 @app.post("/api/scenes/{scene_id}/omit")

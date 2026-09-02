@@ -234,7 +234,7 @@ def _widen_change_vocabularies(engine: Engine) -> None:
         for table, needle in (
             # The needle is always the NEWEST member, so a database widened for an
             # earlier vocabulary is widened again for this one.
-            ("change_sets", "'link_draft'"),
+            ("change_sets", "'merge_entities'"),
             ("change_operations", "'set_scene_omitted'"),
         ):
             has_leftover = table_sql(f"{table}_old") is not None
