@@ -11,6 +11,7 @@ inside request handlers, with no background worker to pay for.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from contextlib import asynccontextmanager
@@ -89,7 +90,11 @@ from ripple.services import renames as renames_service
 from ripple.services import scenes as scenes_service
 from ripple.services.preview import PreviewFailed, PreviewRefused, PreviewResult
 from ripple.services.settings import SettingsService
-from ripple.services.synthesizer import answer_question, synthesize
+from ripple.services.synthesizer import (
+    answer_question,
+    synthesize,
+    ungrounded_entities,
+)
 from ripple.tracing import configure_tracing
 from ripple.tracing import ensure_configured as ensure_tracing
 from ripple.web.stats import eighths, page_of, runtime, script_pages
@@ -682,13 +687,26 @@ def ask_page(
             raise HTTPException(404, "No such script")
     else:
         chosen = session.scalar(select(Script).order_by(Script.created_at.desc()))
-    counts = sidebar_counts(session)
+    counts_by_script = dict(
+        session.execute(
+            select(Assertion.script_id, func.count())
+            .where(Assertion.active.is_(True))
+            .group_by(Assertion.script_id)
+        ).all()
+    )
     return templates.TemplateResponse(
         request,
         "ask.html",
         {
             "script": chosen,
-            "counts": counts,
+            "scripts": [
+                {
+                    "id": str(row.id),
+                    "title": row.title,
+                    "assertions": counts_by_script.get(row.id, 0),
+                }
+                for row in session.scalars(select(Script).order_by(Script.title))
+            ],
             "assertions": (
                 session.scalar(
                     select(func.count())
@@ -711,6 +729,24 @@ def ask_page(
                 else 0
             ),
             "lock": _graph_lock(session, chosen.id) if chosen else None,
+            "model": settings_service.selected_model(session)[1],
+            "history": (
+                [
+                    {
+                        "id": str(row.id),
+                        "question": row.question,
+                        "asked_at": row.asked_at.strftime("%d %b %H:%M"),
+                    }
+                    for row in session.scalars(
+                        select(QueryLog)
+                        .where(QueryLog.script_id == chosen.id)
+                        .order_by(QueryLog.asked_at.desc())
+                        .limit(15)
+                    )
+                ]
+                if chosen
+                else []
+            ),
         },
     )
 
@@ -969,10 +1005,48 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
         empty="No model calls recorded yet. Every call is recorded here, "
         "successes and refusals alike.",
         lock=None,
+        header_action={
+            "url": "/api/traces/viewer",
+            "label": "⁘ Open in TraceAct viewer",
+            "tip": "Open TraceAct's viewer on Ripple's full operational "
+            "trace log (data/traces), map view",
+        },
     )
 
 
 _TRACE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+@app.post("/api/traces/viewer")
+def open_traces_viewer():
+    """Open the TraceAct viewer over Ripple's whole operational trace log.
+
+    The page-level companion to `open_trace_viewer`: that one deep-links to a
+    single trace's map, this one opens the viewer reading `data/traces`
+    directly, unfiltered, so the whole run history is browsable at once.
+    """
+    from ripple.tracing import DEFAULT_TRACE_DIR
+
+    if not DEFAULT_TRACE_DIR.exists():
+        raise HTTPException(
+            404,
+            "No trace files yet. Tracing may be off (RIPPLE_TRACING=off).",
+        )
+    from traceact.viewer.instance import launch_or_connect
+
+    try:
+        # Absolute: a reused viewer resolves a relative path against its own
+        # working directory, which may be another project's.
+        url = launch_or_connect(
+            source=str(DEFAULT_TRACE_DIR.resolve()), name="ripple"
+        )
+    except Exception as error:  # a viewer that cannot start is a 503, not a 500
+        logger.exception("trace viewer launch failed")
+        raise HTTPException(
+            503, f"The trace viewer could not start: {error}"
+        ) from error
+    separator = "&" if "?" in url else "?"
+    return {"url": f"{url}{separator}view=map"}
 
 
 @app.post("/api/traces/{trace_id}/viewer")
@@ -1081,6 +1155,8 @@ def entities_page(request: Request, session: Session = Depends(get_session)):
         for pair in duplicates_service.detect(session, script_id):
             items.append(
                 {
+                    "id": f"{pair.keep.id}:{pair.absorb.id}",
+                    "batch_kinds": ["merge", "keep_separate"],
                     "tag": "duplicate?",
                     "tag_class": "duplicate",
                     "title": (
@@ -1128,6 +1204,9 @@ def entities_page(request: Request, session: Session = Depends(get_session)):
         )
         items.append(
             {
+                "id": str(entity.id),
+                "batch_kinds": ["delete"],
+                "assertions": uses,
                 "tag": entity.entity_type.replace("_", " "),
                 "tag_class": entity.entity_type,
                 "title": entity.canonical_name,
@@ -1147,32 +1226,88 @@ def entities_page(request: Request, session: Session = Depends(get_session)):
         items=items,
         empty="No entities yet.",
         lock=_graph_lock(session),
+        batch_actions=[
+            {
+                "kind": "merge",
+                "label": "Merge selected",
+                "url": "/api/entities/batch/merge",
+                "confirm": True,
+            },
+            {
+                "kind": "keep_separate",
+                "label": "Keep selected separate",
+                "url": "/api/entities/batch/keep-separate",
+            },
+            {
+                "kind": "delete",
+                "label": "Delete selected",
+                "url": "/api/entities/batch/delete",
+                "danger": True,
+                "confirm": True,
+            },
+        ],
     )
 
 
 @app.get("/assertions")
 def assertions_page(request: Request, session: Session = Depends(get_session)):
-    """Every active assertion, with the unit that supports it."""
+    """Every assertion, active and deactivated, with the unit that supports it.
+
+    Deactivated rows are shown too, muted and marked, so a deactivation can be
+    reversed: selecting them and pressing Reactivate returns them to the graph.
+    """
     scripts = {script.id: script for script in session.scalars(select(Script))}
     items = []
+    active_total = 0
+    inactive_total = 0
     for script_id, script in scripts.items():
         labels = _labels(session, script_id)
-        rows = list(
+        active_rows = list(
             session.scalars(
                 select(Assertion).where(
                     Assertion.script_id == script_id, Assertion.active.is_(True)
                 )
             )
         )
-        for row in rows[:500]:
+        inactive_rows = list(
+            session.scalars(
+                select(Assertion).where(
+                    Assertion.script_id == script_id, Assertion.active.is_(False)
+                )
+            )
+        )
+        active_total += len(active_rows)
+        inactive_total += len(inactive_rows)
+
+        def _label(row: Assertion, labels=labels) -> tuple[str, str]:
             subject = labels.get(row.subject_entity_id or row.subject_scene_id, "?")
             obj = labels.get(row.object_entity_id or row.object_scene_id, "?")
+            return subject, obj
+
+        for row in active_rows[:500]:
+            subject, obj = _label(row)
             items.append(
                 {
+                    "id": str(row.id),
+                    "batch_kinds": ["deactivate"],
                     "tag": row.predicate.replace("_", " "),
                     "tag_class": "location",
                     "title": f"{subject} → {obj}",
                     "sub": f"{script.title} · {row.provenance}"
+                    + (f" · {row.model_id}" if row.model_id else ""),
+                    "right": f"{row.confidence:.2f}",
+                }
+            )
+        for row in inactive_rows[:200]:
+            subject, obj = _label(row)
+            items.append(
+                {
+                    "id": str(row.id),
+                    "batch_kinds": ["reactivate"],
+                    "tag": row.predicate.replace("_", " "),
+                    "tag_class": "off",
+                    "title": f"{subject} → {obj}",
+                    "sub": f"inactive · {script.title} · {row.provenance}"
                     + (f" · {row.model_id}" if row.model_id else ""),
                     "right": f"{row.confidence:.2f}",
                 }
@@ -1182,10 +1317,26 @@ def assertions_page(request: Request, session: Session = Depends(get_session)):
         session,
         heading="Assertions",
         active="assertions",
-        subtitle=f"{len(items)} active assertion(s)",
+        subtitle=f"{active_total} active"
+        + (f", {inactive_total} inactive" if inactive_total else "")
+        + " assertion(s)",
         items=items,
         empty="No assertions yet.",
         lock=_graph_lock(session),
+        batch_actions=[
+            {
+                "kind": "deactivate",
+                "label": "Deactivate selected",
+                "url": "/api/assertions/batch/deactivate",
+                "danger": True,
+                "confirm": True,
+            },
+            {
+                "kind": "reactivate",
+                "label": "Reactivate selected",
+                "url": "/api/assertions/batch/reactivate",
+            },
+        ],
     )
 
 
@@ -1859,6 +2010,132 @@ def keep_entities_separate(
     return {"recorded": True}
 
 
+def _batch_ids(raw: str) -> list[str]:
+    """Parse the JSON id list a batch button posts, bounding its size.
+
+    The browser sends the selected rows' ids as one JSON array field, so a
+    batch is one request rather than one per row.
+    """
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Malformed batch selection.") from None
+    if not isinstance(data, list) or len(data) > 1000:
+        raise HTTPException(400, "Malformed or oversized batch selection.")
+    return [str(item) for item in data]
+
+
+@app.post("/api/entities/batch/merge")
+def batch_merge_entities(ids: str = Form(...), session: Session = Depends(get_session)):
+    """Merge several suspected-duplicate pairs at once.
+
+    Each id is a `keep:absorb` pair. A pair whose entities have vanished
+    (absorbed by an earlier merge in the same batch) or that the service
+    refuses is skipped, not fatal, so one bad pair does not lose the rest.
+    """
+    merged = 0
+    skipped = 0
+    for raw in _batch_ids(ids):
+        keep_raw, _, absorb_raw = raw.partition(":")
+        if not absorb_raw:
+            skipped += 1
+            continue
+        keep = session.get(Entity, _uuid(keep_raw))
+        absorb = session.get(Entity, _uuid(absorb_raw))
+        if keep is None or absorb is None:
+            skipped += 1
+            continue
+        try:
+            duplicates_service.merge(session, keep.id, absorb.id)
+            merged += 1
+        except duplicates_service.MergeRefused:
+            skipped += 1
+    return {"merged": merged, "skipped": skipped}
+
+
+@app.post("/api/entities/batch/keep-separate")
+def batch_keep_separate(ids: str = Form(...), session: Session = Depends(get_session)):
+    """Record several suspected pairs as distinct; their suggestions stop."""
+    recorded = 0
+    for raw in _batch_ids(ids):
+        a_raw, _, b_raw = raw.partition(":")
+        if not b_raw:
+            continue
+        try:
+            duplicates_service.keep_separate(session, _uuid(a_raw), _uuid(b_raw))
+            recorded += 1
+        except duplicates_service.MergeRefused:
+            continue
+    return {"recorded": recorded}
+
+
+@app.post("/api/entities/batch/delete")
+def batch_delete_entities(ids: str = Form(...), session: Session = Depends(get_session)):
+    """Delete several entities. The DB cascades to their assertions,
+    attributes, and aliases, so this is not reversible. The UI gates it behind
+    a typed confirm that names the assertion count it will also remove.
+    """
+    deleted = 0
+    for raw in _batch_ids(ids):
+        entity = session.get(Entity, _uuid(raw))
+        if entity is None:
+            continue
+        session.delete(entity)
+        deleted += 1
+    return {"deleted": deleted}
+
+
+@app.post("/api/assertions/batch/deactivate")
+def batch_deactivate_assertions(
+    ids: str = Form(...), session: Session = Depends(get_session)
+):
+    """Deactivate several assertions. They leave the active graph but the rows
+    remain, so this is reversible at the data layer.
+    """
+    deactivated = 0
+    for raw in _batch_ids(ids):
+        assertion = session.get(Assertion, _uuid(raw))
+        if assertion is None or not assertion.active:
+            continue
+        assertion.active = False
+        deactivated += 1
+    return {"deactivated": deactivated}
+
+
+@app.post("/api/assertions/batch/reactivate")
+def batch_reactivate_assertions(
+    ids: str = Form(...), session: Session = Depends(get_session)
+):
+    """Return several deactivated assertions to the active graph.
+
+    The `uq_assertion_active_dedupe` index allows only one active row per
+    dedupe key, so a row whose key another active assertion already holds (a
+    re-extraction wrote a fresh one after this was deactivated) is skipped, not
+    fatal: reactivating it would collide.
+    """
+    reactivated = 0
+    skipped = 0
+    for raw in _batch_ids(ids):
+        assertion = session.get(Assertion, _uuid(raw))
+        if assertion is None or assertion.active:
+            continue
+        clash = session.scalar(
+            select(func.count())
+            .select_from(Assertion)
+            .where(
+                Assertion.dedupe_key == assertion.dedupe_key,
+                Assertion.active.is_(True),
+                Assertion.id != assertion.id,
+            )
+        )
+        if clash:
+            skipped += 1
+            continue
+        assertion.active = True
+        reactivated += 1
+    return {"reactivated": reactivated, "skipped": skipped}
+
+
 @app.post("/api/scenes/{scene_id}/omit")
 def omit_scene(scene_id: str, session: Session = Depends(get_session)):
     """Mark a scene OMITTED, deactivating its facts and reporting orphans."""
@@ -2281,6 +2558,11 @@ def confirm_rename_route(finding_id: str, session: Session = Depends(get_session
     }
 
 
+# A grounded question is short by nature. The cap bounds a single ask's input
+# tokens and denies a large injected instruction a path in through the query.
+MAX_QUESTION_CHARS = 1024
+
+
 @app.post("/api/scripts/{script_id}/ask")
 def ask_graph(
     script_id: str,
@@ -2292,6 +2574,16 @@ def ask_graph(
     if script is None:
         raise HTTPException(404, "No such script")
 
+    # A question is a question, not a place to paste a payload. The cap keeps
+    # a wall of injected instructions from arriving as a "query" and bounds the
+    # input tokens a single ask can bill, before any provider contact.
+    if len(question) > MAX_QUESTION_CHARS:
+        raise HTTPException(
+            422,
+            f"A question can be at most {MAX_QUESTION_CHARS} characters; "
+            f"this one is {len(question)}.",
+        )
+
     labels = _labels(session, script.id)
     terms = [w.lower() for w in question.split() if len(w) > 3]
     rows = list(
@@ -2301,13 +2593,18 @@ def ask_graph(
             )
         )
     )
-    scene_of = dict(
-        session.execute(
-            select(ScriptUnit.id, Scene.display_scene_number)
+    # Heading as well as number: a script whose scenes carry no numbers would
+    # otherwise reach the model with no scene identity at all, and "which
+    # scenes use the mug" would be unanswerable from a graph that records it.
+    # Numbers are never invented, so the heading is the fallback identity.
+    scene_of = {
+        unit_id: {"number": number, "heading": heading}
+        for unit_id, number, heading in session.execute(
+            select(ScriptUnit.id, Scene.display_scene_number, Scene.heading)
             .join(Scene)
             .where(Scene.script_id == script.id)
         ).all()
-    )
+    }
     unit_text = dict(
         session.execute(
             select(ScriptUnit.id, ScriptUnit.current_text)
@@ -2316,24 +2613,47 @@ def ask_graph(
         ).all()
     )
 
-    matched = []
+    mapped = []
+    keyword_hits = []
     for row in rows:
         subject = labels.get(row.subject_entity_id or row.subject_scene_id, "")
         obj = labels.get(row.object_entity_id or row.object_scene_id, "")
         haystack = f"{subject} {row.predicate} {obj}".lower()
-        if not terms or any(term in haystack for term in terms):
-            matched.append(
-                {
-                    "id": str(row.id),
-                    "subject": subject,
-                    "predicate": row.predicate,
-                    "object": obj,
-                    "scene": scene_of.get(row.source_unit_id),
-                    "unit_id": str(row.source_unit_id),
-                    "unit_text": unit_text.get(row.source_unit_id, ""),
-                    "confidence": row.confidence,
-                }
-            )
+        where = scene_of.get(row.source_unit_id) or {}
+        item = {
+            "id": str(row.id),
+            "subject": subject,
+            "predicate": row.predicate,
+            "object": obj,
+            "scene": where.get("number"),
+            "scene_heading": where.get("heading"),
+            "unit_id": str(row.source_unit_id),
+            "unit_text": unit_text.get(row.source_unit_id, ""),
+            "confidence": row.confidence,
+        }
+        mapped.append(item)
+        if terms and any(term in haystack for term in terms):
+            keyword_hits.append(item)
+    # Keyword hits scope the packet when the question names graph content; a
+    # question that matches nothing ("how many scenes are there?") still
+    # deserves a live answer, so the packet falls back to a sample of the
+    # whole graph and the script facts carry the counts.
+    matched = keyword_hits or mapped
+
+    facts = {
+        "title": script.title,
+        "scenes": session.scalar(
+            select(func.count())
+            .select_from(Scene)
+            .where(Scene.script_id == script.id, Scene.omitted.is_(False))
+        ),
+        "entities": session.scalar(
+            select(func.count())
+            .select_from(Entity)
+            .where(Entity.script_id == script.id)
+        ),
+        "assertions": len(rows),
+    }
 
     provider_name, model_id = settings_service.selected_model(session)
     provider = get_provider(provider_name) if provider_name else None
@@ -2343,7 +2663,13 @@ def ask_graph(
             {"question": question, "terms": len(terms), "matched": len(matched)}
         )
         answer = answer_question(
-            question, matched[:40], provider, model_id, session, script.id
+            question,
+            matched[:40],
+            provider,
+            model_id,
+            session,
+            script.id,
+            facts=facts,
         )
         query_trace.output(
             {
@@ -2353,16 +2679,15 @@ def ask_graph(
             }
         )
 
-    session.add(
-        QueryLog(
-            script_id=script.id,
-            question=question,
-            answer=answer.answer,
-            cited_assertion_ids_json=answer.cited_assertion_ids,
-            model_id=answer.model_id,
-            prompt_version=answer.prompt_version,
-        )
+    record = QueryLog(
+        script_id=script.id,
+        question=question,
+        answer=answer.answer,
+        cited_assertion_ids_json=answer.cited_assertion_ids,
+        model_id=answer.model_id,
+        prompt_version=answer.prompt_version,
     )
+    session.add(record)
     session.flush()
 
     seen: set[str] = set()
@@ -2374,13 +2699,37 @@ def ask_graph(
         cited.append(
             {
                 "scene": item["scene"],
+                "scene_heading": item["scene_heading"],
                 "unit_id": item["unit_id"],
                 "text": item["unit_text"],
             }
         )
 
+    grounded_names = {item["subject"] for item in matched[:40]} | {
+        item["object"] for item in matched[:40]
+    }
+    all_names = set(
+        session.scalars(
+            select(Entity.canonical_name).where(Entity.script_id == script.id)
+        )
+    ) | set(
+        session.scalars(
+            select(EntityAlias.alias)
+            .join(Entity, EntityAlias.entity_id == Entity.id)
+            .where(Entity.script_id == script.id)
+        )
+    )
+    # Only a written answer can reach past its evidence; the deterministic
+    # answer is built from the grounding set and needs no check.
+    ungrounded = (
+        ungrounded_entities(answer.answer, grounded_names, all_names)
+        if answer.generated
+        else []
+    )
+
     confidences = [item["confidence"] for item in matched] or [0.0]
     return {
+        "query_id": str(record.id),
         "answer": answer.answer,
         "generated": answer.generated,
         "grounded_in": len(matched),
@@ -2390,6 +2739,78 @@ def ask_graph(
             {item["subject"] for item in matched[:40]}
             | {item["object"] for item in matched[:40]}
         )[:8],
+        "ungrounded_entities": ungrounded,
+    }
+
+
+@app.get("/api/queries/{query_id}")
+def stored_query(query_id: str, session: Session = Depends(get_session)):
+    """A past question's stored answer, rebuilt for the ask page at no cost.
+
+    The answer text and citation ids come from the log; the cited units and
+    entities are resolved from whichever of those assertions still exist, so a
+    stored answer over a since-changed graph shows what remains rather than
+    failing. The response says it is stored, and when it was asked.
+    """
+    record = session.get(QueryLog, _uuid(query_id))
+    if record is None:
+        raise HTTPException(404, "No such question")
+
+    ids = [_uuid(item) for item in (record.cited_assertion_ids_json or [])]
+    rows = (
+        list(session.scalars(select(Assertion).where(Assertion.id.in_(ids))))
+        if ids
+        else []
+    )
+    labels = _labels(session, record.script_id)
+    scene_of = {
+        unit_id: {"number": number, "heading": heading}
+        for unit_id, number, heading in session.execute(
+            select(ScriptUnit.id, Scene.display_scene_number, Scene.heading)
+            .join(Scene)
+            .where(Scene.script_id == record.script_id)
+        ).all()
+    }
+    unit_text = dict(
+        session.execute(
+            select(ScriptUnit.id, ScriptUnit.current_text)
+            .join(Scene)
+            .where(Scene.script_id == record.script_id)
+        ).all()
+    )
+    seen: set = set()
+    cited = []
+    names: set[str] = set()
+    for row in rows:
+        names.add(labels.get(row.subject_entity_id or row.subject_scene_id, "?"))
+        names.add(labels.get(row.object_entity_id or row.object_scene_id, "?"))
+        if row.source_unit_id in seen:
+            continue
+        seen.add(row.source_unit_id)
+        where = scene_of.get(row.source_unit_id) or {}
+        cited.append(
+            {
+                "scene": where.get("number"),
+                "scene_heading": where.get("heading"),
+                "unit_id": str(row.source_unit_id),
+                "text": unit_text.get(row.source_unit_id, ""),
+            }
+        )
+    confidences = [row.confidence for row in rows] or [0.0]
+    return {
+        "query_id": str(record.id),
+        "question": record.question,
+        "answer": record.answer,
+        "generated": record.model_id is not None,
+        "grounded_in": len(rows),
+        "cited_units": cited[:6],
+        "mean_confidence": round(sum(confidences) / len(confidences), 2),
+        "entities": sorted(names - {"?"})[:8],
+        # No grounding badge on a stored answer: the check ran against the
+        # grounding set at ask time, and the graph may have changed since.
+        "ungrounded_entities": None,
+        "stored": True,
+        "asked_at": record.asked_at.strftime("%d %b %H:%M"),
     }
 
 

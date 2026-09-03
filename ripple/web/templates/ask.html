@@ -1,7 +1,31 @@
 {% extends "base.html" %}
-{% from "_nav.html" import sidebar %}
 {% block title %}Ask the graph · Ripple{% endblock %}
-{% block sidebar %}{{ sidebar(counts, 'ask', script.id if script else None) }}{% endblock %}
+
+{% block sidebar %}
+<div class="side-hd"><span>Scripts</span>
+  <span class="num">{{ scripts|length }}</span></div>
+<a class="srow side-fixed" href="/">
+  <span class="ic">‹</span><span class="lb">Library</span></a>
+<div class="side-search">
+  <span class="ic" aria-hidden="true">⌕</span>
+  <input id="script-search" placeholder="Search scripts" autocomplete="off"
+         aria-label="Search scripts">
+</div>
+<div class="side-scroll" id="script-list">
+  {% for row in scripts %}
+  <a class="srow {{ 'on' if script and row.id == script.id|string }}"
+     {% if script and row.id == script.id|string %}aria-current="page"{% endif %}
+     href="/ask?script={{ row.id }}">
+    <span class="ic">▤</span><span class="lb">{{ row.title }}</span>
+    <span class="ct num">{{ row.assertions }}</span></a>
+  {% endfor %}
+  <div class="side-nomatch hide" id="script-nomatch">No script matches.</div>
+</div>
+<i class="pane-grip" role="separator" aria-orientation="vertical"
+   aria-label="Resize the scripts pane" tabindex="0"
+   data-resize="side" data-resize-var="--side-w" data-edge="right"
+   data-min="180" data-max="460"></i>
+{% endblock %}
 
 {% block toolbar %}
 <h1>Ask the graph</h1>
@@ -9,7 +33,19 @@
   {% if script %}{{ script.title }} · <span class="num">{{ assertions }}</span>
     accepted assertions · <span class="num">{{ entities }}</span> entities
   {% else %}No scripts yet{% endif %}</span>
+<div class="right">
+  <button class="btn hide" id="export-answer"
+          data-tip="Download this answer and its citations as Markdown">
+    ⤓ Export answer</button>
+  {% if script %}
+  <button class="toggle" data-pane="askhistory" data-target=".askwrap"
+          data-tip="Show or hide the history pane"
+          aria-label="Toggle the history pane">⬒</button>
+  {% endif %}
+</div>
 {% endblock %}
+
+{% block content_class %}panes{% endblock %}
 
 {% block content %}
 {% if not script %}
@@ -17,25 +53,99 @@
     <span>There are no scripts to ask about.</span>
     <a href="/">Import one</a></div>
 {% else %}
+<div class="askwrap">
+  <div class="askmain">
   {% if lock %}
-  <div class="lock"><span class="ic">◎</span>
-    <span>{{ lock.message }} Questions are answered from accepted assertions,
-      so there is nothing to answer from yet.</span>
-    <a href="{{ lock.href }}">{{ lock.action }}</a></div>
-  {% endif %}
-
-  <div id="askform" class="{{ 'locked' if lock }}"
-       data-script="{{ script.id }}" data-ready="{{ 'no' if lock else 'yes' }}">
-    <div class="askbox">
-      <input id="q" placeholder="Which scenes include the blue sedan?"
-             autocomplete="off" {{ 'disabled' if lock }}>
-      <button class="btn pri" id="ask" {{ 'disabled' if lock }}>Ask</button>
+  <div class="ask-empty" id="ask-idle">
+    <div class="ask-empty-ic" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
+        <path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
+        <path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
+      </svg>
     </div>
+    <h2>Nothing to ask yet</h2>
+    <p>Questions are answered from accepted assertions. {{ script.title }} has
+      no graph, so there is nothing to answer from.</p>
+    {% if model %}
+    <button class="btn pri" id="ask-build" data-script="{{ script.id }}">
+      ⁙ Build graph</button>
+    {% else %}
+    <a class="btn pri" href="/settings">◎ Choose a model</a>
+    <p class="tiny muted">Building the graph needs a model; keys and models
+      live in Settings</p>
+    {% endif %}
   </div>
 
-  <div id="out" aria-live="polite"><div class="empty">
-    Answers come from accepted assertions only. Nothing is generated from the
-    screenplay text.</div></div>
+  <div class="ask-empty hide" id="ask-building" role="status" aria-live="polite">
+    <div class="ask-empty-ic pulse" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
+        <path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
+        <path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
+      </svg>
+    </div>
+    <h2>Building graph&hellip;</h2>
+    <p>Extracting entities and assertions from {{ script.title }}. Leaving
+      this screen pauses the build; it resumes where it left off when you
+      return.</p>
+    <div class="build-progress">
+      <div class="build-row"><span id="bp-scene">Starting&hellip;</span>
+        <span class="num" id="bp-count"></span></div>
+      <div class="track"><i id="bp-bar" style="width:0"></i></div>
+      <div class="build-row tiny muted"><span id="bp-spend"></span>
+        <span class="num" id="bp-rate"></span></div>
+    </div>
+  </div>
+  {% else %}
+  <div class="ask-col">
+    <div id="askform"
+         data-script="{{ script.id }}" data-title="{{ script.title }}"
+         data-ready="yes">
+      <div class="askbox">
+        <span class="ic" aria-hidden="true">⌕</span>
+        <input id="q" placeholder="Which scenes include the blue sedan?"
+               autocomplete="off" maxlength="1024">
+        <button class="btn pri" id="ask">Ask</button>
+      </div>
+    </div>
+
+    <div id="out" aria-live="polite"><div class="ask-hint">
+      Answers from accepted graph assertions, not screenplay text. Browse
+      history in the right pane.</div></div>
+  </div>
+  {% endif %}
+  </div>
+
+  <aside class="pane askpane">
+    <i class="pane-grip" role="separator" aria-orientation="vertical"
+       aria-label="Resize the history pane" tabindex="0"
+       data-resize="askhistory" data-resize-var="--askpane-w" data-edge="left"
+       data-min="220" data-max="560"></i>
+    <div class="pane-hd"><h2>History</h2>
+      <span class="meta num" id="history-count">{{ history|length }}</span></div>
+    <div class="side-search">
+      <span class="ic" aria-hidden="true">⌕</span>
+      <input id="history-search" placeholder="Search questions"
+             autocomplete="off" aria-label="Search past questions">
+    </div>
+    <div class="qlist" id="ask-history">
+      {% for item in history %}
+      <button class="qrow" data-query="{{ item.id }}"
+              title="{{ item.question }} · {{ item.asked_at }}">
+        <span class="qq">{{ item.question }}</span>
+        <span class="qt num">{{ item.asked_at }}</span>
+      </button>
+      {% endfor %}
+    </div>
+    <div class="side-nomatch hide" id="history-nomatch">
+      No question matches.</div>
+    <div class="side-nomatch{{ ' hide' if history }}" id="history-empty">
+      Questions you ask appear here, and replay at no cost.</div>
+  </aside>
+</div>
 {% endif %}
 {% endblock %}
 

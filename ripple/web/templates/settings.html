@@ -47,8 +47,7 @@
            data-configured="{{ '1' if statuses and statuses[0].configured }}"
            data-main="{{ selected_model or '' }}"
            data-fallback="{{ fallback_model or '' }}">
-        <div class="hd"><h2>Models</h2>
-          <span class="meta">saved as soon as you pick</span></div>
+        <div class="hd"><h2>Models</h2></div>
         {% if statuses and statuses[0].configured %}
         <div class="tiny muted" style="margin-bottom:11px">
           The main model handles every call. When it refuses for an
@@ -103,11 +102,7 @@
 
     <section class="cards hide" data-pane="interface" role="tabpanel" id="pane-interface" aria-labelledby="tab-interface" tabindex="0">
       <div class="card" id="landing-card">
-        <div class="hd"><h2>Opening a script</h2>
-          <span class="meta">saved as soon as you pick</span></div>
-        <div class="tiny muted" style="margin-bottom:11px">
-          Where a script opens when you click it in the library. The other view
-          stays one click away either way.</div>
+        <div class="hd"><h2>Opening a script</h2></div>
         <label class="grow" style="cursor:pointer">
           <input type="radio" name="landing" value="reader"
                  {{ 'checked' if landing_view == 'reader' }}>

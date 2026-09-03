@@ -26,6 +26,7 @@ dev = [
     "black",
     "ruff",
     "httpx",
+    "shiplock>=0.2,<1",
 ]
 
 [project.urls]

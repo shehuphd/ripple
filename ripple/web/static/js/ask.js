@@ -5,54 +5,252 @@ if (ask) {
   // The chosen script comes from the server, not the query string: the page
   // falls back to the most recent script when none is named, and reading the
   // absent parameter sent "null" to the API.
-  const scriptId = document.getElementById('askform').dataset.script;
+  const askform = document.getElementById('askform');
+  const scriptId = askform.dataset.script;
+  const scriptTitle = askform.dataset.title || '';
 
   // One question in flight at a time: a second Enter while the first is
   // running would bill a second model call for the same question.
   let running = false;
 
+  // The last rendered answer, kept for the export button, which lives in the
+  // toolbar and stays hidden until there is something to export.
+  let last = null;
+  const exportButton = document.getElementById('export-answer');
+  if (exportButton) exportButton.addEventListener('click', exportAnswer);
+
+  function groundingBadge(body) {
+    // Only a fresh, written answer carries the check; a stored answer's
+    // grounding set may have changed since it was asked, so no badge.
+    if (!Array.isArray(body.ungrounded_entities) || !body.generated) return '';
+    if (body.ungrounded_entities.length === 0) {
+      return '<span class="tag set_design">✓ no ungrounded entities</span>';
+    }
+    const names = body.ungrounded_entities.map(esc).join(', ');
+    return `<span class="tag prop">names outside grounding: ${names}</span>`;
+  }
+
+  function render(body) {
+    last = body;
+    const chips = body.entities
+      .map((e) => `<span class="tag">${esc(e)}</span>`).join(' ');
+    const cited = body.cited_units.map((u) => `
+      <div class="cited">
+        <span class="no">${esc(u.scene ?? '')}</span>
+        <span class="bd">${esc(u.text)}</span>
+      </div>`).join('');
+    const storedNote = body.stored
+      ? `Stored answer from ${esc(body.asked_at)}, zero cost · `
+      : '';
+    out.innerHTML = `
+      <div class="ask-meta">
+        <span>${storedNote}Grounded in ${body.grounded_in} assertions across
+          ${body.cited_units.length} units, mean confidence
+          ${body.mean_confidence}${body.generated || !body.grounded_in
+            ? '' : ' · deterministic answer, no model configured'}</span>
+        <span class="grounded">${groundingBadge(body)}</span>
+      </div>
+      <div class="card ask-card">
+        <div class="answer">${esc(body.answer)}</div>
+        ${chips ? `<div class="chips" style="margin:16px 0 0">${chips}</div>` : ''}
+        <div class="tiny muted" style="margin-top:14px">
+          Answers come from accepted assertions only. Nothing here is generated
+          from the screenplay text.</div>
+      </div>
+      <div class="card ask-card">
+        <div class="hd"><h2>Cited units</h2>
+          <span class="meta">${body.cited_units.length}, ordered by scene</span></div>
+        ${cited || '<div class="empty">None.</div>'}
+      </div>`;
+    if (exportButton) exportButton.classList.remove('hide');
+  }
+
+  function exportAnswer() {
+    if (!last) return;
+    const q = last.question || question.value.trim();
+    const lines = [
+      `# ${q}`,
+      '',
+      last.answer,
+      '',
+      `Grounded in ${last.grounded_in} accepted assertion(s), `
+        + `mean confidence ${last.mean_confidence}.`
+        + (scriptTitle ? ` Script: ${scriptTitle}.` : ''),
+      '',
+    ];
+    if (last.entities.length) {
+      lines.push(`Entities: ${last.entities.join(', ')}`, '');
+    }
+    if (last.cited_units.length) {
+      lines.push('## Cited units', '');
+      last.cited_units.forEach((u) => {
+        lines.push(`- Scene ${u.scene ?? '?'}: ${u.text}`);
+      });
+      lines.push('');
+    }
+    lines.push(
+      'Answers come from accepted assertions only. '
+      + 'Nothing is generated from the screenplay text.',
+    );
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    const slug = q.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '').slice(0, 60) || 'answer';
+    link.download = `${slug}.md`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
   async function run() {
     if (!question.value.trim() || running) return;
     running = true;
     ask.disabled = true;
-    out.innerHTML = '<div class="empty">Asking…</div>';
+    out.innerHTML = '<div class="ask-hint">Asking…</div>';
+    if (exportButton) exportButton.classList.add('hide');
+    const asked = question.value.trim();
     try {
       const body = await api(`/api/scripts/${scriptId}/ask`, {
-        method: 'POST', body: form({ question: question.value }),
+        method: 'POST', body: form({ question: asked }),
       });
-      const chips = body.entities
-        .map((e) => `<span class="tag">${esc(e)}</span>`).join(' ');
-      const cited = body.cited_units.map((u) => `
-        <div class="cited">
-          <span class="no">${esc(u.scene ?? '')}</span>
-          <span class="bd">${esc(u.text)}</span>
-        </div>`).join('');
-      out.innerHTML = `
-        <div class="tiny muted" style="margin-bottom:12px">
-          Grounded in ${body.grounded_in} assertions · ${body.cited_units.length} units ·
-          mean confidence ${body.mean_confidence}
-          ${body.generated ? '' : ' · deterministic answer, no model configured'}
-        </div>
-        <div class="card">
-          <div class="answer">${esc(body.answer)}</div>
-          <div class="chips" style="margin:14px 0 0">${chips}</div>
-          <div class="tiny muted" style="margin-top:12px">
-            Answers come from accepted assertions only. Nothing here is generated
-            from the screenplay text.</div>
-        </div>
-        <div class="card" style="margin-top:14px">
-          <div class="hd"><h2>Cited units</h2>
-            <span class="meta">${body.cited_units.length} · ordered by scene</span></div>
-          ${cited || '<div class="empty">None.</div>'}
-        </div>`;
+      body.question = asked;
+      render(body);
+      prependHistory(body.query_id, asked);
     } catch (error) {
-      out.innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+      out.innerHTML = `<div class="ask-hint">${esc(error.message)}</div>`;
+      if (exportButton) exportButton.classList.add('hide');
     } finally {
       running = false;
       ask.disabled = false;
     }
   }
 
+  /* History lives in the page's own left pane: a stored answer replays from
+     the log at zero cost, and the question box fills so Ask re-runs it fresh
+     against the current graph. */
+  const historyPane = document.getElementById('ask-history');
+
+  async function showStored(queryId) {
+    out.innerHTML = '<div class="ask-hint">Loading the stored answer…</div>';
+    if (exportButton) exportButton.classList.add('hide');
+    try {
+      const body = await api(`/api/queries/${queryId}`);
+      question.value = body.question;
+      render(body);
+    } catch (error) {
+      out.innerHTML = `<div class="ask-hint">${esc(error.message)}</div>`;
+      if (exportButton) exportButton.classList.add('hide');
+    }
+  }
+
+  function wireHistoryRow(row) {
+    row.addEventListener('click', () => showStored(row.dataset.query));
+  }
+
+  function prependHistory(queryId, asked) {
+    if (!historyPane || !queryId) return;
+    const empty = document.getElementById('history-empty');
+    if (empty) empty.classList.add('hide');
+    const row = document.createElement('button');
+    row.className = 'qrow';
+    row.dataset.query = queryId;
+    row.title = asked;
+    const q = document.createElement('span');
+    q.className = 'qq';
+    q.textContent = asked;
+    const when = document.createElement('span');
+    when.className = 'qt num';
+    when.textContent = 'just now';
+    row.append(q, when);
+    wireHistoryRow(row);
+    historyPane.prepend(row);
+    const count = document.getElementById('history-count');
+    if (count) count.textContent = historyPane.querySelectorAll('.qrow').length;
+  }
+
+  if (historyPane) {
+    historyPane.querySelectorAll('.qrow').forEach(wireHistoryRow);
+  }
+
   ask.addEventListener('click', run);
   question.addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+}
+
+/* Instant search over a pane's rows: the rows are already on the page, so
+   filtering is a display toggle, no request and no reload. Runs for the
+   scripts pane and the history pane alike. */
+function filterPane(inputId, listId, rowSelector, emptyId) {
+  const input = document.getElementById(inputId);
+  const list = document.getElementById(listId);
+  if (!input || !list) return;
+  const noMatch = emptyId ? document.getElementById(emptyId) : null;
+  const apply = () => {
+    const needle = input.value.trim().toLowerCase();
+    const rows = list.querySelectorAll(rowSelector);
+    let shown = 0;
+    rows.forEach((row) => {
+      const hit = !needle || row.textContent.toLowerCase().includes(needle);
+      row.style.display = hit ? '' : 'none';
+      if (hit) shown += 1;
+    });
+    // An empty pane is not a failed search: its own empty line covers that.
+    if (noMatch) noMatch.classList.toggle('hide', shown > 0 || !rows.length);
+  };
+  input.addEventListener('input', apply);
+  apply();
+}
+
+filterPane('script-search', 'script-list', '.srow', 'script-nomatch');
+filterPane('history-search', 'ask-history', '.qrow', 'history-nomatch');
+
+/* The graphless empty state: Build graph runs the extraction loop right
+   here, one scene per request, each committed on its own. Leaving the page
+   pauses the loop; pressing Build again resumes from the unfinished scenes,
+   because completed scenes replay from cache at no cost. */
+const build = document.getElementById('ask-build');
+if (build) {
+  build.addEventListener('click', async () => {
+    build.disabled = true;
+    document.getElementById('ask-idle').classList.add('hide');
+    document.getElementById('ask-building').classList.remove('hide');
+    const sceneLabel = document.getElementById('bp-scene');
+    const countLabel = document.getElementById('bp-count');
+    const bar = document.getElementById('bp-bar');
+    const spend = document.getElementById('bp-spend');
+    const rate = document.getElementById('bp-rate');
+    const started = performance.now();
+    try {
+      const run = await api(`/api/scripts/${build.dataset.script}/extract`, {
+        method: 'POST',
+      });
+      let progress = run;
+      while (progress.pending > 0) {
+        const step = await api(`/api/extract/${run.run_id}/next`, {
+          method: 'POST',
+        });
+        progress = step.progress;
+        const done = progress.completed + progress.failed;
+        sceneLabel.textContent = done < progress.total
+          ? `Extracting scene ${done + 1}`
+          : 'Finishing';
+        countLabel.textContent = `${done} of ${progress.total} scenes`
+          + (progress.failed ? ` · ${progress.failed} failed` : '');
+        bar.style.width =
+          `${Math.round((done / Math.max(progress.total, 1)) * 100)}%`;
+        spend.textContent = `${progress.tokens.toLocaleString()} tokens`
+          + (progress.cost ? ` · ${progress.cost}` : '');
+        if (done) {
+          const perScene = (performance.now() - started) / 1000 / done;
+          rate.textContent = `${perScene.toFixed(1)}s per scene`;
+        }
+        if (step.done) break;
+      }
+      window.location.reload();
+    } catch (error) {
+      toast(error.message, true);
+      document.getElementById('ask-building').classList.add('hide');
+      document.getElementById('ask-idle').classList.remove('hide');
+      build.disabled = false;
+    }
+  });
 }

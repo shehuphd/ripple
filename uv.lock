@@ -1014,6 +1014,7 @@ dev = [
     { name = "reportlab" },
     { name = "ruff" },
     { name = "screenplain" },
+    { name = "shiplock" },
 ]
 
 [package.metadata]
@@ -1033,6 +1034,7 @@ requires-dist = [
     { name = "reportlab", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "screenplain", marker = "extra == 'dev'", specifier = "==0.12.0" },
+    { name = "shiplock", marker = "extra == 'dev'", specifier = ">=0.2,<1" },
     { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "traceact", specifier = ">=1.0,<2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
@@ -1074,6 +1076,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/1c/de/ca417cf95ea70775dfe29ac373091aa488aa355cc4a4669685288cd4e4db/screenplain-0.12.0.tar.gz", hash = "sha256:3e97c32b5dbce28e9623a364936d7142222837a67d1b9294262684fa13bd4c3c", size = 208891, upload-time = "2026-04-28T21:33:18.512Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7e/fd/c11f0072d85fb0fc4ab4feff133bb9fd7bcff6e6b2e56fdf20e03da0859c/screenplain-0.12.0-py3-none-any.whl", hash = "sha256:35feb87cbb0d99a8a713cd1368b9fcf67e522afbc68390a9d691c5fe77d3d4c0", size = 211944, upload-time = "2026-04-28T21:33:16.499Z" },
+]
+
+[[package]]
+name = "shiplock"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e9/68/eebeb82ba8e8c8d06fba0a297a015128e2caaec7aeb1fe908b7a868603bf/shiplock-0.2.0.tar.gz", hash = "sha256:cd45fd8a5fc2c8a34a97a6fd11a0cf4a725bd274db2e0cf5a8316ef9b92c6653", size = 23705, upload-time = "2026-09-03T12:27:17.4Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/dc/40e6223ed83b85abe825115e28502258a98d8866a5b294f05547f109b966/shiplock-0.2.0-py3-none-any.whl", hash = "sha256:343c17be7126a3e84326ee6359034d2ca88f4b61d588c845cfa211f37ce7b790", size = 24874, upload-time = "2026-09-03T12:27:16.118Z" },
 ]
 
 [[package]]

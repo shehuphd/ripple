@@ -25,7 +25,7 @@ button{font:inherit}
 .hide{display:none !important}
 
 /* Window shell */
-.win{height:100vh;display:grid;grid-template-columns:238px 1fr}
+.win{height:100vh;display:grid;grid-template-columns:var(--side-w,238px) 1fr}
 /* Collapsing removes the track rather than zeroing it. A zero-width track
    still participates in auto-placement, so the main column lands in it and
    ends up zero wide too. */
@@ -40,7 +40,8 @@ button{font:inherit}
    drawer's open and closed states are ordinary top-level rules with no
    media-query nesting between them. */
 .win.compact{grid-template-columns:1fr}
-.win.compact .side{position:fixed;left:-238px;top:0;bottom:0;width:238px;
+.win.compact .side{position:fixed;left:calc(-1 * var(--side-w,238px));top:0;
+  bottom:0;width:var(--side-w,238px);
   z-index:50;transition:left .18s ease;box-shadow:14px 0 34px rgba(0,0,0,.45)}
 .win.compact.side-on .side{left:0}
 .win.compact.side-on::after{content:"";position:fixed;inset:0;z-index:49;
@@ -156,6 +157,7 @@ a.chip:hover{border-color:var(--ac);color:var(--t1)}
 .tag.vfx{color:var(--set);border-color:#20372c}
 .tag.stunt{color:var(--red);border-color:#3a2523}
 .tag.duplicate{color:var(--amber);border-color:#3f3520}
+.tag.off{color:var(--t4);border-color:var(--bd)}
 
 .status{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
 .status .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
@@ -430,15 +432,93 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .grow i{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
 
 /* Ask the graph */
-.askbox{display:flex;gap:10px;margin-bottom:14px}
-.askbox input{flex:1;background:var(--inset);border:.5px solid var(--bd2);border-radius:8px;
-  color:var(--t1);padding:12px 14px;font:inherit;font-size:14px}
-.askbox input:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px var(--ac-w)}
+.ask-empty{max-width:460px;margin:18vh auto 0;text-align:center}
+.ask-empty-ic{width:84px;height:84px;border-radius:50%;background:var(--raised);
+  border:.5px solid var(--bd2);display:flex;align-items:center;justify-content:center;
+  color:var(--ac);margin:0 auto 36px}
+.ask-empty-ic svg{width:42px;height:42px}
+.ask-empty h2{font-size:20px;margin-bottom:14px}
+.ask-empty p{color:var(--t3);font-size:14px;line-height:1.65;margin-bottom:36px}
+.ask-empty .btn{padding:12px 26px;font-size:14.5px}
+.ask-empty .tiny{margin-top:18px;margin-bottom:0}
+.ask-empty-ic.pulse{animation:ask-pulse 1.6s ease-in-out infinite}
+@keyframes ask-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.build-progress{max-width:430px;margin:34px auto 0;text-align:left}
+.build-row{display:flex;justify-content:space-between;font-size:13px;
+  color:var(--t2)}
+.build-row.tiny{color:var(--t4)}
+/* Ask the graph: scripts on the left, question history on the right, the
+   answer in a centred column between them. Both panes collapse and resize;
+   each scrolls on its own so a hundred scripts and a hundred questions never
+   compete for one scrollbar. */
+.askwrap{display:grid;grid-template-columns:minmax(0,1fr) var(--askpane-w,320px);
+  gap:16px;flex:1;min-height:0}
+.askwrap > *{overflow-y:auto;min-height:0}
+.askwrap.pane-off{grid-template-columns:minmax(0,1fr)}
+.askwrap.pane-off .askpane{display:none}
+@media(max-width:1080px){
+  .askwrap{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}
+}
+.askpane{position:relative;gap:0;padding:0 2px 0 14px}
+.pane-hd{display:flex;align-items:center;gap:9px;padding:2px 2px 10px}
+.pane-hd h2{font-size:13px;font-weight:600;margin:0}
+.pane-hd .meta{margin-left:auto;font-size:12px;color:var(--t4)}
+.qlist{display:flex;flex-direction:column}
+.qrow{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;
+  background:none;border:0;border-radius:6px;padding:8px 9px;font:inherit;
+  font-size:13px;color:var(--t2);cursor:pointer}
+.qrow:hover{background:var(--raised)}
+.qrow .qq{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  max-width:100%}
+.qrow .qt{color:var(--t4);font-size:11.5px}
+.side-nomatch{color:var(--t4);font-size:12.5px;padding:8px 9px;line-height:1.55}
+
+/* A pane edge you can drag. Sits over the border it moves, so the whole
+   boundary is the target rather than a separate strip beside it. */
+.pane-grip{position:absolute;top:0;bottom:0;width:9px;cursor:col-resize;
+  z-index:5}
+.pane-grip[data-edge="right"]{right:-5px}
+.pane-grip[data-edge="left"]{left:-5px}
+.pane-grip:hover,.pane-grip:focus-visible,.pane-grip.dragging{
+  background:linear-gradient(to right,transparent 3px,var(--ac) 3px,
+  var(--ac) 5px,transparent 5px)}
+.pane-grip:focus-visible{outline:none}
+.side{position:relative}
+.side-fixed{margin:0 8px}
+.side-search{position:relative;padding:6px 8px 8px}
+.side-search .ic{position:absolute;left:17px;top:13px;color:var(--t4);
+  font-size:13px;pointer-events:none}
+.side-search input{width:100%;background:var(--inset);
+  border:.5px solid var(--bd2);border-radius:7px;color:var(--t1);
+  padding:7px 9px 7px 26px;font:inherit;font-size:12.5px}
+.side-search input:focus{outline:none;border-color:var(--ac);
+  box-shadow:0 0 0 3px var(--ac-w)}
+.ask-col{max-width:860px;margin:0 auto;padding:22px 8px 60px}
+.askbox{display:flex;align-items:center;gap:10px;background:var(--inset);
+  border:.5px solid var(--bd2);border-radius:11px;padding:7px 7px 7px 15px;
+  margin-bottom:18px}
+.askbox:focus-within{border-color:var(--ac);box-shadow:0 0 0 3px var(--ac-w)}
+.askbox .ic{color:var(--t4);font-size:15px;flex:0 0 auto}
+.askbox .btn{flex:0 0 auto;padding:9px 20px}
+.ask-hint{color:var(--t4);font-size:13px;line-height:1.6;padding:2px 2px 0}
+.ask-meta{display:flex;align-items:center;gap:12px;margin-bottom:16px;
+  color:var(--t3);font-size:12.5px}
+.ask-meta .grounded{margin-left:auto;flex:0 0 auto}
+.ask-card{margin-bottom:16px}
+/* The input carries no chrome of its own: the wrapper is the control, so the
+   glyph, field, and button read as one pill. */
+.askbox input{flex:1;min-width:0;background:none;border:0;color:var(--t1);
+  padding:9px 0;font:inherit;font-size:14.5px}
+.askbox input:focus{outline:none}
 .answer{font-size:14.5px;line-height:1.65}
 .cited{padding:13px 0;border-bottom:.5px solid var(--bd);display:flex;gap:16px}
 .cited:last-child{border-bottom:0}
 .cited .no{color:var(--t4);font-variant-numeric:tabular-nums;min-width:22px}
 .cited .bd{flex:1;font-family:var(--mono);font-size:13px;line-height:1.55}
+.srow.qrow{width:100%;background:none;border:0;font:inherit;font-size:13px;
+  color:var(--t2);cursor:pointer;text-align:left}
+.srow.qrow:hover{background:var(--raised)}
+.srow.qrow .lb{white-space:nowrap}
 .cited .bd .h{text-transform:uppercase;margin-bottom:5px}
 .cited .pg{color:var(--t4);font-size:12px}
 
@@ -478,6 +558,22 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .item .sub{color:var(--t3);font-size:12px;margin-top:3px}
 .item .r{margin-left:auto;color:var(--t4);font-variant-numeric:tabular-nums;
   flex:0 0 auto}
+
+.batch-head{display:flex;align-items:center;padding:2px 2px 9px}
+.batch-all{display:inline-flex;align-items:center;gap:7px;font-size:12px;
+  color:var(--t3);cursor:pointer}
+.row-check,.batch-all input{accent-color:var(--ac);width:15px;height:15px;
+  cursor:pointer}
+.item .row-check{flex:0 0 auto;position:relative;top:2px}
+.row-check-spacer{flex:0 0 15px}
+.batch-bar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
+  display:flex;align-items:center;gap:9px;padding:9px 13px;background:var(--raised);
+  border:.5px solid var(--bd2);border-radius:10px;
+  box-shadow:0 14px 34px rgba(0,0,0,.5);z-index:55}
+.batch-count{font-size:12px;color:var(--t3);font-variant-numeric:tabular-nums}
+.batch-spacer{width:14px}
+.btn.danger{color:var(--red);border-color:#3a2523}
+.btn.danger:hover:not(:disabled){background:#3a2523}
 
 .toast{position:fixed;right:18px;bottom:18px;background:var(--raised);
   border:.5px solid var(--bd2);border-radius:8px;padding:11px 15px;font-size:13px;

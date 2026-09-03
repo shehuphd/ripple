@@ -233,4 +233,80 @@ function setUpPaneToggles() {
   }
 }
 
+/* Draggable pane edges.
+   Each grip names the CSS custom property it drives, which edge of its pane
+   it sits on, and the bounds it may take. The width persists like the
+   collapsed state does, so a pane sized once stays that size. Arrow keys
+   move it too: a drag-only control is unreachable from the keyboard. */
+function rememberWidth(key, px) {
+  try {
+    window.localStorage.setItem(`ripple.width.${key}`, String(px));
+  } catch (error) {
+    // Private browsing denies localStorage; the drag still works.
+  }
+}
+
+function storedWidth(key) {
+  try {
+    const value = Number(window.localStorage.getItem(`ripple.width.${key}`));
+    return Number.isFinite(value) && value > 0 ? value : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function setUpPaneResizers() {
+  const root = document.documentElement;
+  for (const grip of document.querySelectorAll('[data-resize]')) {
+    const pane = grip.parentElement;
+    const key = grip.dataset.resize;
+    const property = grip.dataset.resizeVar;
+    const min = Number(grip.dataset.min || 180);
+    const max = Number(grip.dataset.max || 520);
+    const leading = grip.dataset.edge === 'right';
+    const clamp = (px) => Math.min(max, Math.max(min, Math.round(px)));
+    const setWidth = (px) => {
+      const width = clamp(px);
+      root.style.setProperty(property, `${width}px`);
+      rememberWidth(key, width);
+      window.dispatchEvent(new Event('resize'));
+      return width;
+    };
+
+    const remembered = storedWidth(key);
+    if (remembered) root.style.setProperty(property, `${clamp(remembered)}px`);
+
+    grip.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      grip.setPointerCapture(event.pointerId);
+      grip.classList.add('dragging');
+      // The pane's own edge is the anchor, so the width follows the pointer
+      // exactly however the pane is placed in the page.
+      const box = pane.getBoundingClientRect();
+      const anchor = leading ? box.left : box.right;
+      const move = (moved) => {
+        setWidth(leading ? moved.clientX - anchor : anchor - moved.clientX);
+      };
+      const stop = () => {
+        grip.classList.remove('dragging');
+        grip.removeEventListener('pointermove', move);
+        grip.removeEventListener('pointerup', stop);
+        grip.removeEventListener('pointercancel', stop);
+      };
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', stop);
+      grip.addEventListener('pointercancel', stop);
+    });
+
+    grip.addEventListener('keydown', (event) => {
+      const step = event.key === 'ArrowLeft' ? -16
+        : event.key === 'ArrowRight' ? 16 : 0;
+      if (!step) return;
+      event.preventDefault();
+      setWidth(pane.getBoundingClientRect().width + (leading ? step : -step));
+    });
+  }
+}
+
 document.addEventListener('DOMContentLoaded', setUpPaneToggles);
+document.addEventListener('DOMContentLoaded', setUpPaneResizers);

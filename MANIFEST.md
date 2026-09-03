@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-02 09:49:52 UTC
+Last updated: 2026-09-03 18:36:57 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
 
@@ -10,12 +10,13 @@ Every file in the repository and what it does. Directories the application write
 |---|---|
 | `README.md` | What Ripple is, what it does, and how to run it. |
 | `USAGE.md` | The full manual: every screen, control, and error code. |
-| `ARCHITECTURE.md` | System structure, data stores, integrations, and the domain glossary. |
+| `ARCHITECTURE.md` | System structure, data stores, integrations, a STRuFO run-through, and the domain glossary. |
 | `CHANGELOG.md` | Release history, newest first. |
 | `MANIFEST.md` | This file. |
 | `LICENSE` | AGPL-3.0. |
 | `launch.command` | macOS launcher: stops any running instance, builds or repairs the venv, starts the server, opens a browser. `--test` runs the suite instead. |
 | `pyproject.toml` | Package metadata, dependencies, pytest and ruff configuration. |
+| `shiplock.toml` | Shiplock docs-vs-code release checks: declared docs, version alignment, architecture and manifest coverage. |
 | `uv.lock` | Locked dependency versions for `uv`. |
 | `.gitignore` | Excludes runtime state, virtual environments, and local tool settings. |
 | `.github/dependabot.yml` | Weekly dependency update checks. |
@@ -105,7 +106,7 @@ Every file in the repository and what it does. Directories the application write
 | `services/scenes.py` | Scene insertion, omission (OMITTED, reversible), and restoration. |
 | `services/spend.py` | Token ledger and the hard budget gate every call site checks. |
 | `services/settings.py` | Credential entry and validation, main and fallback model selection. |
-| `services/synthesizer.py` | Plain-language ripple explanation, with a deterministic no-model fallback. |
+| `services/synthesizer.py` | Plain-language ripple explanation and the grounded query answer (script facts + assertions packet, out-of-scope parts declined, answer checked for ungrounded entity names), each with a deterministic no-model fallback. |
 
 ### Web (`ripple/web/`)
 
@@ -119,7 +120,7 @@ Every file in the repository and what it does. Directories the application write
 | `web/templates/reader.html` | Screenplay reader, editing, and the ripple preview overlay. |
 | `web/templates/script_graph.html` | The script-level production graph, the opening view. |
 | `web/templates/graph.html` | The expanded per-node graph view. |
-| `web/templates/ask.html` | Grounded query page. |
+| `web/templates/ask.html` | Grounded query page, with its own pane of scripts and question history. |
 | `web/templates/list.html` | Shared listing page: entities, assertions, reports, findings, traces. |
 | `web/templates/settings.html` | Tabbed settings: API keys, spend, interface. |
 | `web/templates/error.html` | In-app error page for page routes. |
@@ -127,11 +128,11 @@ Every file in the repository and what it does. Directories the application write
 | `web/static/css/ripple-fonts.css` | Font faces. |
 | `web/static/css/ripple-components.css` | Shared components. |
 | `web/static/css/app.css` | Per-screen styles. |
-| `web/static/js/app.js` | Shared helpers: `api()`, escaping, dialogs, the decision log. |
+| `web/static/js/app.js` | Shared helpers: `api()`, escaping, dialogs, the decision log, and the collapse and drag-resize behaviour every pane uses. |
 | `web/static/js/library.js` | Library page behaviour. |
 | `web/static/js/reader.js` | Reader editing, drafts, and the preview overlay. |
 | `web/static/js/graph.js` | Both graph views: rendering, selection, zoom, search. |
-| `web/static/js/ask.js` | Grounded query page behaviour. |
+| `web/static/js/ask.js` | Grounded query page behaviour: asking, stored replays, Markdown export, the grounding tag. |
 | `web/static/js/settings.js` | Settings page behaviour. |
 | `web/static/ripple-mark.svg` | The product mark. |
 
@@ -151,7 +152,7 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_continuity.py` | Evidence retrieval and orphaned-reference detection. |
 | `tests/test_continuity_judge.py` | Continuity reply verification and prompt assembly. |
 | `tests/test_diff.py` | Diff engine identity and grouping rules. |
-| `tests/test_docs.py` | Docs hygiene: no internal references in public docs or shipped source, absolute README links, this manifest present. |
+| `tests/test_docs.py` | Docs hygiene: no internal references in public docs or shipped source, absolute README links, this manifest present, and the shiplock gate. |
 | `tests/test_duplicates.py` | Duplicate detection, merge collisions and refusals, alias-aware resolution. |
 | `tests/test_extraction.py` | Extraction service, validation, caching, and run status. |
 | `tests/test_fixtures.py` | Judge-visible scene context assembly. |

@@ -11,6 +11,10 @@
   <input id="list-search" placeholder="Search" autocomplete="off"
          aria-label="Search this list"></div>
 {% endif %}
+{% if header_action %}
+<button class="btn" id="header-action" data-post="{{ header_action.url }}"
+        data-tip="{{ header_action.tip }}">{{ header_action.label }}</button>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -22,9 +26,23 @@
 {% endif %}
 
 {% if items %}
+{% if batch_actions %}
+<div class="batch-head">
+  <label class="batch-all"><input type="checkbox" id="batch-all">
+    Select all matching</label>
+</div>
+{% endif %}
 <div class="list">
   {% for item in items %}
-  <div class="item">
+  <div class="item{{ ' selectable' if item.id and item.batch_kinds }}"
+       {% if item.id %}data-id="{{ item.id }}"{% endif %}
+       {% if item.batch_kinds %}data-kinds="{{ item.batch_kinds|join(',') }}"{% endif %}
+       {% if item.assertions is defined %}data-assertions="{{ item.assertions }}"{% endif %}>
+    {% if batch_actions %}
+      {% if item.id and item.batch_kinds %}
+      <input type="checkbox" class="row-check" aria-label="Select this row">
+      {% else %}<span class="row-check-spacer"></span>{% endif %}
+    {% endif %}
     {% if item.tag %}<span class="tag {{ item.tag_class }}">{{ item.tag }}</span>{% endif %}
     <div class="grow">
       <div>{{ item.title }}</div>
@@ -47,6 +65,18 @@
   <button class="btn sm" id="pager-next">Next ›</button>
 </div>
 <div class="empty hide" id="list-no-match">Nothing matches the search.</div>
+{% if batch_actions %}
+<div class="batch-bar hide" id="batch-bar" role="region" aria-label="Batch actions">
+  <span class="batch-count" id="batch-count">0 selected</span>
+  <button class="btn sm" id="batch-clear">Clear</button>
+  <span class="batch-spacer"></span>
+  {% for a in batch_actions %}
+  <button class="btn sm{{ ' danger' if a.danger }}" data-batch-kind="{{ a.kind }}"
+          data-batch-url="{{ a.url }}"{% if a.confirm %} data-batch-confirm="1"{% endif %}>
+    {{ a.label }}</button>
+  {% endfor %}
+</div>
+{% endif %}
 {% else %}
 <div class="empty">{{ empty }}</div>
 {% endif %}
@@ -54,7 +84,30 @@
 
 {% block scripts %}
 <script>
-document.querySelectorAll('[data-post]').forEach((button) => {
+/* A header action POSTs and, when the reply carries a url, opens it in a new
+   tab (the trace viewer) rather than reloading the page. */
+const headerAction = document.getElementById('header-action');
+if (headerAction) {
+  headerAction.addEventListener('click', async () => {
+    headerAction.disabled = true;
+    let result;
+    try {
+      result = await api(headerAction.dataset.post, { method: 'POST', body: form({}) });
+    } catch (error) {
+      toast(error.message, true);
+      headerAction.disabled = false;
+      return;
+    }
+    headerAction.disabled = false;
+    if (result && result.url) {
+      window.open(result.url, '_blank', 'noopener');
+    } else {
+      window.location.reload();
+    }
+  });
+}
+
+document.querySelectorAll('.item [data-post]').forEach((button) => {
   button.addEventListener('click', async () => {
     button.disabled = true;
     try {
@@ -109,6 +162,114 @@ document.querySelectorAll('[data-post]').forEach((button) => {
   prev.addEventListener('click', () => { page -= 1; render(); });
   next.addEventListener('click', () => { page += 1; render(); });
   render();
+})();
+
+/* Batch selection. Checkboxes on selectable rows drive a floating action bar;
+   each action runs over the selected rows that support it in one request.
+   Selection tracks the search filter: "select all matching" and clearing a
+   filtered-out selection both honour the current search needle, so a batch is
+   scoped to what the list is showing, not the page you happen to be on. */
+(() => {
+  const bar = document.getElementById('batch-bar');
+  if (!bar) return;
+  const rows = [...document.querySelectorAll('.list .item.selectable')];
+  if (!rows.length) return;
+  const search = document.getElementById('list-search');
+  const all = document.getElementById('batch-all');
+  const count = document.getElementById('batch-count');
+  const clear = document.getElementById('batch-clear');
+
+  const needle = () => (search ? search.value.trim().toLowerCase() : '');
+  const matches = (row) => {
+    const n = needle();
+    return !n || row.textContent.toLowerCase().includes(n);
+  };
+  const checkOf = (row) => row.querySelector('.row-check');
+  const kindsOf = (row) => (row.dataset.kinds || '').split(',');
+  const selected = () => rows.filter((r) => checkOf(r) && checkOf(r).checked);
+
+  const CONFIRM = {
+    merge: (n) => `Merge ${n} selected pair(s)? Each keeps the survivor and `
+      + 'records the other name as an alias. Recorded as an auditable change set.',
+    delete: (n, extra) => `Delete ${n} selected entit${n === 1 ? 'y' : 'ies'}? `
+      + `This also permanently removes ${extra} assertion(s) that reference `
+      + 'them, and cannot be undone.',
+    deactivate: (n) => `Deactivate ${n} selected assertion(s)? They leave the `
+      + 'active graph; the rows remain and can be reactivated.',
+  };
+
+  function refresh() {
+    const sel = selected();
+    count.textContent = `${sel.length} selected`;
+    bar.classList.toggle('hide', sel.length === 0);
+    const matching = rows.filter(matches);
+    all.checked = matching.length > 0 && matching.every((r) => checkOf(r).checked);
+    all.indeterminate = sel.length > 0 && !all.checked;
+    bar.querySelectorAll('[data-batch-kind]').forEach((btn) => {
+      btn.disabled = !sel.some((r) => kindsOf(r).includes(btn.dataset.batchKind));
+    });
+  }
+
+  rows.forEach((r) => {
+    const c = checkOf(r);
+    if (c) c.addEventListener('change', refresh);
+  });
+
+  all.addEventListener('change', () => {
+    const on = all.checked;
+    rows.filter(matches).forEach((r) => { checkOf(r).checked = on; });
+    refresh();
+  });
+
+  clear.addEventListener('click', () => {
+    rows.forEach((r) => { if (checkOf(r)) checkOf(r).checked = false; });
+    refresh();
+  });
+
+  if (search) {
+    search.addEventListener('input', () => {
+      rows.forEach((r) => {
+        const c = checkOf(r);
+        if (c && c.checked && !matches(r)) c.checked = false;
+      });
+      refresh();
+    });
+  }
+
+  bar.querySelectorAll('[data-batch-kind]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const kind = btn.dataset.batchKind;
+      const chosen = selected().filter((r) => kindsOf(r).includes(kind));
+      if (!chosen.length) { toast('No selected rows support that action.', true); return; }
+      const ids = chosen.map((r) => r.dataset.id);
+      if (btn.dataset.batchConfirm) {
+        let message;
+        if (kind === 'delete') {
+          const extra = chosen.reduce(
+            (sum, r) => sum + (parseInt(r.dataset.assertions, 10) || 0), 0);
+          message = CONFIRM.delete(ids.length, extra);
+        } else {
+          const build = CONFIRM[kind] || ((n) => `Apply to ${n} selected row(s)?`);
+          message = build(ids.length);
+        }
+        const ok = await confirmDialog(message, btn.textContent.trim());
+        if (!ok) return;
+      }
+      btn.disabled = true;
+      try {
+        await api(btn.dataset.batchUrl, {
+          method: 'POST', body: form({ ids: JSON.stringify(ids) }),
+        });
+      } catch (error) {
+        toast(error.message, true);
+        btn.disabled = false;
+        return;
+      }
+      window.location.reload();
+    });
+  });
+
+  refresh();
 })();
 </script>
 {% endblock %}

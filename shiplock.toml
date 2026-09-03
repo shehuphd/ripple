@@ -1,0 +1,29 @@
+# Shiplock: docs-vs-code release checks. Run `shiplock check` here, or let
+# tests/test_docs.py run the same gate inside pytest.
+
+[docs]
+public = ["README.md", "USAGE.md", "ARCHITECTURE.md", "CHANGELOG.md", "MANIFEST.md"]
+changelog = "CHANGELOG.md"
+readme = "README.md"
+
+[version]
+package = "ripple"
+
+[architecture]
+doc = "ARCHITECTURE.md"
+source_dir = "ripple"
+
+# No [[coverage]] entries: the enumerated vocabularies here (IMPORT_OUTCOMES,
+# MODEL_CALL_OUTCOMES) are plain tuples backing CHECK constraints, not Enum
+# classes, and the coverage check reads Enums only.
+
+[manifest]
+doc = "MANIFEST.md"
+sources = [
+    "ripple/**/*.py",
+    "ripple/web/templates/*.html",
+    "ripple/web/static/**/*.css",
+    "ripple/web/static/**/*.js",
+    "tests/*.py",
+    "tools/*.py",
+]

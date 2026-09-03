@@ -111,3 +111,48 @@ class TestManifest:
             if "__pycache__" not in path.parts and path.name not in text
         ]
         assert missing == []
+
+
+class TestPromptRegistry:
+    """project/PROMPTS.md is the review surface for prompt versions; a bumped
+    constant that never reaches the registry defeats the audit trail."""
+
+    def test_every_live_prompt_version_is_registered(self):
+        from ripple.extraction.continuity_judge import CONTINUITY_PROMPT_VERSION
+        from ripple.extraction.judge import JUDGE_PROMPT_VERSION
+        from ripple.extraction.prompt import PROMPT_VERSION
+        from ripple.services.synthesizer import (
+            QUERY_PROMPT_VERSION,
+            SYNTHESIS_PROMPT_VERSION,
+        )
+
+        registry = (REPO / "project" / "PROMPTS.md").read_text(encoding="utf-8")
+        for version in (
+            PROMPT_VERSION,
+            JUDGE_PROMPT_VERSION,
+            CONTINUITY_PROMPT_VERSION,
+            SYNTHESIS_PROMPT_VERSION,
+            QUERY_PROMPT_VERSION,
+        ):
+            assert f"`{version}`" in registry, (
+                f"{version} is live but not in project/PROMPTS.md"
+            )
+
+
+class TestShiplock:
+    """The shiplock gate: docs checked against the code they describe.
+
+    One assertion over the whole deterministic layer (declared docs present,
+    banned words, version alignment, architecture module list, manifest
+    coverage, README links), configured in shiplock.toml so the CLI, this
+    test, and CI all run the identical gate.
+    """
+
+    def test_the_shiplock_gate_is_clean(self):
+        from shiplock import load_config, run_checks
+
+        report = run_checks(load_config(REPO))
+        assert not report.findings, [
+            f"{finding.check} {finding.path}:{finding.line}: {finding.message}"
+            for finding in report.findings
+        ]

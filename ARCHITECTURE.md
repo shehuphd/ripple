@@ -59,6 +59,55 @@ flowchart LR
 
 The model is called for extraction, the preview's judgement and continuity passes, the opt-in prose explanation, and the grounded query; everything else (detection, parsing, the diff, continuity retrieval, layout, severity) is deterministic application code, so the diff and the orphaned-reference finding hold even with no provider configured. The continuity judgement is advisory: when its call fails, the preview stands on the deterministic findings and says so. Every model call, refusal included, is written to the `model_calls` audit table.
 
+## STRuFO
+
+A one-page tour: Shape, Technical stack, Run details, Failure modes, Observability.
+
+### Shape (10 seconds)
+
+Ripple treats a screenplay as a production database, not a static document. It imports a script, extracts a graph of production entities and evidence-backed assertions, and shows the downstream production and continuity impact of a proposed edit before anything is applied. The loop is: select a line, inspect its graph, edit it, see the ripple, decide.
+
+### Technical stack
+
+- **Language:** Python 3.11+
+- **Web:** FastAPI + Jinja2 templates + vanilla JS, no build step
+- **Data:** SQLAlchemy 2 over SQLite locally (`data/ripple.db`), PostgreSQL when deployed; 22 tables with CHECK constraints enforcing every enumerated vocabulary at the database layer
+- **`keycall`:** the one LLM adapter every provider routes through; used only for extraction, the preview's judgement and continuity passes, the prose explanation, and grounded queries
+- **`traceact`:** startup-configured tracing with `capture_inputs=False`, so screenplay text and uploaded bytes are never captured automatically
+- **`rates`:** pricing ledger behind every dollar figure
+- **`pdf-inspector` / `defusedxml`:** PDF and Final Draft XML parsing; optional `tesseract` + `pdftoppm` for OCR of scanned PDFs
+- **Deterministic core (no model):** format detection, parsing, the diff engine, continuity retrieval, 2D layout, and severity are all plain application code, so the diff and the orphaned-reference finding hold with no provider configured
+
+### Run details — cocktail-party version
+
+You upload a screenplay and Ripple reads it into a web of who and what each scene depends on: characters, props, wardrobe, vehicles, locations, every fact backed by the line that stated it. Then you change a line. Before anything is saved, Ripple shows you what that change knocks over downstream: the prop that's now in two places at once, the character named in a scene that no longer introduces them. You look at the ripple, then decide whether to accept it.
+
+### Run details — technical version
+
+**Setup (build the graph).** An upload is format-detected from its bytes, parsed into `ParsedScene`/`ParsedUnit`, and written as scripts/scenes/units. `extraction/service.py` then runs one scene at a time through the model: a deterministic pre-pass writes what code can derive (cast from dialogue cues, location from the heading) with `provenance="system"`, the model reads the rest, `validate.py` checks the JSON against the schema and predicate rules before any row is written, and entities/assertions/attributes are written to the graph. Extraction resumes per scene rather than restarting a whole run, and unchanged scenes replay from cache at no cost.
+
+**The unit of work (one edit → ripple → accept).** You edit a line and press See ripple. `preview_changes` opens a `ripple.preview` traceact span and, for each affected scene, sends the model the stored assertions and attributes those edited lines support. `judge.py` verifies the returned verdicts in code: unlisted ids are dropped, a `holds` on deleted evidence is downgraded, a missing verdict is a coverage miss. An advisory continuity pass runs over a bounded evidence packet, every claimed conflict required to cite evidence ids from that packet. The deterministic `diff.py` compares assertion sets by edge identity (both endpoints plus predicate), so a proposed-but-unsaved assertion still compares correctly, and the synthesizer writes the plain-language explanation. Nothing is applied yet. On accept, `changeset.py` turns the diff and its findings into one atomic change set, applied in a single transaction, with latest-only undo. Every model call, refusals included, is written to the `model_calls` audit table.
+
+### Failure modes
+
+| Failure | Trigger | Handling |
+|---|---|---|
+| Malformed / truncated response | Model returns unparseable or cut-off JSON during extraction | Escalates to the configured fallback model within the same billed pass; if the fallback also fails, the scene fails (recorded), and the rest of the run continues |
+| Empty answer on a scene with content | Model returns no entities for a scene that has text | Treated as a validation failure and escalated to the fallback |
+| Budget cap reached | `check_budget` sees the cap hit before provider contact | Raises `BudgetExceeded`, writes the refusal to `model_calls` so billed-but-refused is still visible, fails the scene `budget_exceeded` |
+| Dead model | Provider reports a model doesn't exist | Model selection refuses it and Settings marks it, so it's never offered again |
+| Quota exhaustion | Provider quota error mid-run | Persistent warning badge on that key in Settings, cleared when the key is updated |
+| Continuity call fails | The advisory continuity judgement errors | Preview stands on the deterministic findings and says the continuity pass didn't run |
+| No model configured | No provider key / model selected | Import, reader, diff, and deterministic continuity findings all still work; only graph building is disabled |
+| Crash mid-build | Server stops during extraction | Per-scene resume on restart, never a restart from zero |
+
+### Observability
+
+- Each build, preview, and accept opens its own `traceact` span; the Traces page lists every model call newest-first with purpose, tokens, duration, and outcome, and can launch traceact's full viewer pre-filtered to a run.
+- The `model_calls` audit table records every call including refusals, so billed tokens are never invisible to the budget gate.
+- Each run record carries a priced ledger; every act and estimate states the date of the `rates` price snapshot in use, and shows a dash rather than a wrong number when a model is unpriced.
+- Continuity findings, change sets, and reports are all queryable list pages, so the "why did the graph change" trail is on record, not just the fact that it did.
+
 ## Core components
 
 | Component | Role |
