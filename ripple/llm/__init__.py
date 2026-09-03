@@ -18,6 +18,7 @@ from ripple.llm.base import (
     ProviderNotConfigured,
     Tier,
 )
+from ripple.llm.genai_provider import GoogleGenaiProvider
 from ripple.llm.keycall_provider import KeycallProvider
 
 logger = logging.getLogger(__name__)
@@ -26,8 +27,17 @@ PROVIDERS: dict[str, LLMProvider] = {
     "google": KeycallProvider("google", "GOOGLE_API_KEY"),
 }
 
+# The grounded query (Ask the graph) runs through Google's own google-genai
+# SDK instead of KeyCall's HTTP path, so a Google SDK generation is imported
+# and called at runtime. Extraction and judgement stay on PROVIDERS above. Same
+# credential, same model ids, same GenerationResult; only the transport differs.
+QUERY_PROVIDERS: dict[str, LLMProvider] = {
+    "google": GoogleGenaiProvider("google", "GOOGLE_API_KEY"),
+}
+
 __all__ = [
     "PROVIDERS",
+    "QUERY_PROVIDERS",
     "GenerationResult",
     "LLMProvider",
     "ModelInfo",
@@ -36,6 +46,7 @@ __all__ = [
     "Tier",
     "configured_providers",
     "get_provider",
+    "get_query_provider",
 ]
 
 
@@ -48,6 +59,15 @@ def get_provider(name: str) -> LLMProvider:
             "unknown_provider",
             f"Unknown provider {name!r}. Available: {', '.join(sorted(PROVIDERS))}.",
         ) from None
+
+
+def get_query_provider(name: str) -> LLMProvider:
+    """The provider the Ask path uses: the google-genai SDK for Google.
+
+    Falls back to the standard registry for any other provider name, so the
+    query path never has fewer providers than the rest of the app.
+    """
+    return QUERY_PROVIDERS.get(name) or get_provider(name)
 
 
 def configured_providers() -> list[str]:

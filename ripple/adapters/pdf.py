@@ -67,6 +67,30 @@ MARGIN_SCENE_NUMBER = re.compile(
 )
 
 
+def _looks_like_heading(text: str) -> bool:
+    """True when a line is a scene heading, with or without margin numbers.
+
+    A screenplay leaves no blank line between a slug and its action, so on an
+    OCR'd page the two group into one block and the heading stops matching. This
+    forces a heading onto a block of its own; a text-layer PDF separates it by
+    geometry already, so the rule is a safe no-op there.
+    """
+    return bool(MARGIN_SCENE_NUMBER.match(text) or SCENE_HEADING.match(text))
+
+
+def _looks_like_cue(text: str) -> bool:
+    """A character cue by shape alone: a short, all-caps name line.
+
+    Used only on the OCR path, where indentation is gone and a cue cannot be
+    told from action by position. The length and terminal-punctuation guards
+    keep an all-caps action line ("A LOUD BANG.") from reading as a cue.
+    """
+    stripped = text.strip()
+    if len(stripped) > 38 or stripped.endswith((".", "!", "?")):
+        return False
+    return parse_character_cue(stripped) is not None
+
+
 @dataclass(frozen=True)
 class _Line:
     """One rendered line of text with its position on the page."""
@@ -259,11 +283,18 @@ class PdfAdapter:
             detail = (error.stderr or b"").decode("utf-8", "replace").strip()
             raise ImportRejected("ocr_failed", f"OCR failed: {detail[:200]}") from error
 
+        # OCR loses the exact geometry a text layer carries, so blocks are
+        # separated by the blank lines Tesseract keeps between them: a blank line
+        # advances the vertical cursor past a full block gap, so _group_blocks
+        # splits there. Without this every line sits one unit below the last, the
+        # whole page collapses into one block, and a scene heading glued to its
+        # action stops matching, so a clean scan parses to zero scenes.
         lines = []
         index = 0
         for page_number, text in enumerate(page_texts, start=1):
             for line in text.splitlines():
                 if not line.strip():
+                    index += int(BLOCK_GAP) + 1
                     continue
                 lines.append(
                     _Line(
@@ -295,13 +326,15 @@ class PdfAdapter:
         speaker: str | None = None
         ambiguous = 0
 
-        for block_index, block in enumerate(self._group_blocks(lines)):
+        for block_index, block in enumerate(self._group_blocks(lines, method)):
             text = " ".join(line.text for line in block).strip()
             if not text:
                 continue
             text, margin_number = self._strip_margin_number(text)
             left = min(line.x for line in block)
-            unit_type, confidence = self._classify_block(text, left, margin, previous)
+            unit_type, confidence = self._classify_block(
+                text, left, margin, previous, method
+            )
             if confidence < 0.6:
                 ambiguous += 1
 
@@ -389,30 +422,46 @@ class PdfAdapter:
         return counts.most_common(1)[0][0]
 
     @staticmethod
-    def _group_blocks(lines: list[_Line]) -> list[list[_Line]]:
-        """Split lines into blocks on a vertical gap or a page break."""
+    def _group_blocks(
+        lines: list[_Line], method: ParserMethod = ParserMethod.PDF_LAYOUT
+    ) -> list[list[_Line]]:
+        """Split lines into blocks on a vertical gap, a page break, or a heading.
+
+        A scene heading always starts its own block, and on the OCR path a
+        character cue does too: OCR leaves no blank line between it and the line
+        below, so without this they group together and stop being recognised. A
+        text-layer PDF separates them by geometry, so the rule is a no-op there.
+        """
+        ocr = method is ParserMethod.OCR
         blocks: list[list[_Line]] = []
         current: list[_Line] = []
         for line in lines:
-            if not current:
-                current = [line]
-                continue
-            last = current[-1]
-            new_page = line.page != last.page
-            gap = abs(last.y - line.y)
-            shifted = abs(line.x - current[0].x) > COLUMN_SHIFT
-            if new_page or gap > BLOCK_GAP or shifted:
+            # A heading, and on the OCR path a character cue, is a block of its
+            # own: OCR leaves no blank line between it and the line that follows.
+            solo = _looks_like_heading(line.text) or (ocr and _looks_like_cue(line.text))
+            if current and (
+                solo
+                or line.page != current[-1].page
+                or abs(current[-1].y - line.y) > BLOCK_GAP
+                or abs(line.x - current[0].x) > COLUMN_SHIFT
+            ):
                 blocks.append(current)
-                current = [line]
-            else:
-                current.append(line)
+                current = []
+            current.append(line)
+            if solo:
+                blocks.append(current)
+                current = []
         if current:
             blocks.append(current)
         return blocks
 
     @staticmethod
     def _classify_block(
-        text: str, left: float, margin: float, previous: UnitType | None
+        text: str,
+        left: float,
+        margin: float,
+        previous: UnitType | None,
+        method: ParserMethod = ParserMethod.PDF_LAYOUT,
     ) -> tuple[UnitType, float]:
         """Classify a block, returning the type and the rule's confidence."""
         if SCENE_HEADING.match(text):
@@ -428,6 +477,18 @@ class PdfAdapter:
             UnitType.DIALOGUE,
             UnitType.PARENTHETICAL,
         )
+
+        # OCR flattens indentation, so a cue and its dialogue cannot be told
+        # apart by horizontal position. Classify by shape instead: a cue-shaped
+        # line is the speaker, and a line that follows one is their dialogue.
+        if method is ParserMethod.OCR:
+            if _looks_like_cue(text):
+                return UnitType.CHARACTER, 0.7
+            if SHOT_PREFIX.match(text):
+                return UnitType.SHOT, 0.8
+            if in_speech:
+                return UnitType.DIALOGUE, 0.7
+            return UnitType.ACTION, 0.7
 
         if offset >= CHARACTER_POINTS and parse_character_cue(text):
             return UnitType.CHARACTER, 0.95

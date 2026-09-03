@@ -112,6 +112,47 @@ class TestOutputValidation:
         assert report.entities == []
         assert "unknown_entity_type" in report.rejection_codes
 
+    def test_a_pronoun_or_group_name_is_dropped(self):
+        """The extractor sometimes resolves a pronoun to a fresh entity, or
+        labels a group as one. Neither is a production entity, so both are
+        dropped before they reach the graph, while an unnamed role is kept."""
+        report = validate_response(
+            _reply(
+                entities=[
+                    {"id": "e1", "type": "cast", "name": "She", "conf": 0.9},
+                    {"id": "e2", "type": "cast", "name": "Two Characters", "conf": 0.9},
+                    {"id": "e3", "type": "cast", "name": "Nurse", "conf": 0.9},
+                ],
+                assertions=[
+                    {"s": "e3", "p": "appears_in", "o": "scene",
+                     "unit": "u1", "conf": 0.9},
+                ],
+            ),
+            {"u1"},
+        )
+        kept = {e.canonical_name for e in report.entities}
+        assert kept == {"Nurse"}, kept
+        assert report.rejection_codes.count("pronoun_or_group_name") == 2
+
+    def test_a_line_of_screen_text_is_not_an_entity(self):
+        """A line of dialogue or screen text lifted into a name reads as a
+        sentence, and is dropped rather than written as a character."""
+        report = validate_response(
+            _reply(
+                entities=[
+                    {
+                        "id": "e1",
+                        "type": "cast",
+                        "name": "PERMISSIONS UPDATED. CONTACT YOUR SUPERVISOR",
+                        "conf": 0.9,
+                    }
+                ]
+            ),
+            set(),
+        )
+        assert report.entities == []
+        assert "sentence_like_name" in report.rejection_codes
+
     def test_a_fabricated_source_unit_is_dropped(self):
         """An evidence pointer to a unit never shown to the model is invented."""
         report = validate_response(

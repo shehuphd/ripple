@@ -284,6 +284,22 @@ class TestDecisionFlow:
         before = client.get(f"/api/units/{unit_id}/requirements").json()
         assert before["unit"]["text"] != "A bicycle leans against the gate."
 
+    def test_the_preview_carries_the_judgement_and_its_trace(self, client, judged):
+        """Beat 5: the inline card reads the judge's verdict tally and what
+        verification dropped, and Open full trace needs the run's trace id.
+        Both must reach the client on a successful preview, not only on
+        failure."""
+        _unit_id, preview = self._preview(client)
+        # trace_id is always present in the payload now; its value can be None
+        # when tracing is off, but the key the card reads must exist.
+        assert "trace_id" in preview
+        judgement = preview["judgement"]
+        assert judgement is not None, "a judged preview must carry its verdicts"
+        assert "assertion_verdicts" in judgement
+        assert "attribute_verdicts" in judgement
+        # The verification-drop list the card renders, as (id, reason) pairs.
+        assert isinstance(judgement["rejected"], list)
+
     def test_accepting_applies_the_text(self, client, judged):
         unit_id, preview = self._preview(client)
         response = client.post(f"/api/changes/{preview['change_set_id']}/accept")
@@ -633,6 +649,93 @@ class TestAskTheGraph:
         )
         assert ok.status_code == 200
 
+    def test_the_facts_packet_counts_entities_by_department(self, client, monkeypatch):
+        """A database-level question about one department ("how many cast
+        members", "how many props") is answerable because the packet carries a
+        per-type entity breakdown, not only the flat total. Without it the model
+        said "the graph does not record it" about a graph that records it."""
+        captured = {}
+
+        def _capture(question, assertions, provider, model_id, session, script_id,
+                     facts=None):
+            captured["facts"] = facts
+            from ripple.services.synthesizer import GroundedAnswer
+
+            return GroundedAnswer(answer="ok")
+
+        monkeypatch.setattr(web, "answer_question", _capture)
+        script_id = _first_script(client)
+        client.post(
+            f"/api/scripts/{script_id}/ask",
+            data={"question": "how many cast members are in this play?"},
+        )
+        facts = captured["facts"]
+        by_type = facts["entities_by_type"]
+        assert isinstance(by_type, dict) and by_type, "no per-type breakdown"
+        # "cast" is the characters, and every key is an entity type.
+        from ripple.db.models import ENTITY_TYPES
+
+        assert set(by_type) <= set(ENTITY_TYPES)
+        # Each department carries its count and its names, so both "how many
+        # cast" and "who are the cast" answer from the packet.
+        for slot in by_type.values():
+            assert slot["count"] >= 1
+            assert isinstance(slot["names"], list) and slot["names"]
+        # The counts sum to the flat entity total the packet also carries.
+        assert sum(slot["count"] for slot in by_type.values()) == facts["entities"]
+
+    def test_the_facts_packet_lists_every_scene_in_order(self, client, monkeypatch):
+        """Scene enumeration ("list the scene headings", "the opening scene")
+        answers from a full ordered scene roster, not from sampled assertions."""
+        captured = {}
+
+        def _capture(question, assertions, provider, model_id, session, script_id,
+                     facts=None):
+            captured["facts"] = facts
+            from ripple.services.synthesizer import GroundedAnswer
+
+            return GroundedAnswer(answer="ok")
+
+        monkeypatch.setattr(web, "answer_question", _capture)
+        script_id = _first_script(client)
+        client.post(
+            f"/api/scripts/{script_id}/ask",
+            data={"question": "list the scene headings"},
+        )
+        scenes = captured["facts"]["scene_list"]
+        assert scenes, "no scene roster"
+        assert len(scenes) == captured["facts"]["scenes"]
+        assert all(item["heading"] for item in scenes)
+
+    def test_keyword_matching_ignores_accents(self, client, monkeypatch):
+        """A name typed without its accent still retrieves the accented entity's
+        assertions: "Bela" finds "Béla", so the question is answered instead of
+        met with a false "the graph does not record it"."""
+        import re
+
+        captured = {}
+
+        def _capture(question, assertions, *args, **kwargs):
+            captured["assertions"] = assertions
+            from ripple.services.synthesizer import GroundedAnswer
+
+            return GroundedAnswer(answer="ok")
+
+        monkeypatch.setattr(web, "answer_question", _capture)
+        # SEVEN MINUTES carries the accented entity "Béla".
+        rows = client.get("/").text
+        match = re.search(
+            r'data-id="([0-9a-f-]{36})"[^>]*data-title="SEVEN MINUTES"', rows
+        )
+        assert match, "SEVEN MINUTES not seeded"
+        script_id = match.group(1)
+        client.post(
+            f"/api/scripts/{script_id}/ask",
+            data={"question": "what does Bela use"},  # no accent on Bela
+        )
+        subjects = " ".join(a["subject"] for a in captured["assertions"])
+        assert "Béla" in subjects, "accent-less 'Bela' did not retrieve 'Béla'"
+
     def test_the_question_is_logged_for_audit(self, client):
         script_id = _first_script(client)
         client.post(f"/api/scripts/{script_id}/ask", data={"question": "Anything?"})
@@ -696,6 +799,13 @@ class TestAskTheGraph:
         for unit in body["cited_units"]:
             assert "scene_heading" in unit
             assert unit["scene_heading"], "every unit belongs to a headed scene"
+
+    def test_fold_strips_accents_and_case(self):
+        """The keyword-match fold collapses accent and case, so a term and its
+        accented, differently-cased form become one string."""
+        assert web._fold("Béla") == web._fold("bela") == "bela"
+        assert web._fold("MATÍAS") == web._fold("matias") == "matias"
+        assert web._fold("Ilona Nagy") == "ilona nagy"
 
     def test_a_missing_stored_question_is_404(self, client):
         gone = "00000000-0000-0000-0000-000000000000"

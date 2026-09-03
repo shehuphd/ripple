@@ -79,6 +79,80 @@ function edgeRow(edge, cls, sign) {
       >${esc(edge.confidence ?? '')}</span></div>`;
 }
 
+/* One judged assertion: the edge plus the verdict the model returned, after
+   code verification. Mirrors edgeRow but ends in the verdict tag, not the
+   confidence. */
+function verdictRow(edge, cls, sign, tag) {
+  return `<div class="edge ${cls}">
+    <span class="sign">${sign}</span>
+    <span>${esc(edge.subject)}</span>
+    <span class="p">${esc(edge.predicate).replace(/_/g, ' ')}</span>
+    <span>${esc(edge.object)}</span>
+    <span class="verdict ${cls}">${tag}</span></div>`;
+}
+
+/* Open one run's full trace in the TraceAct viewer, map view. Shared by the
+   failure banner and the judgement card's Open full trace button. */
+async function openTraceViewer(traceId) {
+  if (!traceId) return;
+  try {
+    const body = await api(`/api/traces/${traceId}/viewer`, { method: 'POST' });
+    window.open(body.url, '_blank', 'noopener');
+    ripple.trace('trace.viewer_opened', { trace: traceId });
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+/* The inline "how this was computed" card: the judge's verdicts after code
+   verification, verdict by verdict, plus what verification dropped. Beat 5 of
+   the demo, and the honest answer to "why did the graph change like that". */
+function renderJudgement(body) {
+  const box = document.getElementById('pv-judgement');
+  const meta = document.getElementById('pv-judgemeta');
+  const traceBtn = document.getElementById('pv-judge-trace');
+  const j = body.judgement;
+  const d = body.diff;
+
+  meta.textContent = body.cached
+    ? 'cached, no model call'
+    : (j ? (body.model_id || 'judged') : 'deterministic');
+
+  const rows = [
+    ...d.changed.map((c) => verdictRow(
+      { ...c.before, object: `${c.before.object} → ${c.after.object}` },
+      'chg', '~', 'changed')),
+    ...d.removed.map((e) => verdictRow(e, 'del', '−', 'removed')),
+    ...d.added.map((e) => verdictRow(e, 'add', '+', 'new')),
+  ];
+
+  const parts = [];
+  if (j) {
+    const held = Math.max(0, j.assertion_verdicts - d.changed.length - d.removed.length);
+    parts.push(
+      `<div class="judge-tally">${j.assertion_verdicts} assertion verdict` +
+      `${j.assertion_verdicts === 1 ? '' : 's'} · ${d.changed.length} changed · ` +
+      `${d.removed.length} removed · ${held} held · ${d.added.length} new</div>`);
+  }
+  parts.push(rows.length
+    ? `<div class="judge-verdicts">${rows.join('')}</div>`
+    : '<div class="empty">Every judged assertion held unchanged.</div>');
+
+  if (j && j.rejected && j.rejected.length) {
+    parts.push(
+      `<div class="judge-drop"><div class="drop-hd">Verification dropped ` +
+      `${j.rejected.length}</div>` +
+      j.rejected.map((r) => `<div class="drop-row">${esc(r[1])}</div>`).join('') +
+      '</div>');
+  } else if (j) {
+    parts.push('<div class="judge-drop ok">Verification dropped nothing.</div>');
+  }
+
+  box.innerHTML = parts.join('');
+  traceBtn.dataset.trace = body.trace_id || '';
+  traceBtn.classList.toggle('hide', !body.trace_id);
+}
+
 /* Scene list selection scrolls the page rather than filtering it, so the
    surrounding scenes stay readable. */
 document.querySelectorAll('.scene-row').forEach((row) => {
@@ -267,6 +341,10 @@ async function runPreview() {
   document.getElementById('pv-diff').innerHTML = '';
   document.getElementById('pv-edits').innerHTML =
     '<div class="empty">Computing…</div>';
+  document.getElementById('pv-judgement').innerHTML =
+    '<div class="empty">Computing…</div>';
+  document.getElementById('pv-judge-trace').classList.add('hide');
+  document.getElementById('pv-judgemeta').textContent = '';
   document.getElementById('pv-warning').classList.add('hide');
   setWarningTrace(null);
   showWait();
@@ -380,6 +458,8 @@ async function runPreview() {
       .map((s) => `<div class="stage"><span class="tick">✓</span>${s.name}
         <span class="ms">${s.seconds.toFixed(2)}s</span></div>`).join('');
 
+    renderJudgement(body);
+
     document.getElementById('pv-origin').innerHTML =
       `<mark>${esc(body.origin.text)}</mark>`;
     document.getElementById('pv-prov').textContent = [
@@ -403,6 +483,8 @@ async function runPreview() {
     setWarningTrace(error.traceId || null);
     document.getElementById('pv-warning').classList.remove('hide');
     document.getElementById('pv-edits').innerHTML =
+      '<div class="empty">The preview did not run. Nothing was recorded.</div>';
+    document.getElementById('pv-judgement').innerHTML =
       '<div class="empty">The preview did not run. Nothing was recorded.</div>';
   }
 }
@@ -438,18 +520,9 @@ function setWarningTrace(traceId) {
 }
 
 document.getElementById('pv-warning-trace').addEventListener('click',
-  async (event) => {
-    const traceId = event.currentTarget.dataset.trace;
-    if (!traceId) return;
-    try {
-      const body = await api(`/api/traces/${traceId}/viewer`,
-        { method: 'POST' });
-      window.open(body.url, '_blank', 'noopener');
-      ripple.trace('trace.viewer_opened', { trace: traceId });
-    } catch (error) {
-      toast(error.message);
-    }
-  });
+  (event) => openTraceViewer(event.currentTarget.dataset.trace));
+document.getElementById('pv-judge-trace').addEventListener('click',
+  (event) => openTraceViewer(event.currentTarget.dataset.trace));
 
 /* Centre a node in the reader pane. Scrolls only that pane, computed
    directly: scrollIntoView walks every scrollable ancestor and, at load

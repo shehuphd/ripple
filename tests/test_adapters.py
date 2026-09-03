@@ -192,6 +192,36 @@ class TestPdf:
         assert _units(result, UnitType.DIALOGUE)
         assert _units(result, UnitType.CHARACTER)
 
+    def test_ocr_isolates_headings_and_recovers_dialogue(self):
+        """OCR flattens indentation and drops the blank line between a slug and
+        its action. The adapter isolates the heading and the cue onto their own
+        blocks and classifies dialogue by shape, so a clean scan parses into
+        numbered scenes with speakers rather than one action blob."""
+        from ripple.adapters.base import ParserMethod
+        from ripple.adapters.pdf import PdfAdapter, _Line
+
+        def line(text, y):
+            return _Line(page=1, x=0.0, y=y, text=text, is_bold=False)
+
+        # Margin numbers on both sides of the slug, no blank between slug and
+        # action, a blank (a y-gap) before the cue: the shape OCR produces.
+        lines = [
+            line("1 INT. LOFT - NIGHT 1", 0),
+            line("A steel flask goes into a padded case.", -1),
+            line("SURGEON", -21),
+            line("Seven minutes of margin. Not eight.", -22),
+            line("2 EXT. DOCK - NIGHT 2", -42),
+            line("Matias takes the case two-handed.", -43),
+        ]
+        scenes, _ = PdfAdapter()._blocks_to_scenes(lines, ParserMethod.OCR)
+        # Clean headings, with the margin numbers stripped off both sides.
+        assert [s.heading for s in scenes] == ["INT. LOFT - NIGHT", "EXT. DOCK - NIGHT"]
+        assert scenes[0].display_scene_number == "1"
+        types = [u.unit_type for u in scenes[0].units]
+        assert UnitType.CHARACTER in types and UnitType.DIALOGUE in types
+        cue = next(u for u in scenes[0].units if u.unit_type is UnitType.CHARACTER)
+        assert cue.text.strip() == "SURGEON"
+
 
 class TestCrossFormat:
     """One source, four formats. What must match, and what must not."""

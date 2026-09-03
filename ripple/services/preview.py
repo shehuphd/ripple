@@ -161,6 +161,7 @@ class PreviewResult:
     cached: bool = False
     judgement: JudgementReport | None = None
     continuity_error: str | None = None
+    trace_id: str | None = None
 
 
 def word_diff(before: str, after: str) -> list[dict[str, str]]:
@@ -230,6 +231,9 @@ def preview_changes(
             # With tracing off, start() yields a no-op with no id.
             error.trace_id = getattr(trace, "trace_id", None)
             raise
+        # The same trace id the failure path carries, on the success path too,
+        # so the inline judgement card can open this run in the viewer.
+        result.trace_id = getattr(trace, "trace_id", None)
         trace.output(
             {
                 "change_set_id": str(result.change_set.id),
@@ -543,8 +547,34 @@ def _preview(
             }
             for unit, proposed in live_edits
         ],
-        judgement=judgements[0] if len(judgements) == 1 else None,
+        judgement=_merge_judgements(judgements),
     )
+
+
+def _merge_judgements(
+    judgements: list[JudgementReport],
+) -> JudgementReport | None:
+    """One combined report across every affected scene, for display.
+
+    A preview over lines in more than one scene makes one judgement call per
+    scene. The inline card shows the verdict tally and what verification
+    dropped, so the reports are concatenated rather than shown one scene at a
+    time or dropped when there is more than one.
+    """
+    if not judgements:
+        return None
+    if len(judgements) == 1:
+        return judgements[0]
+    merged = JudgementReport()
+    for report in judgements:
+        merged.assertion_verdicts.extend(report.assertion_verdicts)
+        merged.attribute_verdicts.extend(report.attribute_verdicts)
+        merged.new_entities.extend(report.new_entities)
+        merged.new_assertions.extend(report.new_assertions)
+        merged.new_attributes.extend(report.new_attributes)
+        merged.rejected.extend(report.rejected)
+        merged.coverage_misses.extend(report.coverage_misses)
+    return merged
 
 
 def _ordered_unique(values: list[str]) -> list[str]:

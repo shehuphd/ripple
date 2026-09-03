@@ -42,6 +42,23 @@ class TestProvidedForScene:
         provided = provided_for_scene("INT. OFFICE - DAY", units)
         assert sum(1 for p in provided if p.entity_type == "cast") == 1
 
+    def test_direction_and_junk_cues_do_not_become_cast(self):
+        """A flattened scan can type a transition, a shot, a line of screen
+        text, or a group label as a character cue. None is a speaker, so none
+        becomes a cast entity; the real cue beside them still does."""
+        units = _units(
+            ("scene_heading", "INT. LOFT - NIGHT"),
+            ("character", "INTERCUT"),
+            ("character", "END INTERCUT"),
+            ("character", "PERMISSIONS UPDATED. CONTACT YOUR SUPERVISOR"),
+            ("character", "SECOND PERSON"),
+            ("character", "SURGEON"),
+            ("dialogue", "Seven minutes."),
+        )
+        cast = {p.name for p in provided_for_scene("INT. LOFT - NIGHT", units)
+                if p.entity_type == "cast"}
+        assert cast == {"SURGEON"}
+
     def test_each_row_cites_its_unit_with_a_span(self):
         units = _units(
             ("scene_heading", "EXT. LOADING DOCK - NIGHT"),

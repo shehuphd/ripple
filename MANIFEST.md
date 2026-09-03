@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-03 18:36:57 UTC
+Last updated: 2026-09-03 21:40:09 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
 
@@ -86,9 +86,10 @@ Every file in the repository and what it does. Directories the application write
 
 | File | Purpose |
 |---|---|
-| `llm/__init__.py` | The provider registry; Google Gemini is the only entry. |
+| `llm/__init__.py` | The provider registry: Gemini over KeyCall for extraction and judgement, and the same models over the google-genai SDK for the Ask path. |
 | `llm/base.py` | The provider contract and shared types (`ModelInfo`, `GenerationResult`, `ProviderError`). |
-| `llm/keycall_provider.py` | The KeyCall-backed adapter every registered provider uses. |
+| `llm/keycall_provider.py` | The KeyCall-backed adapter extraction and judgement use. |
+| `llm/genai_provider.py` | The google-genai SDK adapter the Ask path uses, so a Google SDK generation runs at runtime. |
 | `llm/fixture.py` | Deterministic no-network test double. |
 
 ### Services (`ripple/services/`)
@@ -159,6 +160,7 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_judge.py` | Verdict verification rules. |
 | `tests/test_layout.py` | Layout determinism. |
 | `tests/test_llm.py` | Provider contract and the KeyCall adapter. |
+| `tests/test_genai_provider.py` | The google-genai adapter: SDK mapping, error codes, and the Ask-path routing. |
 | `tests/test_models.py` | Schema constraints and the outcome-vocabulary migration. |
 | `tests/test_pricing.py` | Cost lookup, reasoning at the output rate, and honest unknowns. |
 | `tests/test_prepass.py` | The deterministic pre-pass and the validator's provided-id and span-bound rules. |

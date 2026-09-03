@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import unicodedata
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -80,7 +81,7 @@ from ripple.graph.diff import Edge, GraphDiff
 from ripple.graph.fixtures import seed_demo_graphs
 from ripple.graph.layout import DEPARTMENT_ORDER, script_layout
 from ripple.graph.layout import layout as graph_layout
-from ripple.llm import ProviderError, get_provider
+from ripple.llm import ProviderError, get_provider, get_query_provider
 from ripple.services import changeset, pricing, spend
 from ripple.services import draft_report as report_service
 from ripple.services import drafts as drafts_service
@@ -2333,6 +2334,7 @@ def _preview_payload(
         },
         "pipeline": result.stages,
         "judgement": result.judgement.summary() if result.judgement else None,
+        "trace_id": result.trace_id,
         "origin": {
             "text": unit.current_text,
             "page": anchor.source_page_number if anchor else None,
@@ -2562,6 +2564,28 @@ def confirm_rename_route(finding_id: str, session: Session = Depends(get_session
 # tokens and denies a large injected instruction a path in through the query.
 MAX_QUESTION_CHARS = 1024
 
+# The most entity names of one department the packet lists. A department this
+# large is enumerable by its count; listing every name past this would bloat
+# the packet with no gain. The count beside the names is always the true total.
+ROSTER_NAME_CAP = 80
+
+# The most assertions the packet carries when a question falls back to the whole
+# graph. Set above the largest demo-corpus script so scene-anchored and
+# aggregate questions see every assertion; it only truncates a far larger graph,
+# and a keyword-scoped question sends its focused hits regardless.
+PACKET_ASSERTION_CAP = 1000
+
+
+def _fold(text: str) -> str:
+    """Casefold and strip diacritics for keyword matching.
+
+    A question typed without accents must still find the accented entity: "bela"
+    matches "Béla", "matias" matches "Matías". NFKC (the entity-name normalizer)
+    keeps the accents, so this decomposes and drops the combining marks instead.
+    """
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
+
 
 @app.post("/api/scripts/{script_id}/ask")
 def ask_graph(
@@ -2585,7 +2609,7 @@ def ask_graph(
         )
 
     labels = _labels(session, script.id)
-    terms = [w.lower() for w in question.split() if len(w) > 3]
+    terms = [_fold(w) for w in question.split() if len(w) > 3]
     rows = list(
         session.scalars(
             select(Assertion).where(
@@ -2618,7 +2642,7 @@ def ask_graph(
     for row in rows:
         subject = labels.get(row.subject_entity_id or row.subject_scene_id, "")
         obj = labels.get(row.object_entity_id or row.object_scene_id, "")
-        haystack = f"{subject} {row.predicate} {obj}".lower()
+        haystack = _fold(f"{subject} {row.predicate} {obj}")
         where = scene_of.get(row.source_unit_id) or {}
         item = {
             "id": str(row.id),
@@ -2634,29 +2658,58 @@ def ask_graph(
         mapped.append(item)
         if terms and any(term in haystack for term in terms):
             keyword_hits.append(item)
-    # Keyword hits scope the packet when the question names graph content; a
-    # question that matches nothing ("how many scenes are there?") still
-    # deserves a live answer, so the packet falls back to a sample of the
-    # whole graph and the script facts carry the counts.
-    matched = keyword_hits or mapped
+    # A question that names graph content is scoped to its keyword hits, kept
+    # tight so the grounding count stays honest. A question that names nothing
+    # the keyword pass can match, a scene-anchored or aggregate one ("what props
+    # are in scene 8", "which scene has the most props"), falls back to the whole
+    # graph rather than a 40-row sample: those scenes' assertions carry no term
+    # to match, so a small sample misses them. A user query is infrequent and
+    # costs a fraction of a cent, so the cap holds a whole demo-corpus script and
+    # only bounds a pathologically large graph.
+    matched = (keyword_hits or mapped)[:PACKET_ASSERTION_CAP]
+
+    # Entities as a roster grouped by department type: the count and the names.
+    # A "who / list / name the X" question needs the names, not only the total;
+    # a packet with counts alone answered "the graph does not record the full
+    # list" about a graph that records every one. Keys are the entity_type
+    # vocabulary; "cast" is the characters. Names are capped per type so a huge
+    # department cannot crowd the packet, with the true count kept beside them.
+    roster: dict[str, dict[str, Any]] = {}
+    for etype, name in session.execute(
+        select(Entity.entity_type, Entity.canonical_name)
+        .where(Entity.script_id == script.id)
+        .order_by(Entity.entity_type, Entity.canonical_name)
+    ).all():
+        slot = roster.setdefault(etype, {"count": 0, "names": []})
+        slot["count"] += 1
+        if len(slot["names"]) < ROSTER_NAME_CAP:
+            slot["names"].append(name)
+
+    # Every scene in order, so scene enumeration ("list the scene headings",
+    # "what is the opening scene") answers from the packet rather than from
+    # whichever assertions happened to be sampled.
+    scene_list = [
+        {"number": number, "heading": heading}
+        for number, heading in session.execute(
+            select(Scene.display_scene_number, Scene.heading)
+            .where(Scene.script_id == script.id, Scene.omitted.is_(False))
+            .order_by(Scene.sequence_index)
+        ).all()
+    ]
 
     facts = {
         "title": script.title,
-        "scenes": session.scalar(
-            select(func.count())
-            .select_from(Scene)
-            .where(Scene.script_id == script.id, Scene.omitted.is_(False))
-        ),
-        "entities": session.scalar(
-            select(func.count())
-            .select_from(Entity)
-            .where(Entity.script_id == script.id)
-        ),
+        "scenes": len(scene_list),
+        "entities": sum(slot["count"] for slot in roster.values()),
+        "entities_by_type": roster,
+        "scene_list": scene_list,
         "assertions": len(rows),
     }
 
+    # The Ask path runs through Google's google-genai SDK, not KeyCall's HTTP
+    # path: a Google SDK generation on every asked question.
     provider_name, model_id = settings_service.selected_model(session)
-    provider = get_provider(provider_name) if provider_name else None
+    provider = get_query_provider(provider_name) if provider_name else None
     ensure_tracing()
     with ActionTrace.start(action="graph.query", kind="query") as query_trace:
         query_trace.input(
@@ -2664,7 +2717,7 @@ def ask_graph(
         )
         answer = answer_question(
             question,
-            matched[:40],
+            matched,
             provider,
             model_id,
             session,
@@ -2692,7 +2745,7 @@ def ask_graph(
 
     seen: set[str] = set()
     cited = []
-    for item in matched[:40]:
+    for item in matched:
         if item["unit_id"] in seen:
             continue
         seen.add(item["unit_id"])
@@ -2705,8 +2758,8 @@ def ask_graph(
             }
         )
 
-    grounded_names = {item["subject"] for item in matched[:40]} | {
-        item["object"] for item in matched[:40]
+    grounded_names = {item["subject"] for item in matched} | {
+        item["object"] for item in matched
     }
     all_names = set(
         session.scalars(
@@ -2736,8 +2789,8 @@ def ask_graph(
         "cited_units": cited[:6],
         "mean_confidence": round(sum(confidences) / len(confidences), 2),
         "entities": sorted(
-            {item["subject"] for item in matched[:40]}
-            | {item["object"] for item in matched[:40]}
+            {item["subject"] for item in matched}
+            | {item["object"] for item in matched}
         )[:8],
         "ungrounded_entities": ungrounded,
     }

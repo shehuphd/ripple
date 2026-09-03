@@ -16,14 +16,45 @@ edge with invented evidence.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
-from ripple.adapters.base import parse_character_cue, split_heading
+from ripple.adapters.base import (
+    SHOT_PREFIX,
+    TRANSITION,
+    parse_character_cue,
+    split_heading,
+)
 from ripple.db.naming import normalize
+from ripple.extraction.validate import _unusable_name_reason
 
 #: Confidence for rule-derived rows. Parsing a cue or a heading is not
 #: inference, so the value is nominal rather than a probability.
 RULE_CONFIDENCE = 1.0
+
+# A cue line that is really a transition or shot direction, not a speaker.
+# TRANSITION and SHOT_PREFIX cover the opening forms ("CUT TO:", "INTERCUT",
+# "MONTAGE"); this covers the "END ..." bracket that closes such a block
+# ("END INTERCUT", "END OF MONTAGE"), which neither opening regex anchors.
+_END_DIRECTION = re.compile(
+    r"^END(?:\s+OF)?\s+(?:INTERCUT|MONTAGE|FLASHBACK|DREAM|SERIES)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_direction_cue(text: str) -> bool:
+    """True when a "character" cue is actually a transition or shot line.
+
+    A flattened scan drops the blank lines that separate these directions
+    from real cues, so a line like "INTERCUT" or "END INTERCUT" can reach the
+    cue parser and become a phantom cast member if left unguarded.
+    """
+    stripped = text.strip()
+    return bool(
+        TRANSITION.match(stripped)
+        or SHOT_PREFIX.match(stripped)
+        or _END_DIRECTION.match(stripped)
+    )
 
 
 @dataclass(frozen=True)
@@ -60,6 +91,8 @@ def provided_for_scene(
         if parsed is None:
             continue
         name = parsed[0]
+        if _is_direction_cue(text) or _unusable_name_reason(name):
+            continue
         key = normalize(name)
         if not key or key in seen:
             continue
@@ -86,7 +119,7 @@ def provided_for_scene(
         ),
         None,
     )
-    if location and heading_unit:
+    if location and heading_unit and not _is_direction_cue(location):
         unit_id, text = heading_unit
         found = text.find(location)
         result.append(

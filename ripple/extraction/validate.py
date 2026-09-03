@@ -12,12 +12,44 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import unicodedata
 from dataclasses import dataclass, field
 
 from ripple.db.models import ENTITY_TYPES
 from ripple.db.naming import normalize_key
 from ripple.extraction.prompt import MINIMUM_CONFIDENCE
 from ripple.graph.predicates import SignatureError, validate_edge
+
+# Names that are never a production entity: a pronoun the extractor resolved to
+# a fresh entity instead of its antecedent, or a group label standing in for
+# one. Unnamed roles ("Nurse", "Woman", "Surgeon") are deliberately absent:
+# those are valid characters a screenplay leaves unnamed.
+_NON_ENTITY_NAMES = frozenset(
+    {
+        "he", "she", "it", "they", "him", "her", "them", "we", "us", "you",
+        "i", "me", "this", "that", "these", "those", "someone", "somebody",
+        "anyone", "anybody", "everyone", "everybody", "nobody", "no one",
+        "none", "unknown", "unnamed", "character", "characters",
+        "two characters", "a character", "the character", "people",
+        "first person", "second person", "third person",
+    }
+)
+# A full word, a sentence terminator, then a capitalised next word: a line of
+# screen text or dialogue lifted into a name ("PERMISSIONS UPDATED. CONTACT
+# YOUR SUPERVISOR"). The four-letter floor spares abbreviations that carry a
+# period, like "Dr. Chen", "St. Mary", "INT. WHITE VAN".
+_SENTENCE_IN_NAME = re.compile(r"\w{4,}[.!?]\s+[A-Z]")
+
+
+def _unusable_name_reason(name: str) -> str | None:
+    """Why a name cannot be an entity, or None when it is usable."""
+    folded = unicodedata.normalize("NFKC", name).casefold().strip()
+    if folded in _NON_ENTITY_NAMES:
+        return "pronoun_or_group_name"
+    if _SENTENCE_IN_NAME.search(name):
+        return "sentence_like_name"
+    return None
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +248,11 @@ def _validate_entity(
         if not isinstance(name, str) or not name.strip():
             report.reject("entity", "missing_canonical_name")
             return None
+
+    unusable = _unusable_name_reason(name)
+    if unusable:
+        report.reject("entity", unusable)
+        return None
 
     confidence = _confidence(item.get("conf"))
     if confidence is None:
