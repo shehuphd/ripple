@@ -42,10 +42,15 @@ if (ask) {
     const storedNote = body.stored
       ? `Stored answer from ${esc(body.asked_at)}, zero cost · `
       : '';
+    const shown = body.cited_units.length;
+    const total = body.total_units ?? shown;
+    const evidenceMeta = total > shown
+      ? `sample of ${shown} of ${total}, ordered by scene`
+      : `${total}, ordered by scene`;
     out.innerHTML = `
       <div class="ask-meta">
         <span>${storedNote}Grounded in ${body.grounded_in} assertions across
-          ${body.cited_units.length} units, mean confidence
+          ${total} units, mean confidence
           ${body.mean_confidence}${body.generated || !body.grounded_in
             ? '' : ' · deterministic answer, no model configured'}</span>
         <span class="grounded">${groundingBadge(body)}</span>
@@ -58,8 +63,8 @@ if (ask) {
           from the screenplay text.</div>
       </div>
       <div class="card ask-card">
-        <div class="hd"><h2>Cited units</h2>
-          <span class="meta">${body.cited_units.length}, ordered by scene</span></div>
+        <div class="hd"><h2>Evidence</h2>
+          <span class="meta">${evidenceMeta}</span></div>
         ${cited || '<div class="empty">None.</div>'}
       </div>`;
     if (exportButton) exportButton.classList.remove('hide');
@@ -73,7 +78,8 @@ if (ask) {
       '',
       last.answer,
       '',
-      `Grounded in ${last.grounded_in} accepted assertion(s), `
+      `Grounded in ${last.grounded_in} accepted assertion(s) across `
+        + `${last.total_units ?? last.cited_units.length} unit(s), `
         + `mean confidence ${last.mean_confidence}.`
         + (scriptTitle ? ` Script: ${scriptTitle}.` : ''),
       '',
@@ -82,7 +88,11 @@ if (ask) {
       lines.push(`Entities: ${last.entities.join(', ')}`, '');
     }
     if (last.cited_units.length) {
-      lines.push('## Cited units', '');
+      const total = last.total_units ?? last.cited_units.length;
+      const heading = total > last.cited_units.length
+        ? `## Evidence (sample of ${last.cited_units.length} of ${total})`
+        : '## Evidence';
+      lines.push(heading, '');
       last.cited_units.forEach((u) => {
         lines.push(`- Scene ${u.scene ?? '?'}: ${u.text}`);
       });

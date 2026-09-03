@@ -800,6 +800,23 @@ class TestAskTheGraph:
             assert "scene_heading" in unit
             assert unit["scene_heading"], "every unit belongs to a headed scene"
 
+    def test_evidence_reports_the_true_unit_total_not_the_shown_sample(
+        self, client
+    ):
+        """The panel shows a capped sample of the grounding units; the answer
+        also carries the true total, so "across N units" reflects the whole
+        evidence set rather than the display cap."""
+        script_id = _first_script(client)
+        body = client.post(
+            f"/api/scripts/{script_id}/ask",
+            data={"question": "Who are the characters?"},
+        ).json()
+        assert "total_units" in body
+        # The sample is capped; the total is the honest count and is at least
+        # as large as what is shown.
+        assert len(body["cited_units"]) <= web.EVIDENCE_UNIT_SAMPLE
+        assert body["total_units"] >= len(body["cited_units"])
+
     def test_fold_strips_accents_and_case(self):
         """The keyword-match fold collapses accent and case, so a term and its
         accented, differently-cased form become one string."""

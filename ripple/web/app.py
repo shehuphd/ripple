@@ -2574,6 +2574,9 @@ ROSTER_NAME_CAP = 80
 # aggregate questions see every assertion; it only truncates a far larger graph,
 # and a keyword-scoped question sends its focused hits regardless.
 PACKET_ASSERTION_CAP = 1000
+# The evidence panel shows a sample of the grounding units, not all of them; the
+# true total rides alongside so the count on screen is never mistaken for it.
+EVIDENCE_UNIT_SAMPLE = 6
 
 
 def _fold(text: str) -> str:
@@ -2786,7 +2789,8 @@ def ask_graph(
         "answer": answer.answer,
         "generated": answer.generated,
         "grounded_in": len(matched),
-        "cited_units": cited[:6],
+        "total_units": len(seen),
+        "cited_units": cited[:EVIDENCE_UNIT_SAMPLE],
         "mean_confidence": round(sum(confidences) / len(confidences), 2),
         "entities": sorted(
             {item["subject"] for item in matched}
@@ -2856,7 +2860,8 @@ def stored_query(query_id: str, session: Session = Depends(get_session)):
         "answer": record.answer,
         "generated": record.model_id is not None,
         "grounded_in": len(rows),
-        "cited_units": cited[:6],
+        "total_units": len(seen),
+        "cited_units": cited[:EVIDENCE_UNIT_SAMPLE],
         "mean_confidence": round(sum(confidences) / len(confidences), 2),
         "entities": sorted(names - {"?"})[:8],
         # No grounding badge on a stored answer: the check ran against the
