@@ -40,12 +40,35 @@ _NON_ENTITY_NAMES = frozenset(
 # YOUR SUPERVISOR"). The four-letter floor spares abbreviations that carry a
 # period, like "Dr. Chen", "St. Mary", "INT. WHITE VAN".
 _SENTENCE_IN_NAME = re.compile(r"\w{4,}[.!?]\s+[A-Z]")
+# A cardinal count or a quantifier leading another word is an anonymous group,
+# not a named character: "Two men", "Three cops", "Several workers", "A group
+# of guards". A bare number ("Seven") is left alone, since it can be a name,
+# and ordinals ("Second Officer", "Third Guard") are left alone, since they
+# name distinct roles. Matched case-insensitively on the raw name.
+_GROUP_LABEL = re.compile(
+    r"^(?:\d+"
+    r"|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve"
+    r"|both|several|many|some|few|various|numerous|multiple|countless"
+    r"|a\s+(?:couple|few|group|pair|bunch|handful|number)(?:\s+of)?"
+    r"|group\s+of|pair\s+of|crowd\s+of)"
+    r"\s+\w",
+    re.IGNORECASE,
+)
 
 
-def _unusable_name_reason(name: str) -> str | None:
-    """Why a name cannot be an entity, or None when it is usable."""
+def _unusable_name_reason(name: str, entity_type: str = "cast") -> str | None:
+    """Why a name cannot be an entity, or None when it is usable.
+
+    The group-label rule ("Two men", "Six ...") is a cast concept only: a
+    prop, set dressing, or location legitimately carries a count or a plural
+    noun ("Six monitors", "14 Stannary Lane", "one wall of books"), so it is
+    applied to cast alone. The pronoun and sentence-text rules hold for any
+    type.
+    """
     folded = unicodedata.normalize("NFKC", name).casefold().strip()
     if folded in _NON_ENTITY_NAMES:
+        return "pronoun_or_group_name"
+    if entity_type == "cast" and _GROUP_LABEL.match(name.strip()):
         return "pronoun_or_group_name"
     if _SENTENCE_IN_NAME.search(name):
         return "sentence_like_name"
@@ -249,7 +272,7 @@ def _validate_entity(
             report.reject("entity", "missing_canonical_name")
             return None
 
-    unusable = _unusable_name_reason(name)
+    unusable = _unusable_name_reason(name, entity_type)
     if unusable:
         report.reject("entity", unusable)
         return None

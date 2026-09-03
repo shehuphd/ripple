@@ -153,6 +153,20 @@ class TestOutputValidation:
         assert report.entities == []
         assert "sentence_like_name" in report.rejection_codes
 
+    def test_the_group_label_rule_is_scoped_to_cast(self):
+        """A count leading a noun ("Two men") is an anonymous group of
+        characters and is dropped from cast. The same shape is valid for a
+        prop, set dressing, or a location, which carry counts and plural
+        nouns ("Six monitors", "14 Stannary Lane"), so those are kept. The
+        pronoun and sentence rules still hold for every type."""
+        from ripple.extraction.validate import _unusable_name_reason
+
+        assert _unusable_name_reason("Two men", "cast") == "pronoun_or_group_name"
+        assert _unusable_name_reason("Six monitors", "set_design") is None
+        assert _unusable_name_reason("14 Stannary Lane", "location") is None
+        assert _unusable_name_reason("one wall of books", "set_design") is None
+        assert _unusable_name_reason("She", "prop") == "pronoun_or_group_name"
+
     def test_a_fabricated_source_unit_is_dropped(self):
         """An evidence pointer to a unit never shown to the model is invented."""
         report = validate_response(
