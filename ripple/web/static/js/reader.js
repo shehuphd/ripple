@@ -800,9 +800,26 @@ if (extract) {
   extract.addEventListener('click', async () => {
     const scriptId = window.location.pathname.split('/').pop();
     const label = document.getElementById('run-label');
+    // A rebuild reads every scene again rather than replaying the cache, so
+    // it bills where an ordinary build of an unchanged script costs nothing.
+    // That deserves a question before it runs.
+    const force = extract.dataset.force === '1';
+    if (force) {
+      const scenes = extract.dataset.scenes || 'all';
+      const ok = await confirmDialog(
+        `Rebuild the graph? This reads all ${scenes} scenes again with the `
+        + 'model and bills for each, rather than replaying the stored '
+        + 'answers. Facts already in the graph stay; a rebuild adds and '
+        + 'refreshes, it does not clear them.',
+        'Rebuild',
+      );
+      if (!ok) return;
+    }
     extract.disabled = true;
     try {
-      const started = await api(`/api/scripts/${scriptId}/extract`, { method: 'POST' });
+      const started = await api(`/api/scripts/${scriptId}/extract`, {
+        method: 'POST', body: form(force ? { force: 'true' } : {}),
+      });
       ripple.trace('extract.started', { run: started.run_id });
       const progress = await driveRun(started.run_id);
       ripple.trace('extract.finished', {

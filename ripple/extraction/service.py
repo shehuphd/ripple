@@ -24,7 +24,7 @@ import uuid as uuid_module
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from traceact import ActionTrace
@@ -184,6 +184,7 @@ def start_run(
     model_id: str,
     prompt_version: str = PROMPT_VERSION,
     scene_ids: list | None = None,
+    force: bool = False,
 ) -> ExtractionRun:
     """Create a run and a pending job for every scene.
 
@@ -194,6 +195,12 @@ def start_run(
     scene is extracted without re-running the rest: on a seeded script the
     other scenes have no cache rows, so a whole-script run would bill all of
     them. Omitted scenes are never extracted.
+
+    `force` ignores the cache and gives every scene a job, so a script whose
+    graph is already current is read again. That is what a rebuild is for:
+    the parser and the deterministic pre-pass may have changed since the last
+    build, and neither is reflected by replaying a stored answer. It bills
+    every scene, which is why nothing calls it without the user asking.
     """
     script = session.get(Script, script_id)
     if script is None:
@@ -214,6 +221,7 @@ def start_run(
         prompt_version=prompt_version,
         model_id=model_id,
         total_scenes=len(scenes),
+        forced=force,
         started_at=_now(),
     )
     session.add(run)
@@ -225,7 +233,22 @@ def start_run(
         # The extraction cache key is unique across runs, so a scene already
         # extracted from identical input under the same prompt and model gets
         # no job at all. That is the cache: no row, no call, no spend.
-        already_done = session.scalar(
+        if force:
+            # The cache key is a unique constraint, so a rebuild cannot add a
+            # second job beside the row the cache already holds: the stale row
+            # goes first. Nothing has a foreign key to it, and the record of
+            # what the run spent lives in the ModelCall rows and the trace
+            # files, which a rebuild leaves untouched.
+            session.execute(
+                delete(SceneExtraction).where(
+                    SceneExtraction.scene_id == scene.id,
+                    SceneExtraction.input_hash == digest,
+                    SceneExtraction.prompt_version == prompt_version,
+                    SceneExtraction.model_id == model_id,
+                ),
+                execution_options={"synchronize_session": False},
+            )
+        already_done = None if force else session.scalar(
             select(SceneExtraction.id).where(
                 SceneExtraction.scene_id == scene.id,
                 SceneExtraction.input_hash == digest,
@@ -319,7 +342,10 @@ def extract_scene(
             }
         )
 
-        cached = _reuse_cached(session, job)
+        # A forced run reads the scene again even when an identical extraction
+        # is on file: replaying the stored answer is the one thing a rebuild
+        # must not do.
+        cached = None if run.forced else _reuse_cached(session, job)
         if cached is not None:
             trace.step("Reused a cached extraction")
             trace.output({"cached": True, "assertions": cached.assertions_written})

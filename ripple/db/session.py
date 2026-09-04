@@ -77,6 +77,7 @@ def create_all(engine: Engine) -> None:
     _widen_model_call_outcomes(engine)
     _add_script_origin(engine)
     _add_scene_omitted(engine)
+    _add_run_forced(engine)
     _add_lineage_columns(engine)
     _widen_change_vocabularies(engine)
     _repair_dangling_references(engine)
@@ -207,6 +208,30 @@ def _add_scene_omitted(engine: Engine) -> None:
         logger.info("adding scenes.omitted")
         connection.exec_driver_sql(
             "ALTER TABLE scenes ADD COLUMN omitted BOOLEAN NOT NULL DEFAULT 0"
+        )
+        connection.commit()
+
+
+def _add_run_forced(engine: Engine) -> None:
+    """Add `extraction_runs.forced` to a database that predates it."""
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.connect() as connection:
+        table_exists = connection.exec_driver_sql(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name='extraction_runs'"
+        ).fetchone()
+        if not table_exists:
+            return
+        columns = {
+            row[1]
+            for row in connection.exec_driver_sql("PRAGMA table_info(extraction_runs)")
+        }
+        if "forced" in columns:
+            return
+        logger.info("adding extraction_runs.forced")
+        connection.exec_driver_sql(
+            "ALTER TABLE extraction_runs ADD COLUMN forced BOOLEAN NOT NULL DEFAULT 0"
         )
         connection.commit()
 

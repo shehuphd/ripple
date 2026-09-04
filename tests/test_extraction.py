@@ -674,6 +674,26 @@ class TestResumeAndCache:
 
         assert len(provider.calls) == calls_after_first, "cache did not hold"
 
+    def test_a_forced_run_reads_every_scene_again(self, session, script, tmp_path):
+        """A rebuild exists to pick up changes the cache cannot see: a new
+        parser or pre-pass rule produces different rows from identical input,
+        and replaying the stored answer would hide that. So a forced run gives
+        every scene a job and sends each to the model, where an ordinary
+        second run sends none."""
+        provider = _provider(tmp_path, _reply())
+        first = start_run(session, script.id, MODEL)
+        while (job := claim_next_scene(session, first.id)) is not None:
+            extract_scene(session, job, provider)
+        calls_after_first = len(provider.calls)
+        assert calls_after_first > 0
+
+        forced = start_run(session, script.id, MODEL, force=True)
+        assert forced.forced is True
+        while (job := claim_next_scene(session, forced.id)) is not None:
+            extract_scene(session, job, provider)
+
+        assert len(provider.calls) == calls_after_first * 2, "force did not re-read"
+
     def test_editing_a_unit_changes_the_cache_key(self, session, script):
         scene = script.scenes[13]
         units = _units_of(session, scene.id)

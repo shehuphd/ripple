@@ -2179,13 +2179,22 @@ def restore_scene(scene_id: str, session: Session = Depends(get_session)):
 
 
 @app.post("/api/scripts/{script_id}/extract")
-def begin_extraction(script_id: str, session: Session = Depends(get_session)):
-    """Create an extraction run for a script."""
+def begin_extraction(
+    script_id: str,
+    force: bool = Form(False),
+    session: Session = Depends(get_session),
+):
+    """Create an extraction run for a script.
+
+    `force` re-reads every scene instead of replaying the cache, which is what
+    the reader's Rebuild asks for. It bills each scene, so the page confirms
+    before sending it.
+    """
     provider_name, model_id = settings_service.selected_model(session)
     if not provider_name or not model_id:
         raise HTTPException(400, "Choose a provider and model in Settings first.")
     try:
-        run = start_run(session, _uuid(script_id), model_id)
+        run = start_run(session, _uuid(script_id), model_id, force=force)
     except ValueError:
         raise HTTPException(404, "No such script") from None
     return progress(session, run.id).__dict__

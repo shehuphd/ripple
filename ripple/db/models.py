@@ -635,6 +635,11 @@ class ExtractionRun(Base):
     total_scenes: Mapped[int] = mapped_column(Integer, default=0)
     completed_scenes: Mapped[int] = mapped_column(Integer, default=0)
     failed_scenes: Mapped[int] = mapped_column(Integer, default=0)
+    #: A forced run ignores the extraction cache and re-reads every scene, so
+    #: the flag has to outlive the request that started it: each scene is a
+    #: separate call, and the one doing the work reads this to decide whether
+    #: a cached answer may stand in.
+    forced: Mapped[bool] = mapped_column(Boolean, default=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

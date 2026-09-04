@@ -2291,15 +2291,19 @@ class TestTraceViewerLaunch:
 class TestBuildGraphGate:
     """Build graph is gated on billable work: changed or unextracted scenes."""
 
-    def test_a_current_graph_disables_the_button(
-        self, client, judged, monkeypatch
-    ):
+    def test_a_current_graph_offers_a_rebuild(self, client, judged, monkeypatch):
+        """With nothing pending there is still one thing to ask for: reading
+        every scene again. The parser and the pre-pass can change between
+        builds, and replaying the stored answers would not show it, so the
+        button stays live as Rebuild and says what it costs."""
         monkeypatch.setattr(
             web, "pending_scene_count", lambda session, script_id, model: 0
         )
         body = client.get(f"/scripts/{_first_script(client)}").text
-        assert 'id="extract" disabled' in body
-        assert "The graph matches every scene" in body
+        assert "Rebuild graph" in body
+        assert 'id="extract" disabled' not in body
+        assert 'data-force="1"' in body
+        assert "bills for each" in body
 
     def test_changed_scenes_offer_an_update_with_the_count(
         self, client, judged, monkeypatch
