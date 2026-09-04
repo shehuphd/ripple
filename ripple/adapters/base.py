@@ -347,7 +347,9 @@ def inline_cue_split(line: str) -> tuple[str, str] | None:
     match = INLINE_CUE.match(line.strip())
     if not match:
         return None
-    name = match.group("name").strip().rstrip(".").strip()
+    # Project Gutenberg italicises a cue with underscores ("HAMLET._"), and
+    # left on the name they fork one character into two entities.
+    name = match.group("name").strip().strip("_").rstrip(".").strip("_").strip()
     speech = match.group("rest").strip()
     words = name.split()
     if not (2 <= len(name) <= 35 and 1 <= len(words) <= 5):
@@ -439,7 +441,9 @@ def parse_character_cue(line: str) -> tuple[str, str | None, bool] | None:
     if not match:
         return None
 
-    name = match.group("name").strip().rstrip(".")
+    # Project Gutenberg italicises a cue with underscores ("HAMLET._"), and
+    # left on the name they fork one character into two entities.
+    name = match.group("name").strip().strip("_").rstrip(".").strip("_")
     if not name or not any(character.isalpha() for character in name):
         return None
 

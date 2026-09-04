@@ -33,8 +33,18 @@ _NON_ENTITY_NAMES = frozenset(
         "none", "unknown", "unnamed", "character", "characters",
         "two characters", "a character", "the character", "people",
         "first person", "second person", "third person",
+        # Cue conventions: a stage play marks a line spoken in chorus with
+        # ALL or BOTH, and heads its cast list DRAMATIS PERSONAE. None of
+        # them is a person the production casts.
+        "all", "both", "together", "omnes", "dramatis personae",
+        "the rest", "others", "the others",
     }
 )
+# A cue naming several roles at once is the cast list, not a character:
+# "Lords, Ladies, Officers, Soldiers, Sailors, Messengers, and Attendants".
+# Two commas, or one comma before a conjunction, marks the enumeration. A
+# single comma is left alone, since one name can carry it ("SMITH, JR.").
+_ROLE_LIST = re.compile(r",[^,]*,|,\s*and\s", re.IGNORECASE)
 # A full word, a sentence terminator, then a capitalised next word: a line of
 # screen text or dialogue lifted into a name ("PERMISSIONS UPDATED. CONTACT
 # YOUR SUPERVISOR"). The four-letter floor spares abbreviations that carry a
@@ -100,7 +110,9 @@ def _unusable_name_reason(name: str, entity_type: str = "cast") -> str | None:
     folded = unicodedata.normalize("NFKC", name).casefold().strip()
     if folded in _NON_ENTITY_NAMES:
         return "pronoun_or_group_name"
-    if entity_type == "cast" and _GROUP_LABEL.match(name.strip()):
+    if entity_type == "cast" and (
+        _GROUP_LABEL.match(name.strip()) or _ROLE_LIST.search(name)
+    ):
         return "pronoun_or_group_name"
     # A location's own rule is terminal: it stands in for the generic
     # sentence-in-name check, which a place name ("Elsinore. A platform

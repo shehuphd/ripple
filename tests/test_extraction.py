@@ -167,6 +167,20 @@ class TestOutputValidation:
         assert _unusable_name_reason("one wall of books", "set_design") is None
         assert _unusable_name_reason("She", "prop") == "pronoun_or_group_name"
 
+    def test_a_cue_convention_is_not_a_character(self):
+        """A stage play marks a chorus line with ALL or BOTH and heads its cast
+        list DRAMATIS PERSONAE, and a cue naming the whole roster at once is
+        that list, not a person. An enumeration needs two commas or a comma
+        before a conjunction, so one comma inside a name is left alone."""
+        from ripple.extraction.validate import _unusable_name_reason
+
+        for cue in ("ALL", "BOTH", "DRAMATIS PERSONAE", "Omnes",
+                    "Lords, Ladies, Officers, Soldiers, and Attendants"):
+            assert _unusable_name_reason(cue, "cast") == "pronoun_or_group_name"
+        for person in ("HAMLET", "SMITH, JR.", "FIRST SAILOR", "A Priest",
+                       "Attendants", "DANES", "English Ambassadors", "nurse"):
+            assert _unusable_name_reason(person, "cast") is None
+
     def test_a_described_set_is_not_a_location(self):
         """A location names a place; a stage-play act opens with prose about the
         set. A finite verb outside a relative clause, or a name too long for a

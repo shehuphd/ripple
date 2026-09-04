@@ -10,7 +10,9 @@ import pytest
 
 from ripple.adapters import DetectedFormat, ImportOutcome, UnitType, import_screenplay
 from ripple.adapters.base import SourcePayload
+from ripple.adapters.base import parse_character_cue
 from ripple.adapters.detect import detect_format
+from ripple.adapters.stageplay import StagePlayAdapter
 
 
 def _units(result, unit_type: UnitType) -> list:
@@ -450,3 +452,56 @@ class TestCrossFormat:
         second = import_screenplay(fountain_bytes, "b.fountain")
         assert first.content_hash == second.content_hash
         assert len(first.content_hash) == 64
+
+
+class TestStagePlayFrontMatter:
+    """A printed play opens with its contents and its cast list. Neither is a
+    scene, and read as one they put phantom scenes in the reader and a roster
+    of extras in the graph."""
+
+    PLAY = (
+        "ACT I\n"
+        " Scene I. A platform before the Castle\n"
+        " Scene II. A room of state\n"
+        "\n"
+        "Dramatis Personae\n"
+        "\n"
+        "HAMLET, Prince of Denmark\n"
+        "Lords, Ladies, Officers, Soldiers, and Attendants\n"
+        "\n"
+        "ACT I\n"
+        "SCENE I. A platform before the Castle.\n"
+        "\n"
+        "FRANCISCO is on watch.\n"
+        "\n"
+        "BARNARDO.\n"
+        "Who's there?\n"
+        "\n"
+        "SCENE II. A room of state.\n"
+        "\n"
+        "The court assembles.\n"
+        "\n"
+        "CLAUDIUS.\n"
+        "Though yet of Hamlet our dear brother's death.\n"
+    )
+
+    def _parse(self):
+        return StagePlayAdapter().parse(
+            SourcePayload(data=self.PLAY.encode(), suggested_name="play.txt")
+        )
+
+    def test_contents_headings_are_dropped(self):
+        scenes, warnings = self._parse()
+        assert len(scenes) == 2
+        assert [scene.sequence_index for scene in scenes] == [0, 1]
+        assert any(w.code == "contents_entries_dropped" for w in warnings)
+
+    def test_the_cast_list_is_not_read_as_a_scene(self):
+        scenes, _ = self._parse()
+        text = " ".join(unit.text for scene in scenes for unit in scene.units)
+        assert "Dramatis Personae" not in text
+        assert "Lords, Ladies" not in text
+
+    def test_an_italicised_cue_keeps_one_name(self):
+        assert parse_character_cue("HAMLET._") == ("HAMLET", None, False)
+        assert parse_character_cue("HAMLET.") == ("HAMLET", None, False)

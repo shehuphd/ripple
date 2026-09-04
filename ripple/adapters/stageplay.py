@@ -58,6 +58,17 @@ MAX_CUE_CHARS = 40
 # Location text longer than this is cut to its first sentence, so a whole
 # opening stage direction does not become the location name.
 MAX_LOCATION_CHARS = 120
+# A play prints its cast before its first act. Those lines are front matter,
+# not a scene: read as script they become action units, and the roster they
+# describe ("Lords, Ladies, Officers, ... and Attendants") is then extracted
+# as though the play had staged it. The block runs to the next act or scene.
+_CAST_LIST_HEADING = re.compile(
+    r"^\s*(?:the\s+)?(?:dramatis\s+person(?:ae|æ|e)?"
+    r"|persons?\s+represented"
+    r"|characters?(?:\s+in\s+the\s+play)?"
+    r"|the\s+persons(?:\s+of\s+the\s+play)?)\s*[.:]?\s*$",
+    re.IGNORECASE,
+)
 
 
 def _ordinal(token: str | None) -> int | None:
@@ -137,6 +148,7 @@ class StagePlayAdapter:
         scene: ParsedScene | None = None
         current_act: int | None = None
         need_setting = False
+        in_front_matter = False
         setting_parts: list[str] = []
         previous: UnitType | None = None
         speaker: str | None = None
@@ -156,6 +168,7 @@ class StagePlayAdapter:
 
             act_match = stage_act_match(stripped)
             if act_match:
+                in_front_matter = False
                 current_act = _ordinal(
                     act_match.group("num") or act_match.group("word")
                 )
@@ -167,6 +180,7 @@ class StagePlayAdapter:
 
             scene_match = stage_scene_match(stripped)
             if scene_match:
+                in_front_matter = False
                 setting = scene_match.group("rest").strip()
                 scene = self._open(scenes, current_act, _ordinal(scene_match.group("num")))
                 started = True
@@ -179,6 +193,14 @@ class StagePlayAdapter:
                 else:
                     need_setting = True
                 offset += advance
+                continue
+
+            if _CAST_LIST_HEADING.match(stripped):
+                in_front_matter = True
+                offset += advance
+                continue
+            if in_front_matter:
+                offset += advance  # a cast-list line, not a line of the play
                 continue
 
             if not started:
@@ -250,7 +272,45 @@ class StagePlayAdapter:
                 "No act or scene headings were found. A stage play needs lines "
                 "such as ACT I or SCENE II.",
             )
+
+        scenes = self._drop_contents_entries(scenes, warnings)
+        if not scenes:
+            raise ImportRejected(
+                "no_scenes",
+                "Every act or scene heading was a contents entry with nothing "
+                "under it, so the play itself was never reached.",
+            )
         return scenes, warnings
+
+    @staticmethod
+    def _drop_contents_entries(
+        scenes: list[ParsedScene], warnings: list[ImportWarning]
+    ) -> list[ParsedScene]:
+        """Drop headings that open nothing, and renumber what is left.
+
+        A printed play lists its scenes before it prints them, and each line
+        of that contents block reads as a scene heading. The heading and the
+        listing are identical, so what separates them is what follows: the
+        scene itself has dialogue or action under it, the listing has the
+        next listing. A heading carrying no body is that listing.
+        """
+        kept = [
+            scene
+            for scene in scenes
+            if any(unit.unit_type is not UnitType.SCENE_HEADING for unit in scene.units)
+        ]
+        dropped = len(scenes) - len(kept)
+        if dropped:
+            warnings.append(
+                ImportWarning(
+                    "contents_entries_dropped",
+                    f"{dropped} heading(s) had nothing under them and were read "
+                    "as the play's contents list rather than as scenes.",
+                )
+            )
+        for index, scene in enumerate(kept):
+            scene.sequence_index = index
+        return kept
 
     @staticmethod
     def _content_bounds(text: str, lines: list[str]) -> tuple[int, int]:
