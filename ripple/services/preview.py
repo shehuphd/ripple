@@ -1535,7 +1535,10 @@ def _new_endpoint(
     allowed_types: frozenset[str] | None,
 ) -> tuple[EdgeRef, str] | None:
     if kind == "scene":
-        return EdgeRef.scene(scene.id), ""
+        # The label the diff rows print. An empty label falls back to the
+        # ref, and a scene's ref is its UUID, which is what the overlay
+        # would then show.
+        return EdgeRef.scene(scene.id), f"Sc {scene.display_scene_number or scene.sequence_index + 1}"
     if local_id in new_entities:
         entity = new_entities[local_id]
         return (
