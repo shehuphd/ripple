@@ -14,6 +14,9 @@ from ripple.adapters.base import (
     SCENE_HEADING,
     DetectedFormat,
     SourcePayload,
+    parse_character_cue,
+    stage_act_match,
+    stage_scene_match,
 )
 
 logger = logging.getLogger(__name__)
@@ -121,5 +124,16 @@ def _detect_text_format(payload: SourcePayload) -> tuple[DetectedFormat, float]:
         if payload.extension == "fountain":
             return DetectedFormat.FOUNTAIN, 0.6
         return DetectedFormat.PLAIN_TEXT, 0.7
+
+    # No sluglines, but act/scene headings above a run of all-caps character
+    # cues is a stage play (Shakespeare, Wilde, Ibsen). The two conditions
+    # together separate a play from prose that happens to say "Scene" or "Act".
+    stripped_lines = [line.strip() for line in text.splitlines()]
+    stage_headings = sum(
+        1 for line in stripped_lines if stage_act_match(line) or stage_scene_match(line)
+    )
+    cue_lines = sum(1 for line in stripped_lines if parse_character_cue(line))
+    if stage_headings >= 3 and cue_lines >= 5:
+        return DetectedFormat.STAGE_PLAY, 0.75
 
     return DetectedFormat.PLAIN_TEXT, 0.3

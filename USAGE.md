@@ -29,7 +29,7 @@ On first run the library seeds three bundled demo screenplays, each with its gro
 
 The library lists every imported script with its format, page count, scene count, estimated runtime, and import outcome. The sidebar filters to recently opened scripts and to imports that need review.
 
-**Import** accepts Fountain, Final Draft XML, PDF, and plain text. Detection reads the file's content; the extension only breaks ties between text formats. Every import ends in one of four outcomes:
+**Import** accepts Fountain, Final Draft XML, PDF, plain text, and stage plays. Detection reads the file's content; the extension only breaks ties between text formats. Every import ends in one of four outcomes:
 
 | Outcome | Meaning |
 |---|---|
@@ -204,6 +204,10 @@ Text-based PDFs are read locally with no network calls and no models. Layout rul
 
 A scanned PDF is rasterised with `pdftoppm` and read with `tesseract`, both as local subprocesses. No bytes leave the machine and nothing is written to disk. If either binary is absent the import is rejected with `ocr_unavailable`, naming what is missing. OCR-derived imports are always `needs_review`.
 
+### Stage plays
+
+A public-domain play (Shakespeare, Wilde, Ibsen and the like, as distributed by Project Gutenberg) names its structure in acts and scenes rather than INT./EXT. sluglines, so it is detected and parsed as its own format. An act heading in numerals or words ("ACT I", "ACT 1", "FIRST ACT") and a scene heading ("SCENE", "SCENE II", "SCENE I. A platform before the Castle") mark the scene boundaries; an act that holds no numbered scenes is itself one scene. The setting that opens a scene becomes its heading, so a location reads out of it the way a slugline's does. An all-caps name ending in a period is the speaker, and bracketed lines and Enter/Exit/Exeunt lines are stage directions. The Project Gutenberg licence wrapper and the front matter before the first heading are dropped, and the title is read from the "Title:" line. Detection needs act and scene headings above a run of all-caps cues with no sluglines present, so a screenplay never routes here by mistake.
+
 ### Security
 
 Final Draft XML is parsed through `defusedxml`; external entities and entity expansion are refused with `xml_unsafe`. Uploads over 8 MiB are rejected before any parser runs. Scene and unit counts are capped, and truncation is reported as a warning rather than applied silently.
@@ -215,7 +219,7 @@ Final Draft XML is parsed through `defusedxml`; external entities and entity exp
 | `payload_too_large` | Over the 8 MiB upload ceiling. |
 | `undecodable_text` | Not UTF-8, UTF-16, UTF-32, or Windows-1252. |
 | `empty_document` | The file contains no text. |
-| `unsupported_format` | Not one of the four supported formats. |
+| `unsupported_format` | Not one of the supported formats. |
 | `no_scenes` | Parsed, but no scene headings were found. |
 | `not_a_screenplay` | Parsed, but the structure is not a screenplay's. |
 | `xml_malformed` | Not well-formed XML. |

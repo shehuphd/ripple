@@ -424,6 +424,7 @@ FORMAT_LABELS = {
     "fdx": "Final Draft",
     "pdf": "PDF",
     "plain_text": "Plain text",
+    "stage_play": "Stage play",
 }
 
 

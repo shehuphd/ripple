@@ -35,6 +35,7 @@ from ripple.adapters.fountain import FountainAdapter
 from ripple.adapters.pdf import PdfAdapter
 from ripple.adapters.plaintext import PlainTextAdapter
 from ripple.adapters.screenplay_check import assess, verdict_warnings
+from ripple.adapters.stageplay import StagePlayAdapter
 from ripple.tracing import ensure_configured
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ ADAPTERS: dict[DetectedFormat, ImportAdapter] = {
     DetectedFormat.FDX: FdxAdapter(),
     DetectedFormat.PDF: PdfAdapter(),
     DetectedFormat.PLAIN_TEXT: PlainTextAdapter(),
+    DetectedFormat.STAGE_PLAY: StagePlayAdapter(),
 }
 
 __all__ = [

@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-03 21:40:09 UTC
+Last updated: 2026-09-04 12:21:22 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
 
@@ -39,6 +39,7 @@ Every file in the repository and what it does. Directories the application write
 | `adapters/fdx.py` | Final Draft XML parser, via defusedxml. |
 | `adapters/pdf.py` | PDF parser with OCR fallback for scanned documents. |
 | `adapters/plaintext.py` | Plain-text screenplay parser. |
+| `adapters/stageplay.py` | Stage-play parser: act/scene structure for public-domain plays. |
 | `adapters/screenplay_check.py` | Post-parse assessment: is this a screenplay at all? |
 
 ### Configuration (`ripple/config/`)

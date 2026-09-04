@@ -54,6 +54,7 @@ class DetectedFormat(str, Enum):
     FDX = "fdx"
     PDF = "pdf"
     PLAIN_TEXT = "plain_text"
+    STAGE_PLAY = "stage_play"
     UNKNOWN = "unknown"
 
 
@@ -282,6 +283,50 @@ SHOT_PREFIX = re.compile(
     r"POV|INSERT|BACK TO|SERIES OF SHOTS|MONTAGE|INTERCUT|AERIAL|TRACKING)\b",
     re.IGNORECASE,
 )
+# Stage-play structure, as public-domain plays (Shakespeare, Wilde, Ibsen and
+# the like) are distributed by Project Gutenberg: acts and scenes named in
+# words or numerals rather than INT./EXT. sluglines. An act is "ACT I", "ACT 1",
+# "ACT ONE", or the word-ordinal "FIRST ACT"; a scene is "SCENE", "SCENE II", or
+# "SCENE I. <setting>". A scene match counts only when a number, a separator, or
+# end-of-line follows the word, so a sentence opening "Scene of ..." is not one.
+_ROMAN = r"[IVXLCDM]+"
+STAGE_ACT = re.compile(
+    r"^(?:ACT\s+(?P<num>" + _ROMAN + r"|\d+|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|"
+    r"EIGHT|NINE|TEN)"
+    r"|(?P<word>FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|"
+    r"TENTH)\s+ACT)"
+    r"\b\s*(?P<rest>.*)$",
+    re.IGNORECASE,
+)
+STAGE_SCENE = re.compile(
+    r"^SCENE(?:\s+(?P<num>" + _ROMAN + r"|\d+))?\s*(?P<sep>[.\-:—])?\s*"
+    r"(?P<rest>.*)$",
+    re.IGNORECASE,
+)
+# Lines that open or close a stage direction rather than a speech.
+STAGE_DIRECTION = re.compile(
+    r"^_?(?:Enter|Exit|Exeunt|Re-enter|Re-enters|Manet|Manent|Curtain|"
+    r"The\s+Curtain|End\s+of)\b",
+    re.IGNORECASE,
+)
+
+
+def stage_act_match(line: str) -> re.Match | None:
+    """Match an act heading, or None. STAGE_ACT already requires a numeral or a
+    word-ordinal, so it does not fire on the word "act" inside a sentence."""
+    return STAGE_ACT.match(line.strip())
+
+
+def stage_scene_match(line: str) -> re.Match | None:
+    """Match a scene heading, or None. A bare STAGE_SCENE match is not enough,
+    since it captures any line opening with "Scene"; a real heading carries a
+    number, a separator, or nothing after the word."""
+    match = STAGE_SCENE.match(line.strip())
+    if match and (
+        match.group("num") or match.group("sep") or not match.group("rest").strip()
+    ):
+        return match
+    return None
 # Character cues carry optional extensions and an optional dual-dialogue caret.
 #
 # The name class is Unicode-aware rather than [A-Z]: MATIAS and MATÍAS are both

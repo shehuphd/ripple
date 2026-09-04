@@ -223,6 +223,151 @@ class TestPdf:
         assert cue.text.strip() == "SURGEON"
 
 
+_SHAKESPEARE = """The Project Gutenberg eBook of A Test Tragedy
+
+Title: A Test Tragedy
+
+*** START OF THE PROJECT GUTENBERG EBOOK A TEST TRAGEDY ***
+
+Dramatis Personae
+
+  BARNARDO, a sentinel
+  HAMLET, Prince of Denmark
+
+ACT I
+
+SCENE I. Elsinore. A platform before the Castle.
+
+Enter BARNARDO and FRANCISCO.
+
+BARNARDO.
+Who's there?
+
+FRANCISCO.
+Nay, answer me. Stand and unfold yourself.
+
+[_Exit Francisco._]
+
+SCENE II. A room of state in the Castle.
+
+HAMLET.
+A little more than kin, and less than kind.
+
+HORATIO.
+My lord, I came to see your father's funeral.
+
+ACT II
+
+SCENE I. A room in Polonius's house.
+
+POLONIUS.
+Give him this money and these notes, Reynaldo.
+
+HAMLET.
+Words, words, words.
+
+[_Exeunt._]
+
+*** END OF THE PROJECT GUTENBERG EBOOK A TEST TRAGEDY ***
+
+Licence boilerplate that must never be parsed as a scene.
+"""
+
+_WILDE = """Title: A Test Comedy
+
+FIRST ACT
+
+SCENE
+
+Morning-room in Algernon's flat in Half-Moon Street. The room is furnished.
+
+ALGERNON.
+Did you hear what I was playing, Lane?
+
+LANE.
+I didn't think it polite to listen, sir.
+
+SECOND ACT
+
+_[SCENE.—A room furnished comfortably and tastefully, but not extravagantly.]_
+
+JACK.
+On the contrary, Aunt Augusta, I have now realised.
+
+GWENDOLEN.
+I am glad to say I have never seen a spade.
+
+THIRD ACT
+
+SCENE
+
+Morning-room at the Manor House.
+
+CECILY.
+They have been eating muffins. That looks like repentance.
+
+ALGERNON.
+I am on the verge of a grave decision.
+"""
+
+
+class TestStagePlay:
+    """Public-domain plays: act/scene structure, not INT./EXT. sluglines."""
+
+    def test_a_gutenberg_tragedy_is_detected_and_parsed(self):
+        result = import_screenplay(_SHAKESPEARE.encode(), "tragedy.txt")
+        assert result.accepted
+        assert result.detected_format is DetectedFormat.STAGE_PLAY
+        assert result.title == "A Test Tragedy"
+        assert result.scene_count == 3
+
+    def test_scenes_are_numbered_by_act_and_scene(self):
+        result = import_screenplay(_SHAKESPEARE.encode(), "x.txt")
+        numbers = [scene.display_scene_number for scene in result.scenes]
+        assert numbers == ["1.1", "1.2", "2.1"]
+
+    def test_the_setting_becomes_the_location_heading(self):
+        result = import_screenplay(_SHAKESPEARE.encode(), "x.txt")
+        assert result.scenes[0].heading == "Elsinore. A platform before the Castle"
+
+    def test_all_caps_cues_name_the_speakers(self):
+        result = import_screenplay(_SHAKESPEARE.encode(), "x.txt")
+        speakers = {u.speaker_name for u in _units(result, UnitType.CHARACTER)}
+        assert {"BARNARDO", "FRANCISCO", "HAMLET", "POLONIUS"} <= speakers
+
+    def test_stage_directions_are_action_not_dialogue(self):
+        result = import_screenplay(_SHAKESPEARE.encode(), "x.txt")
+        actions = [u.text for u in _units(result, UnitType.ACTION)]
+        assert any("Exeunt" in text for text in actions)
+        assert any("Exit Francisco" in text for text in actions)
+
+    def test_the_gutenberg_wrapper_and_front_matter_are_dropped(self):
+        result = import_screenplay(_SHAKESPEARE.encode(), "x.txt")
+        every_text = " ".join(
+            u.text for scene in result.scenes for u in scene.units
+        )
+        assert "Licence boilerplate" not in every_text
+        assert "Dramatis Personae" not in every_text
+
+    def test_word_ordinal_acts_and_bare_scenes_parse(self):
+        """Wilde names acts in words ('FIRST ACT') and opens with a bare
+        'SCENE' whose setting is the prose that follows; Ibsen brackets the
+        setting. Both resolve to a clean location heading."""
+        result = import_screenplay(_WILDE.encode(), "comedy.txt")
+        assert result.accepted
+        assert [s.display_scene_number for s in result.scenes] == ["1", "2", "3"]
+        assert result.scenes[0].heading.startswith("Morning-room in Algernon's flat")
+        # The Ibsen-style bracketed setting loses its brackets and SCENE label.
+        assert result.scenes[1].heading == (
+            "A room furnished comfortably and tastefully, but not extravagantly"
+        )
+
+    def test_a_screenplay_is_not_misread_as_a_stage_play(self, night_freight_fountain):
+        """A real screenplay keeps its slugline format and its own adapter."""
+        result = import_screenplay(night_freight_fountain, "night.fountain")
+        assert result.detected_format is not DetectedFormat.STAGE_PLAY
+
+
 class TestCrossFormat:
     """One source, four formats. What must match, and what must not."""
 
