@@ -659,6 +659,37 @@ def _fail(
     )
 
 
+def _name_extends(shorter: list[str], longer: list[str]) -> bool:
+    """True when one word list is a proper prefix of the other, so "lubov" is a
+    name-extension of "lubov andreyevna" but "maras" is not of "mara"."""
+    return 0 < len(shorter) < len(longer) and longer[: len(shorter)] == shorter
+
+
+def _name_extension_holder(
+    session: Session, script_id, entity_type: str, key: str
+) -> Entity | None:
+    """The one character whose name strictly extends `key` or is extended by
+    it, or None when there is no such character or more than one. Cast only:
+    a first-name/full-name shorthand is a character convention, not a prop's."""
+    if entity_type != "cast":
+        return None
+    words = key.split()
+    if not words:
+        return None
+    matches = [
+        entity
+        for entity in session.scalars(
+            select(Entity).where(
+                Entity.script_id == script_id,
+                Entity.entity_type == "cast",
+            )
+        )
+        if _name_extends(words, other := entity.normalized_name.split())
+        or _name_extends(other, words)
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
 def _resolve_entity(session: Session, script_id, proposed: ValidatedEntity) -> Entity:
     """Find or create the canonical entity for a proposed one.
 
@@ -695,6 +726,17 @@ def _resolve_entity(session: Session, script_id, proposed: ValidatedEntity) -> E
         )
         if len(holders) == 1:
             entity = session.get(Entity, holders[0])
+    if entity is None:
+        # Still no match. A character cue that strictly extends an existing
+        # character's name, or is strictly extended by it ("LUBOV" against
+        # "LUBOV ANDREYEVNA"), is the same person under a fuller or shorter
+        # surface, so it widens that entity instead of forking. Only when a
+        # single character stands in that relation, since two ("MARY" against
+        # both "MARY ANNE" and "MARY JANE") is ambiguous; only for cast, since
+        # a prop or location does not use first-name shorthand.
+        entity = _name_extension_holder(
+            session, script_id, proposed.entity_type, key
+        )
     if entity is None:
         entity = Entity(
             script_id=script_id,

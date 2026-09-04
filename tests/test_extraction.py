@@ -504,6 +504,75 @@ class TestWritingTheGraph:
         )
         assert transportation == 1
 
+    def test_a_fuller_cast_name_widens_the_existing_character(
+        self, session, script
+    ):
+        """A cue that strictly extends an existing character ("LUBOV" then
+        "LUBOV ANDREYEVNA") is one person, so it resolves to that entity and
+        the fuller surface becomes an alias rather than a second node."""
+        from ripple.extraction.service import _resolve_entity
+        from ripple.extraction.validate import ValidatedEntity
+
+        def cast(name):
+            return ValidatedEntity(local_id="c", entity_type="cast", canonical_name=name)
+
+        first = _resolve_entity(session, script.id, cast("LUBOV"))
+        fuller = _resolve_entity(session, script.id, cast("LUBOV ANDREYEVNA"))
+        assert first.id == fuller.id
+        aliases = set(
+            session.scalars(
+                select(EntityAlias.normalized_alias).where(
+                    EntityAlias.entity_id == first.id
+                )
+            )
+        )
+        assert "lubov andreyevna" in aliases
+
+    def test_a_shorter_cast_name_resolves_to_the_fuller_character(
+        self, session, script
+    ):
+        """The order does not matter: a later bare first name resolves to the
+        character already known by the full name."""
+        from ripple.extraction.service import _resolve_entity
+        from ripple.extraction.validate import ValidatedEntity
+
+        def cast(name):
+            return ValidatedEntity(local_id="c", entity_type="cast", canonical_name=name)
+
+        full = _resolve_entity(session, script.id, cast("LUBOV ANDREYEVNA"))
+        short = _resolve_entity(session, script.id, cast("LUBOV"))
+        assert full.id == short.id
+
+    def test_an_ambiguous_extension_stays_a_separate_character(
+        self, session, script
+    ):
+        """"MARY" extends both "MARY ANNE" and "MARY JANE", so which one it
+        belongs to is unknown. It forks rather than guessing."""
+        from ripple.extraction.service import _resolve_entity
+        from ripple.extraction.validate import ValidatedEntity
+
+        def cast(name):
+            return ValidatedEntity(local_id="c", entity_type="cast", canonical_name=name)
+
+        anne = _resolve_entity(session, script.id, cast("MARY ANNE"))
+        jane = _resolve_entity(session, script.id, cast("MARY JANE"))
+        mary = _resolve_entity(session, script.id, cast("MARY"))
+        assert len({anne.id, jane.id, mary.id}) == 3
+
+    def test_a_prop_name_does_not_prefix_merge(self, session, script):
+        """The first-name shorthand is a character convention. A prop that
+        contains another prop's name ("Blue" inside "Blue key") is not the
+        same object, so props never prefix-merge."""
+        from ripple.extraction.service import _resolve_entity
+        from ripple.extraction.validate import ValidatedEntity
+
+        def prop(name):
+            return ValidatedEntity(local_id="p", entity_type="prop", canonical_name=name)
+
+        short = _resolve_entity(session, script.id, prop("Blue"))
+        longer = _resolve_entity(session, script.id, prop("Blue key"))
+        assert short.id != longer.id
+
     def test_a_duplicate_edge_from_one_unit_is_skipped_not_fatal(
         self, session, script, tmp_path
     ):
