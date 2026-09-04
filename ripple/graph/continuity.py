@@ -98,7 +98,11 @@ def _item_payload(item: EvidenceItem) -> dict[str, Any]:
         # An unnumbered scene is shown as unnumbered: substituting its
         # position invents a number a numbered scene may already carry.
         "scene": item.scene_number or "—",
-        "unit_id": item.unit_id,
+        # The assertion id is the one citable id: the validator accepts
+        # citations against it, and the unit behind it is resolved by code.
+        # Offering the unit id here as well invites the model to cite the
+        # wrong one, which is how every finding of a run once died uncited.
+        "assertion_id": item.assertion_id,
         "text": item.unit_text,
         "edge": f"{item.subject_label} {item.predicate} {item.object_label}",
         "confidence": round(item.confidence, 2),

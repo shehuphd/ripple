@@ -152,4 +152,8 @@ class TestPrompt:
         assert payload["graph_changes"]["removed"] == [
             "Blue sedan appears_in Sc 12"
         ]
-        assert payload["evidence"]["later_evidence"][0]["unit_id"] == "unit-12"
+        # The payload's citable id is the assertion id, matching both the
+        # system prompt's instruction and the validator's accepted set; the
+        # unit id stays out so the model cannot cite the wrong id.
+        assert payload["evidence"]["later_evidence"][0]["assertion_id"] == "a1"
+        assert "unit_id" not in payload["evidence"]["later_evidence"][0]
