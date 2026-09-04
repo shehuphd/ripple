@@ -81,15 +81,25 @@ class Edge:
         )
 
     @property
-    def slot(self) -> tuple[str, str, str, str]:
-        """Subject and predicate without the object.
+    def slot(self) -> tuple[str, str, str, str, str | None]:
+        """Subject and predicate without the object's name.
 
         Two edges sharing a slot but differing in object are a change rather
         than an unrelated removal and addition: `Loading dock requires Sodium
         wash` becoming `Loading dock requires Practical lamps` is one
-        production decision, and showing it as two rows loses that.
+        production decision, and showing it as two rows loses that. The
+        object's entity type stays in the slot, because the pairing only
+        holds for a like-for-like swap: cutting a forklift and adding a
+        stunt in the same scene are two decisions, and a change row selling
+        them as one would hide the removal.
         """
-        return (self.subject.kind, self.subject.key, self.predicate, self.obj.kind)
+        return (
+            self.subject.kind,
+            self.subject.key,
+            self.predicate,
+            self.obj.kind,
+            self.obj.entity_type,
+        )
 
 
 @dataclass

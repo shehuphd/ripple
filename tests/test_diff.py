@@ -115,6 +115,18 @@ class TestSlotPairing:
         assert after.obj.ref == "practical lamps"
         assert not diff.added and not diff.removed
 
+    def test_a_cross_type_swap_is_a_removal_and_an_addition(self):
+        """The pairing only holds like-for-like. Cutting a forklift and
+        adding a stunt in the same scene are two production decisions, and
+        one change row would hide the removal."""
+        diff = diff_edges(
+            [edge(SCENE, "requires", EdgeRef.entity("forklift", "transportation"))],
+            [edge(SCENE, "requires", EdgeRef.entity("sedan fishtailing", "stunt"))],
+        )
+        assert diff.changed == []
+        assert [e.obj.ref for e in diff.removed] == ["forklift"]
+        assert [e.obj.ref for e in diff.added] == ["sedan fishtailing"]
+
     def test_an_ambiguous_slot_is_not_paired(self):
         """Two out and two in on one slot is a rewrite; guessing pairs invents."""
         diff = diff_edges(
