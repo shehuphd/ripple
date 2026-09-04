@@ -789,6 +789,12 @@ def _graph_lock(session, script_id=None) -> dict[str, str] | None:
             "action": "Choose a model in Settings",
             "href": "/settings",
         }
+    if script_id is not None:
+        return {
+            "message": "No graph has been built for this script yet.",
+            "action": "Open the reader and build it",
+            "href": f"/scripts/{script_id}",
+        }
     return {
         "message": "No graph has been built yet.",
         "action": "Open a script and build its graph",

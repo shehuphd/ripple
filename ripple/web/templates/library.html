@@ -9,8 +9,7 @@
 <div class="right">
   <div class="search"><span class="ic">⌕</span>
     <input id="search" placeholder="Search" autocomplete="off"></div>
-  {% if model %}<span class="chip">◎ {{ model }}</span>
-  {% else %}<a class="chip" href="/settings">◎ no model selected</a>{% endif %}
+  {% if not model %}<a class="chip" href="/settings">◎ no model selected</a>{% endif %}
   <button class="btn pri" id="pick">+ Import script</button>
   <input type="file" id="file" class="hide"
          accept=".fountain,.fdx,.pdf,.txt,.xml,.text">

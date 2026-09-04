@@ -176,15 +176,27 @@ class TestPages:
             or len(_units(client, script_id)) > 20
         )
 
-    def test_see_ripple_waits_for_a_graph(self, client, night_freight_fountain):
+    def test_see_ripple_waits_for_a_graph(
+        self, client, night_freight_fountain, monkeypatch
+    ):
         """A ripple against an empty graph is meaningless, so a script with no
         graph marks See ripple not-ready; the client then leaves it disabled
         and Build graph is the next step. A built script marks it ready."""
+        # A model must be selected for Build graph to be offered at all, which
+        # is how the gleaming primary-action state is reached.
+        monkeypatch.setattr(
+            web.settings_service,
+            "selected_model",
+            lambda session: ("google", "gemini-flash-lite-latest"),
+        )
         # A seeded script carries a ground-truth graph, so its reader marks
-        # See ripple ready. Captured before the upload below, which would
+        # See ripple ready, keeps the Graph button a live link, and does not
+        # gleam Build graph. Captured before the upload below, which would
         # otherwise become the newest row _first_script returns.
         built = client.get(f"/scripts/{_first_script(client)}").text
         assert 'data-graph-ready="true"' in built
+        assert 'class="btn gleam"' not in built
+        assert "/graph" in built
 
         uploaded = client.post(
             "/api/scripts",
@@ -193,6 +205,10 @@ class TestPages:
         graphless = client.get(f"/scripts/{uploaded['id']}").text
         assert 'id="see-ripple"' in graphless
         assert 'data-graph-ready="false"' in graphless
+        # Without a graph, Build graph is the gleaming primary action and the
+        # Graph button is a disabled span, not a live link.
+        assert 'class="btn gleam"' in graphless
+        assert 'aria-disabled="true"' in graphless
 
     def test_settings_lists_the_provider(self, client):
         body = client.get("/settings").text

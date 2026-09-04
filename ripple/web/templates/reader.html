@@ -30,23 +30,30 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
   {{ script.draft_number - 1 }}</a>
 {% endif %}
 <div class="right">
+  {% if has_graph %}
   <a class="btn" href="/scripts/{{ script.id }}/graph">⁙ Graph</a>
+  {% else %}
+  <span class="btn" aria-disabled="true" tabindex="-1"
+        data-tip="Build the graph first, then open it here">⁙ Graph</span>
+  {% endif %}
   {% if findings %}
   <a class="chip" href="/findings?script={{ script.id }}"
      data-tip="Open this script's continuity findings"><i class="dot medium"></i>
     {{ findings }} continuity finding{{ '' if findings == 1 else 's' }}</a>
   {% endif %}
-  {% if model %}<span class="chip">◎ {{ model }}</span>
-    {% if script.graph_status == 'ready' and pending_scenes == 0 %}
+  {% if model %}
+    {% if not has_graph %}
+    <button class="btn gleam" id="extract"
+            data-tip="Build this script's graph. It is the first step, and the graph view, requirements, and ripple all need it.">
+      Build graph</button>
+    {% elif script.graph_status == 'ready' and pending_scenes == 0 %}
     <button class="btn" id="extract" disabled
             data-tip="The graph matches every scene. Accepting a change or adding a scene enables an update.">
       Build graph</button>
-    {% elif script.graph_status == 'ready' %}
+    {% else %}
     <button class="btn" id="extract"
             data-tip="{{ pending_scenes }} scene{{ '' if pending_scenes == 1 else 's' }} changed since the last build. Unchanged scenes replay from cache at no cost.">
       Update graph</button>
-    {% else %}
-    <button class="btn" id="extract">Build graph</button>
     {% endif %}
   {% else %}
     <a class="chip" href="/settings" data-tip="Choose a model to build the graph">
@@ -176,7 +183,6 @@ character cue, dialogue below it."></textarea>
     <span class="sub" id="pv-crumb"></span>
     <div class="right">
       <span class="chip" id="pv-sev"><i class="dot"></i><span>severity</span></span>
-      {% if model %}<span class="chip">◎ {{ model }}</span>{% endif %}
       <button class="btn icon" id="pv-close" data-tip="Close" aria-label="Close preview">↩</button>
     </div>
   </div>

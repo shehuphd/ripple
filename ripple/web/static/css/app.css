@@ -132,8 +132,21 @@ button{font:inherit}
 .btn.pri:hover{background:#3ab8d8}
 .btn.sm{padding:5px 10px;font-size:12px}
 .btn.danger{color:var(--red);border-color:#3a2523}
-.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn:disabled,.btn[aria-disabled="true"]{opacity:.4;cursor:not-allowed}
 .btn.icon{padding:6px 9px}
+/* Build graph, when no graph exists yet, is the one action the rest of the
+   screen depends on. Amber marks it, and a slow halo pulse is the second,
+   non-colour channel that says "act here first" for a reader who cannot see
+   the amber. Both drop away once a graph exists (the button loses .gleam).
+   The pulse is ~0.4Hz, well under three flashes a second, and reduced-motion
+   swaps it for a steady ring. */
+.btn.gleam{background:var(--amber);border-color:var(--amber);color:#241a08;
+  font-weight:600;animation:gleam 2.4s ease-in-out infinite}
+.btn.gleam:hover{background:#d89a3e}
+@keyframes gleam{0%,100%{box-shadow:0 0 0 0 rgba(201,138,46,0)}
+  50%{box-shadow:0 0 0 4px rgba(201,138,46,.4)}}
+@media (prefers-reduced-motion:reduce){
+  .btn.gleam{animation:none;box-shadow:0 0 0 3px rgba(201,138,46,.32)}}
 
 .chip{display:inline-flex;align-items:center;gap:6px;background:var(--raised);
   border:.5px solid var(--bd2);border-radius:7px;padding:6px 11px;font-size:13px;
