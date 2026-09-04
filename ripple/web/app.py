@@ -661,6 +661,14 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
     pending = (
         pending_scene_count(session, script.id, model) if model else 0
     )
+    # A ripple compares an edit against the graph, so it needs one to exist. The
+    # test is any active assertion, not graph_status: a seeded or partly-built
+    # graph carries assertions without ever reaching "ready".
+    has_graph = session.scalar(
+        select(Assertion.id)
+        .where(Assertion.script_id == script.id, Assertion.active.is_(True))
+        .limit(1)
+    ) is not None
     return templates.TemplateResponse(
         request,
         "reader.html",
@@ -671,6 +679,7 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
             "findings": findings,
             "model": model,
             "pending_scenes": pending,
+            "has_graph": has_graph,
             "counts": sidebar_counts(session),
         },
     )

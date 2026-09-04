@@ -30,8 +30,10 @@ function refreshDraftIndicator() {
     `${count} line${count === 1 ? '' : 's'} edited`;
   revertAll.disabled = count === 0;
   // The preview reads drafts, so the button follows their existence in both
-  // directions: enabling without a draft offers a preview of nothing.
-  seeRipple.disabled = count === 0;
+  // directions: enabling without a draft offers a preview of nothing. A
+  // ripple is also meaningless before a graph exists, so an unbuilt script
+  // keeps the button off and leaves Build graph as the next step.
+  seeRipple.disabled = count === 0 || seeRipple.dataset.graphReady !== 'true';
 }
 
 function noteDraft(node) {

@@ -59,8 +59,13 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
   <button class="btn" id="undo-last" disabled>Undo last accept</button>
   <button class="btn" id="revert-all" disabled
           data-tip="Discard every unapplied edit">Revert edits</button>
-  <button class="btn pri" id="see-ripple" disabled
+  {% if has_graph %}
+  <button class="btn pri" id="see-ripple" disabled data-graph-ready="true"
           data-tip="Edit a line, then see what it changes">≋ See ripple</button>
+  {% else %}
+  <button class="btn pri" id="see-ripple" disabled data-graph-ready="false"
+          data-tip="Build the graph first; then editing a line shows its ripple">≋ See ripple</button>
+  {% endif %}
   <button class="toggle" data-pane="reader" data-target=".reader"
           data-tip="Show or hide the requirement pane" aria-label="Toggle pane">⬒</button>
 </div>

@@ -176,6 +176,24 @@ class TestPages:
             or len(_units(client, script_id)) > 20
         )
 
+    def test_see_ripple_waits_for_a_graph(self, client, night_freight_fountain):
+        """A ripple against an empty graph is meaningless, so a script with no
+        graph marks See ripple not-ready; the client then leaves it disabled
+        and Build graph is the next step. A built script marks it ready."""
+        # A seeded script carries a ground-truth graph, so its reader marks
+        # See ripple ready. Captured before the upload below, which would
+        # otherwise become the newest row _first_script returns.
+        built = client.get(f"/scripts/{_first_script(client)}").text
+        assert 'data-graph-ready="true"' in built
+
+        uploaded = client.post(
+            "/api/scripts",
+            files={"file": ("graphless.fountain", night_freight_fountain)},
+        ).json()
+        graphless = client.get(f"/scripts/{uploaded['id']}").text
+        assert 'id="see-ripple"' in graphless
+        assert 'data-graph-ready="false"' in graphless
+
     def test_settings_lists_the_provider(self, client):
         body = client.get("/settings").text
         assert "google" in body
