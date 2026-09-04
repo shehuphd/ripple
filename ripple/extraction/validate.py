@@ -54,6 +54,36 @@ _GROUP_LABEL = re.compile(
     r"\s+\w",
     re.IGNORECASE,
 )
+# A location names a place; it is not a sentence about the set. A stage play
+# opens an act with prose ("The table has been placed in the middle of the
+# stage", "The Christmas Tree is in the corner by the piano"), and reading a
+# location out of it can lift that whole description. Two marks separate a
+# place name from a described set: a finite verb standing outside a relative
+# clause (the subject is acting or being, not being named), and a length no
+# slug reaches. A verb inside a relative clause is fine, since it modifies the
+# place rather than narrating it ("A room which is still called the nursery").
+_LOCATION_MAX_CHARS = 48
+_PLACE_PREDICATES = frozenset(
+    {
+        "is", "are", "was", "were", "been", "being",
+        "has", "have", "had",
+        "stands", "stood", "hangs", "hung", "lies", "sits",
+        "leads", "opens",
+        "placed", "arranged", "stripped",
+    }
+)
+_RELATIVE_PRONOUNS = frozenset({"which", "that", "who", "whom", "where"})
+
+
+def _describes_rather_than_names(location: str) -> bool:
+    """True when a location reads as a sentence about the set, not a place."""
+    words = re.findall(r"[a-z']+", location.lower())
+    for index, word in enumerate(words):
+        if word in _PLACE_PREDICATES and (
+            index == 0 or words[index - 1] not in _RELATIVE_PRONOUNS
+        ):
+            return True
+    return False
 
 
 def _unusable_name_reason(name: str, entity_type: str = "cast") -> str | None:
@@ -62,14 +92,25 @@ def _unusable_name_reason(name: str, entity_type: str = "cast") -> str | None:
     The group-label rule ("Two men", "Six ...") is a cast concept only: a
     prop, set dressing, or location legitimately carries a count or a plural
     noun ("Six monitors", "14 Stannary Lane", "one wall of books"), so it is
-    applied to cast alone. The pronoun and sentence-text rules hold for any
-    type.
+    applied to cast alone. The described-set rule is a location concept only,
+    for the same reason in reverse: a prop or set-dressing name may run long or
+    read as a phrase, but a location has to be a place. The pronoun and
+    sentence-text rules hold for any type.
     """
     folded = unicodedata.normalize("NFKC", name).casefold().strip()
     if folded in _NON_ENTITY_NAMES:
         return "pronoun_or_group_name"
     if entity_type == "cast" and _GROUP_LABEL.match(name.strip()):
         return "pronoun_or_group_name"
+    # A location's own rule is terminal: it stands in for the generic
+    # sentence-in-name check, which a place name ("Elsinore. A platform
+    # before the Castle") would trip on its region-then-spot period.
+    if entity_type == "location":
+        if len(name.strip()) > _LOCATION_MAX_CHARS or _describes_rather_than_names(
+            name
+        ):
+            return "descriptive_location"
+        return None
     if _SENTENCE_IN_NAME.search(name):
         return "sentence_like_name"
     return None

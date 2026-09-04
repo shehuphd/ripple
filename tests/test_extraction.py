@@ -167,6 +167,33 @@ class TestOutputValidation:
         assert _unusable_name_reason("one wall of books", "set_design") is None
         assert _unusable_name_reason("She", "prop") == "pronoun_or_group_name"
 
+    def test_a_described_set_is_not_a_location(self):
+        """A location names a place; a stage-play act opens with prose about the
+        set. A finite verb outside a relative clause, or a name too long for a
+        slug, marks a description and is dropped. A place-shaped phrase, a
+        region-then-spot period, and a naming relative clause are kept, and the
+        rule is a location concept only: a prop or set-dressing name may run
+        long or read as a phrase."""
+        from ripple.extraction.validate import _unusable_name_reason
+
+        for described in (
+            "The table has been placed in the middle of the stage",
+            "THE Christmas Tree is in the corner by the piano",
+            "A room furnished comfortably and tastefully, but not extravagantly",
+        ):
+            assert _unusable_name_reason(described, "location") == "descriptive_location"
+        for place in (
+            "Elsinore. A platform before the Castle",
+            "A room which is still called the nursery",
+            "A drawing-room in Wimpole Street",
+            "DISPATCH OFFICE",
+        ):
+            assert _unusable_name_reason(place, "location") is None
+        # The same described sentences are admissible names for other types.
+        assert _unusable_name_reason(
+            "A room furnished comfortably and tastefully", "set_design"
+        ) is None
+
     def test_a_fabricated_source_unit_is_dropped(self):
         """An evidence pointer to a unit never shown to the model is invented."""
         report = validate_response(

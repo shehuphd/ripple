@@ -119,7 +119,12 @@ def provided_for_scene(
         ),
         None,
     )
-    if location and heading_unit and not _is_direction_cue(location):
+    if (
+        location
+        and heading_unit
+        and not _is_direction_cue(location)
+        and not _unusable_name_reason(location, "location")
+    ):
         unit_id, text = heading_unit
         found = text.find(location)
         result.append(

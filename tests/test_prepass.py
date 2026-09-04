@@ -82,6 +82,29 @@ class TestProvidedForScene:
         provided = provided_for_scene("EXT. YARD - DAY", units)
         assert provided == []
 
+    def test_a_described_set_heading_yields_no_location(self):
+        """A stage play opens an act with prose about the set. Reading a
+        location out of it would name the whole sentence ("The table has been
+        placed in the middle of the stage"), which is a description, not a
+        place; the pre-pass emits no location rather than a sentence node."""
+        heading = "The table has been placed in the middle of the stage."
+        units = _units(
+            ("scene_heading", heading),
+            ("character", "NORA"),
+            ("dialogue", "Is he home?"),
+        )
+        provided = provided_for_scene(heading, units)
+        assert [(p.entity_type, p.name) for p in provided] == [("cast", "NORA")]
+
+    def test_a_clean_stage_play_location_still_seeds(self):
+        """A place-shaped heading, period and all, still becomes a location."""
+        heading = "Elsinore. A platform before the Castle"
+        units = _units(("scene_heading", heading), ("action", "The guard waits."))
+        provided = provided_for_scene(heading, units)
+        assert ("location", heading, "occurs_at") in {
+            (p.entity_type, p.name, p.predicate) for p in provided
+        }
+
 
 class TestProvidedReferences:
     """The validator accepts references to pre-registered ids."""
