@@ -325,6 +325,11 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 /* The sidebar toggle is the leftmost control; a centred tooltip would
    extend past the bar's left edge and under the sidebar. Grow rightward. */
 .toggle[data-tip]::after{left:0;transform:none}
+/* A control at the right edge of a scrolling column: the column sets
+   overflow-y, which makes the other axis scroll too, so a centred tooltip is
+   cut off at the edge rather than overhanging it. Grow leftward instead. */
+.sctl [data-tip]::after,
+.pane .card .hd [data-tip]::after{left:auto;right:0;transform:none}
 [data-tip]:hover::after,[data-tip]:focus-visible::after{opacity:1}
 @media (prefers-reduced-motion:reduce){[data-tip]::after{transition:none}}
 

@@ -5,6 +5,11 @@
 <a class="srow side-fixed" href="/">
   <span class="ic">‹</span><span class="lb">All scripts</span></a>
 <div class="side-hd"><span>Scene</span><span>Pages</span></div>
+<div class="side-search">
+  <span class="ic" aria-hidden="true">⌕</span>
+  <input id="scene-search" placeholder="Search scenes" autocomplete="off"
+         aria-label="Search scenes">
+</div>
 <div class="side-scroll" style="padding:0">
   {% for scene in scenes %}
   <div class="scene-row{{ ' omitted' if scene.omitted }}" data-scene="{{ scene.id }}"
@@ -18,6 +23,7 @@
       {{ scene.entities }} entities</div>
   </div>
   {% endfor %}
+  <div class="side-nomatch hide" id="scene-nomatch">No scene matches.</div>
   <div class="kbdmap">⌨ Tab reaches lines · Esc reverts a line · Enter opens the ripple</div>
 </div>
 {% endblock %}

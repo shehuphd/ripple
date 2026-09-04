@@ -952,3 +952,25 @@ document.querySelectorAll('.scene-restore').forEach((button) => {
     }
   });
 });
+
+/* Instant search over the scene list. A long play runs to dozens of scenes,
+   and the rows are already on the page, so filtering is a display toggle:
+   no request, no reload. Matching runs over the heading and the scene
+   number together, so "12" and "castle" both find their row. */
+const sceneSearch = document.getElementById('scene-search');
+if (sceneSearch) {
+  const sceneRows = [...document.querySelectorAll('.scene-row')];
+  const sceneNoMatch = document.getElementById('scene-nomatch');
+  sceneSearch.addEventListener('input', () => {
+    const needle = sceneSearch.value.trim().toLowerCase();
+    let shown = 0;
+    sceneRows.forEach((row) => {
+      const hit = !needle || row.textContent.toLowerCase().includes(needle);
+      row.style.display = hit ? '' : 'none';
+      if (hit) shown += 1;
+    });
+    // An empty list is not a failed search, so the notice only appears when
+    // there were rows to filter in the first place.
+    sceneNoMatch.classList.toggle('hide', shown > 0 || !sceneRows.length);
+  });
+}
