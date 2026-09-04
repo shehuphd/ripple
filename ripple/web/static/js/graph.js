@@ -175,6 +175,77 @@ function wireZoom(canvas) {
   applyZoom(canvas);
 }
 
+/* Moving a node.
+   The server's layout is deterministic and reads well, but a crowded wedge
+   can bury one label under another, so a node can be dragged clear. Positions
+   are normalized (0..1 of the canvas), so a moved node keeps its place
+   through a zoom, a pan, and a resize. The moves are held per canvas and
+   reapplied after a refetch, so changing a department filter or the
+   confidence floor does not undo the arrangement; a reload restores the
+   server's layout. */
+const DRAG_SLOP = 3;
+const NUDGE_PX = 12;
+const NUDGE_STEPS = {
+  ArrowUp: [0, -NUDGE_PX], ArrowDown: [0, NUDGE_PX],
+  ArrowLeft: [-NUDGE_PX, 0], ArrowRight: [NUDGE_PX, 0],
+};
+const nodeMoves = new WeakMap();
+
+function movesFor(canvas) {
+  let moves = nodeMoves.get(canvas);
+  if (!moves) {
+    moves = new Map();
+    nodeMoves.set(canvas, moves);
+  }
+  return moves;
+}
+
+/* Keep a node inside the canvas: dropped past an edge it would be unreachable,
+   with no way to drag it back. */
+const clamp01 = (value) => Math.min(0.99, Math.max(0.01, value));
+
+function moveNode(canvas, node, x, y) {
+  node.x = clamp01(x);
+  node.y = clamp01(y);
+  movesFor(canvas).set(node.id, { x: node.x, y: node.y });
+}
+
+/* Reapply this canvas's moves to a freshly fetched layout. */
+function applyNodeMoves(canvas, data) {
+  const moves = movesFor(canvas);
+  if (!data || !moves.size) return data;
+  for (const node of data.nodes) {
+    const moved = moves.get(node.id);
+    if (moved) {
+      node.x = moved.x;
+      node.y = moved.y;
+    }
+  }
+  return data;
+}
+
+/* Clicking the empty canvas clears the selection, the same gesture as
+   clicking the selected node again. A pan is not a click: the press is
+   tracked to its release, and a pointer that moved more than a few pixels
+   was dragging the canvas, so the selection stands. */
+const DESELECT_SLOP = 4;
+
+function wireBackgroundDeselect(canvas, onDeselect) {
+  let press = null;
+  canvas.addEventListener('pointerdown', (event) => {
+    const onChrome = event.target.closest(
+      '.gnode, button, input, a, .gzoomctl, .glegend, .gcount');
+    press = onChrome ? null : { x: event.clientX, y: event.clientY };
+  });
+  canvas.addEventListener('pointerup', (event) => {
+    if (!press) return;
+    const moved = Math.hypot(event.clientX - press.x, event.clientY - press.y);
+    press = null;
+    if (moved <= DESELECT_SLOP) onDeselect();
+  });
+  canvas.addEventListener('pointercancel', () => { press = null; });
+}
+
 /* A search box over the same node list the graph already drew. Picking a
    result reuses the click-selection path (select()), so it dims the
    unrelated graph and fills the detail pane the same way a click does, then
@@ -454,12 +525,69 @@ function draw(canvas, data, onSelect, linkFilter, onDrawn, attempt) {
     element.setAttribute('aria-label',
       `${node.kind === 'scene' ? 'Scene'
         : (node.entity_type || 'entity').replace(/_/g, ' ')}: ${node.label}`);
-    element.addEventListener('click', () => onSelect(node));
+    // A node can be dragged out from under whatever is covering it. The move
+    // is live on the element alone; committing it on release and redrawing is
+    // what re-routes the edges, because a redraw mid-drag would replace the
+    // very element the pointer is captured on.
+    let press = null;
+    let dragged = false;
+    const deltaOf = (event) => {
+      const scale = zoomState(canvas).scale || 1;
+      return {
+        dx: (event.clientX - press.x) / scale,
+        dy: (event.clientY - press.y) / scale,
+      };
+    };
+    element.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      press = { x: event.clientX, y: event.clientY };
+      dragged = false;
+      element.setPointerCapture(event.pointerId);
+    });
+    element.addEventListener('pointermove', (event) => {
+      if (!press) return;
+      const { dx, dy } = deltaOf(event);
+      if (!dragged && Math.hypot(dx, dy) <= DRAG_SLOP) return;
+      dragged = true;
+      element.classList.add('dragging');
+      element.style.left = `${point.x + dx}px`;
+      element.style.top = `${point.y + dy}px`;
+    });
+    element.addEventListener('pointerup', (event) => {
+      if (!press) return;
+      const { dx, dy } = deltaOf(event);
+      press = null;
+      element.classList.remove('dragging');
+      if (!dragged) return;
+      moveNode(canvas, node, (point.x + dx) / width, (point.y + dy) / height);
+      draw(canvas, data, onSelect, linkFilter, onDrawn);
+    });
+    element.addEventListener('pointercancel', () => {
+      press = null;
+      element.classList.remove('dragging');
+    });
+    element.addEventListener('click', (event) => {
+      // The click that ends a drag is the drag, not a selection.
+      if (dragged) { event.preventDefault(); dragged = false; return; }
+      onSelect(node);
+    });
     element.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         onSelect(node);
+        return;
       }
+      // Shift with an arrow nudges the focused node, so untangling a pile is
+      // not a pointer-only move. Plain arrows still pan the canvas.
+      const step = NUDGE_STEPS[event.key];
+      if (!step || !event.shiftKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      moveNode(canvas, node,
+        (point.x + step[0]) / width, (point.y + step[1]) / height);
+      draw(canvas, data, onSelect, linkFilter, onDrawn);
+      const again = canvas.querySelector(`.gnode[data-id="${CSS.escape(node.id)}"]`);
+      if (again) again.focus();
     });
     zoomLayer.appendChild(element);
   }
@@ -570,7 +698,8 @@ if (canvas) {
     if (chosen !== null) params.set('departments', chosen);
 
     try {
-      state.data = await api(`/api/units/${canvas.dataset.unit}/graph?${params}`);
+      state.data = applyNodeMoves(
+        canvas, await api(`/api/units/${canvas.dataset.unit}/graph?${params}`));
     } catch (error) {
       ripple.trace('graph.load_failed', { error: error.message });
       toast(error.message, true);
@@ -640,6 +769,7 @@ if (canvas) {
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && state.selected) deselect();
   });
+  wireBackgroundDeselect(canvas, () => { if (state.selected) deselect(); });
   const searchInput = document.getElementById('search-input');
   const searchResults = document.getElementById('search-results');
   if (searchInput && searchResults) {
@@ -692,8 +822,8 @@ if (scriptCanvas) {
     const chosen = departments();
     if (chosen !== null) params.set('departments', chosen);
     try {
-      state.data = await api(
-        `/api/scripts/${scriptCanvas.dataset.script}/graph?${params}`);
+      state.data = applyNodeMoves(scriptCanvas, await api(
+        `/api/scripts/${scriptCanvas.dataset.script}/graph?${params}`));
     } catch (error) {
       ripple.trace('graph.load_failed', { error: error.message });
       toast(error.message, true);
@@ -803,6 +933,9 @@ if (scriptCanvas) {
   window.addEventListener('resize', redraw);
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && state.selected) deselect(state.selected);
+  });
+  wireBackgroundDeselect(scriptCanvas, () => {
+    if (state.selected) deselect(state.selected);
   });
   const searchInput = document.getElementById('search-input');
   const searchResults = document.getElementById('search-results');
