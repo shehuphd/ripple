@@ -23,14 +23,16 @@
   <div class="sgroup">Scope</div>
   <div style="padding:4px 9px 10px">
     <div class="row" style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
-      <span style="flex:1">Depth</span>
-      <button class="btn sm" id="depth-down">−</button>
-      <span class="num" id="depth">1</span>
-      <button class="btn sm" id="depth-up">+</button>
+      <span style="flex:1" id="depth-label">Depth</span>
+      <button class="btn sm" id="depth-down" aria-label="Decrease depth">−</button>
+      <span class="num" id="depth" aria-live="polite"
+            aria-labelledby="depth-label">1</span>
+      <button class="btn sm" id="depth-up" aria-label="Increase depth">+</button>
     </div>
-    <label style="display:block;margin-bottom:5px">Min confidence
+    <label style="display:block;margin-bottom:5px" for="conf">Min confidence
       <span class="num" id="conf-value" style="float:right">0.00</span></label>
     <input type="range" id="conf" min="0" max="0.95" step="0.05" value="0"
+           aria-label="Minimum confidence"
            style="width:100%;accent-color:var(--ac)">
     <label class="srow" style="padding-left:0;margin-top:8px">
       <input type="checkbox" id="removed" style="accent-color:var(--ac)">

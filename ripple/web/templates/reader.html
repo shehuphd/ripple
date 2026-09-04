@@ -2,6 +2,8 @@
 {% block title %}{{ script.title }} · Ripple{% endblock %}
 
 {% block sidebar %}
+<a class="srow side-fixed" href="/">
+  <span class="ic">‹</span><span class="lb">All scripts</span></a>
 <div class="side-hd"><span>Scene</span><span>Pages</span></div>
 <div class="side-scroll" style="padding:0">
   {% for scene in scenes %}
@@ -31,10 +33,11 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
 {% endif %}
 <div class="right">
   {% if has_graph %}
-  <a class="btn" href="/scripts/{{ script.id }}/graph">⁙ Graph</a>
+  <a class="btn pri" href="/scripts/{{ script.id }}/graph"
+     data-tip="Open this script's production graph">⁙ View graph</a>
   {% else %}
   <span class="btn" aria-disabled="true" tabindex="-1"
-        data-tip="Build the graph first, then open it here">⁙ Graph</span>
+        data-tip="Build the graph first, then view it here">⁙ View graph</span>
   {% endif %}
   {% if findings %}
   <a class="chip" href="/findings?script={{ script.id }}"
@@ -63,9 +66,10 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
   {% endif %}
   <span class="chip hide" id="draft-count"><i class="dot medium"></i>
     <span>0 edited</span></span>
-  <button class="btn" id="undo-last" disabled>Undo last accept</button>
+  <button class="btn" id="undo-last" disabled
+          data-tip="Nothing to undo yet — accept a ripple first">Undo last accept</button>
   <button class="btn" id="revert-all" disabled
-          data-tip="Discard every unapplied edit">Revert edits</button>
+          data-tip="No edits to revert — edit a line first">Revert edits</button>
   {% if has_graph %}
   <button class="btn pri" id="see-ripple" disabled data-graph-ready="true"
           data-tip="Edit a line, then see what it changes">≋ See ripple</button>
@@ -150,7 +154,8 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
     <div class="card">
       <div class="hd"><h2>Local graph</h2>
         <span class="meta" id="graph-meta"></span>
-        <a class="btn sm" id="expand" href="#">Expand</a></div>
+        <a class="btn sm" id="expand" aria-disabled="true" tabindex="-1"
+           data-tip="Select a line with graph edges to open it in the full graph">Expand</a></div>
       <div id="graph"><div class="empty">Select a line in the script.</div></div>
     </div>
   </aside>

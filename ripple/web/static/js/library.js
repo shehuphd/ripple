@@ -125,7 +125,7 @@ document.querySelectorAll('[data-delete]').forEach((button) => {
     if (!(await confirmDialog(
       `Delete "${title}"?\n\n${counts.scenes} scenes, ${counts.units} units, ` +
       `${counts.entities} entities, ${counts.assertions} assertions.`,
-      'Delete'))) return;
+      'Delete', { destructive: true }))) return;
     ripple.trace('script.deleted', { script: id, scenes: counts.scenes });
     await api(`/api/scripts/${id}`, { method: 'DELETE' });
     window.location.reload();

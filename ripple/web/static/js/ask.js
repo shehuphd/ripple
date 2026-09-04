@@ -13,6 +13,16 @@ if (ask) {
   // running would bill a second model call for the same question.
   let running = false;
 
+  // Ask is inert with nothing to send. It carries the reason on the button
+  // while it is off, so the disabled state is never a dead end.
+  function syncAsk() {
+    const empty = !question.value.trim();
+    ask.disabled = empty || running;
+    ask.dataset.tip = empty ? 'Type a question to ask' : 'Ask the graph';
+  }
+  question.addEventListener('input', syncAsk);
+  syncAsk();
+
   // The last rendered answer, kept for the export button, which lives in the
   // toolbar and stays hidden until there is something to export.
   let last = null;
@@ -26,7 +36,11 @@ if (ask) {
     if (body.ungrounded_entities.length === 0) {
       return '<span class="tag set_design">✓ no ungrounded entities</span>';
     }
-    const names = body.ungrounded_entities.map(esc).join(', ');
+    // Each ungrounded name links to the entities list, where the reader can
+    // find it: a warning that names something should reach it.
+    const names = body.ungrounded_entities
+      .map((n) => `<a href="/entities?q=${encodeURIComponent(n)}">${esc(n)}</a>`)
+      .join(', ');
     return `<span class="tag prop">names outside grounding: ${names}</span>`;
   }
 
@@ -131,7 +145,7 @@ if (ask) {
       if (exportButton) exportButton.classList.add('hide');
     } finally {
       running = false;
-      ask.disabled = false;
+      syncAsk();
     }
   }
 

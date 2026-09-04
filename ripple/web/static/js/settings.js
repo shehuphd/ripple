@@ -187,7 +187,7 @@ document.querySelectorAll('[data-provider].card').forEach((card) => {
     forget.addEventListener('click', async () => {
       if (!(await confirmDialog(
         'Forget the stored key? Building graphs and previews will need a '
-        + 'key again.', 'Forget'))) return;
+        + 'key again.', 'Forget', { destructive: true }))) return;
       await api(`/api/settings/${provider}`, { method: 'DELETE' });
       ripple.trace('settings.credential_forgotten', { provider });
       window.location.reload();

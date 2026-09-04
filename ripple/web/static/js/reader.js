@@ -29,6 +29,9 @@ function refreshDraftIndicator() {
   draftCount.querySelector('span').textContent =
     `${count} line${count === 1 ? '' : 's'} edited`;
   revertAll.disabled = count === 0;
+  revertAll.dataset.tip = count === 0
+    ? 'No edits to revert — edit a line first'
+    : 'Discard every unapplied edit';
   // The preview reads drafts, so the button follows their existence in both
   // directions: enabling without a draft offers a preview of nothing. A
   // ripple is also meaningless before a graph exists, so an unbuilt script
@@ -209,13 +212,24 @@ async function selectUnit(node) {
       if (ticket !== selectionTicket) return;
       graphMeta.textContent =
         `${local.nodes.length} nodes · ${local.links.length} edges`;
-      document.getElementById('expand').href = `/graph/${state.unit}`;
+      // Expand only means something when this line has edges to open. With
+      // none, it is a disabled control that says why, not a link to an empty
+      // canvas.
+      const expand = document.getElementById('expand');
       if (local.links.length) {
+        expand.href = `/graph/${state.unit}`;
+        expand.removeAttribute('aria-disabled');
+        expand.removeAttribute('tabindex');
+        expand.dataset.tip = "Open this line's neighbourhood in the full graph";
         graph.innerHTML = '<div class="gcanvas mini"></div>';
         // Draw after layout so the canvas has measurable dimensions.
         requestAnimationFrame(() =>
           draw(graph.querySelector('.gcanvas'), local, () => {}));
       } else {
+        expand.removeAttribute('href');
+        expand.setAttribute('aria-disabled', 'true');
+        expand.tabIndex = -1;
+        expand.dataset.tip = 'This line has no graph edges to expand yet';
         graph.innerHTML =
           '<div class="empty">Nothing in the graph yet. Build it to see edges.</div>';
       }
@@ -687,6 +701,9 @@ if (undoLast) {
     stashedUnit = sessionStorage.getItem(undoStashKey());
   } catch (error) { /* no storage */ }
   undoLast.disabled = !stashedUnit;
+  undoLast.dataset.tip = stashedUnit
+    ? 'Undo the last change you accepted'
+    : 'Nothing to undo yet — accept a ripple first';
   undoLast.addEventListener('click', async () => {
     if (!stashedUnit) return;
     if (!(await confirmDialog(

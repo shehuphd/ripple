@@ -190,6 +190,16 @@ function wireSearch(input, resultsBox, canvas, getData, select, getSelectedId) {
   }
 
   function render(list) {
+    // A typed query that matches nothing states so, rather than the dropdown
+    // vanishing with no word about why.
+    if (!list.length && input.value.trim()) {
+      resultsBox.innerHTML =
+        '<div class="sres empty">No scenes or entities match</div>';
+      resultsBox.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+      input.removeAttribute('aria-activedescendant');
+      return;
+    }
     resultsBox.innerHTML = list.map((n, i) => `
       <div class="sres ${i === active ? 'active' : ''}" role="option"
            id="sres-${i}" data-id="${esc(n.id)}"

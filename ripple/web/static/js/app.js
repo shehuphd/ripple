@@ -103,17 +103,20 @@ async function api(url, options) {
 /* An in-app confirmation, replacing window.confirm: a bare browser dialog
    can't be themed, blocks the page, and looks foreign next to the app.
    Resolves true on confirm, false on cancel or Escape. */
-function confirmDialog(message, confirmLabel) {
+function confirmDialog(message, confirmLabel, options = {}) {
   return new Promise((resolve) => {
     const veil = document.createElement('div');
     veil.className = 'confirm-veil';
+    // A destructive confirm wears the app's red, so the weight of the action
+    // reads on the button the user is about to press, not only in the message.
+    const okClass = options.destructive ? 'btn danger' : 'btn pri';
     veil.innerHTML = `
       <div class="confirm-box" role="alertdialog" aria-modal="true"
            aria-label="Confirm" aria-describedby="confirm-msg">
         <p id="confirm-msg"></p>
         <div class="confirm-acts">
           <button class="btn" data-cancel>Cancel</button>
-          <button class="btn pri" data-ok></button>
+          <button class="${okClass}" data-ok></button>
         </div>
       </div>`;
     veil.querySelector('#confirm-msg').textContent = message;
@@ -191,6 +194,7 @@ function setUpPaneToggles() {
       shell.classList.toggle('side-off', !narrow() && collapsed);
       shell.classList.toggle('side-on', narrow() && !collapsed);
       sideButton.classList.toggle('on', !collapsed);
+      sideButton.setAttribute('aria-pressed', String(!collapsed));
     };
     // Narrow screens start with the drawer shut whatever was remembered: it
     // covers the content there, so restoring it open would hide the page.
@@ -222,6 +226,7 @@ function setUpPaneToggles() {
     const apply = () => {
       target.classList.toggle('pane-off', collapsed);
       button.classList.toggle('on', !collapsed);
+      button.setAttribute('aria-pressed', String(!collapsed));
     };
     apply();
     button.addEventListener('click', () => {

@@ -898,6 +898,11 @@ def findings_page(
                         {
                             "label": "Dismiss",
                             "url": f"/api/findings/{finding.id}/dismiss",
+                            "danger": True,
+                            "confirm": (
+                                "Dismiss this continuity finding? It leaves the "
+                                "open list; nothing in the script changes."
+                            ),
                         }
                     ]
                     if finding.status == "open"

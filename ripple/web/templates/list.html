@@ -51,7 +51,8 @@
     {% if item.actions %}<span class="acts">
       {% for act in item.actions %}
       {% if act.href %}<a class="btn sm" href="{{ act.href }}">{{ act.label }}</a>
-      {% else %}<button class="btn sm" data-post="{{ act.url }}">{{ act.label }}</button>
+      {% else %}<button class="btn sm{{ ' danger' if act.danger }}" data-post="{{ act.url }}"
+              {% if act.confirm %}data-confirm="{{ act.confirm }}"{% endif %}>{{ act.label }}</button>
       {% endif %}
       {% endfor %}
     </span>{% endif %}
@@ -109,12 +110,22 @@ if (headerAction) {
 
 document.querySelectorAll('.item [data-post]').forEach((button) => {
   button.addEventListener('click', async () => {
+    // A row action that names a consequence confirms first; a destructive one
+    // (Dismiss) reddens its confirm button too.
+    if (button.dataset.confirm) {
+      const ok = await confirmDialog(button.dataset.confirm, button.textContent.trim(),
+        { destructive: button.classList.contains('danger') });
+      if (!ok) return;
+    }
+    const label = button.textContent;
     button.disabled = true;
+    button.textContent = 'Working…';
     try {
       await api(button.dataset.post, { method: 'POST', body: form({}) });
     } catch (error) {
       toast(error.message, true);
       button.disabled = false;
+      button.textContent = label;
       return;
     }
     window.location.reload();
@@ -134,6 +145,11 @@ document.querySelectorAll('.item [data-post]').forEach((button) => {
   const next = document.getElementById('pager-next');
   const noMatch = document.getElementById('list-no-match');
   let page = 0;
+
+  // A ?q= in the URL prefills the search, so a link from elsewhere (an
+  // ungrounded-entity name on the Ask page) opens on that exact row.
+  const preset = new URLSearchParams(window.location.search).get('q');
+  if (preset) search.value = preset;
 
   function matches(row, needle) {
     return !needle || row.textContent.toLowerCase().includes(needle);
@@ -206,7 +222,11 @@ document.querySelectorAll('.item [data-post]').forEach((button) => {
     all.checked = matching.length > 0 && matching.every((r) => checkOf(r).checked);
     all.indeterminate = sel.length > 0 && !all.checked;
     bar.querySelectorAll('[data-batch-kind]').forEach((btn) => {
-      btn.disabled = !sel.some((r) => kindsOf(r).includes(btn.dataset.batchKind));
+      const supported = sel.some((r) => kindsOf(r).includes(btn.dataset.batchKind));
+      btn.disabled = !supported;
+      // A disabled batch button says why: no selected row takes this action.
+      if (supported) btn.removeAttribute('data-tip');
+      else btn.dataset.tip = 'No selected row supports this action';
     });
   }
 
@@ -252,7 +272,8 @@ document.querySelectorAll('.item [data-post]').forEach((button) => {
           const build = CONFIRM[kind] || ((n) => `Apply to ${n} selected row(s)?`);
           message = build(ids.length);
         }
-        const ok = await confirmDialog(message, btn.textContent.trim());
+        const ok = await confirmDialog(message, btn.textContent.trim(),
+          { destructive: btn.classList.contains('danger') });
         if (!ok) return;
       }
       btn.disabled = true;
