@@ -27,13 +27,20 @@ from ripple.extraction.validate import (
 )
 
 # Bumped with any wording change: the audit rows record which prompt spoke.
-JUDGE_PROMPT_VERSION = "judge.v5"
+JUDGE_PROMPT_VERSION = "judge.v6"
 
 VERDICTS = ("holds", "changed", "removed")
 
 JUDGE_SCHEMA: dict[str, Any] = {
     "type": "object",
-    "required": ["assertion_verdicts", "attribute_verdicts"],
+    # The new-item arrays are required so an answer must state them, and
+    # an empty array is the deliberate "the edit adds no requirement".
+    "required": [
+        "assertion_verdicts",
+        "attribute_verdicts",
+        "new_entities",
+        "new_assertions",
+    ],
     "properties": {
         "assertion_verdicts": {
             "type": "array",
@@ -198,8 +205,14 @@ def build_judge_prompt(
         "proposed text replaces one thing with another (a prop, a surface, "
         "a sound, a vehicle), report the replaced item's assertions as "
         "removed AND propose the replacement: a new entity plus at least "
-        "one new assertion citing the edited unit. A new entity that no "
-        "new assertion references is dropped.\n\n"
+        "one new assertion citing the edited unit. When the proposed text "
+        "adds material the current text does not have (an object, a sound, "
+        "a stunt beat, a vehicle action), extract it the same way: a new "
+        "entity of the right type plus its assertions, citing the edited "
+        "unit. A dangerous physical action, a fall, a crash, or hard "
+        "driving is a stunt entity the scene requires. A new entity that "
+        "no new assertion references is dropped. Empty new_entities and "
+        "new_assertions arrays state that the edit adds no requirement.\n\n"
         f"{json.dumps(payload, indent=1)}"
     )
 
