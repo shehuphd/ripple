@@ -103,7 +103,10 @@ def _location_of(setting: str) -> str:
         if location and len(candidate) > MAX_LOCATION_CHARS:
             break
         location = candidate
-        if len(location) >= 25:
+        # A single-word first sentence ("Elsinore.") is a place, not the whole
+        # location, so one more sentence is taken; a multi-word one already
+        # names the place ("In a field.", "A room which is still the nursery").
+        if len(location.split()) >= 2:
             break
     return (location or text[:MAX_LOCATION_CHARS]).strip().rstrip(".").strip()
 
