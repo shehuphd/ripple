@@ -10,7 +10,15 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import func, select
 
-from ripple.db.models import Assertion, ChangeSet, Entity, Scene, Script, ScriptUnit
+from ripple.db.models import (
+    Assertion,
+    ChangeSet,
+    ContinuityFinding,
+    Entity,
+    Scene,
+    Script,
+    ScriptUnit,
+)
 from ripple.db.naming import normalize
 from ripple.db.session import create_all, create_db_engine, session_factory
 from ripple.services.changeset import (
@@ -142,6 +150,26 @@ class TestNothingHappensUntilAccept:
         assert proposal.status == "rejected"
         assert world["existing"].active is True
         assert world["script"].current_version == 1
+
+    def test_rejecting_resolves_the_proposal_open_findings(self, session, world):
+        """A warning argues against a specific proposed edit. Rejection takes
+        that edit off the table, so the warning resolves with it instead of
+        holding a place in the reader's findings count forever."""
+        proposal = create_proposal(
+            session, world["unit"].id, "A bicycle.", [remove_op(world)]
+        )
+        finding = ContinuityFinding(
+            change_set_id=proposal.id,
+            finding_type="continuity_conflict",
+            severity="medium",
+            message="A later scene still uses the sedan.",
+            status="open",
+        )
+        session.add(finding)
+        session.flush()
+        reject(session, proposal.id)
+        assert finding.status == "resolved"
+        assert finding.resolved_at is not None
 
     def test_a_rejected_proposal_cannot_then_be_accepted(self, session, world):
         proposal = create_proposal(session, world["unit"].id, "x", [remove_op(world)])
@@ -306,6 +334,24 @@ class TestUndo:
         original = self._accept_an_edit(session, world)
         undo_latest(session, world["unit"].id)
         assert original.status == "reverted"
+
+    def test_undo_resolves_the_original_open_findings(self, session, world):
+        """Reverting the accepted change ends the situation its warnings
+        describe, the same way a rejection does."""
+        proposal = create_proposal(
+            session, world["unit"].id, "A bicycle.", [remove_op(world)]
+        )
+        finding = ContinuityFinding(
+            change_set_id=proposal.id,
+            finding_type="continuity_conflict",
+            severity="medium",
+            message="A later scene still uses the sedan.",
+            status="open",
+        )
+        session.add(finding)
+        accept(session, proposal.id)
+        undo_latest(session, world["unit"].id)
+        assert finding.status == "resolved"
 
     def test_undo_records_an_inverse_pointing_at_the_original(self, session, world):
         original = self._accept_an_edit(session, world)

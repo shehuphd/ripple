@@ -396,12 +396,37 @@ def _stamp_extractions(session: Session, script: Script, pre_hashes: dict) -> in
     return len(stampable)
 
 
+def _resolve_open_findings(session: Session, change_set_id) -> int:
+    """Resolve a proposal's open findings when the proposal itself ends.
+
+    A continuity warning argues against a specific proposed edit. Once that
+    proposal is rejected or reverted, the edit it warns about is off the
+    table, and an open finding would sit in the reader's count for a change
+    that can no longer happen. Resolution, not dismissal: dismissal records
+    a person's judgement on the warning's merit, and this is the situation
+    ending on its own.
+    """
+    open_findings = list(
+        session.scalars(
+            select(ContinuityFinding).where(
+                ContinuityFinding.change_set_id == change_set_id,
+                ContinuityFinding.status == "open",
+            )
+        )
+    )
+    for finding in open_findings:
+        finding.status = "resolved"
+        finding.resolved_at = _now()
+    return len(open_findings)
+
+
 def reject(session: Session, change_set_id, reason: str | None = None) -> ChangeSet:
     """Record a decision not to apply a proposal. Nothing else changes."""
     change_set = _load(session, change_set_id)
     if change_set.status != "pending":
         raise InvalidOperation(f"This proposal is already {change_set.status}.")
     change_set.status = "rejected"
+    _resolve_open_findings(session, change_set.id)
     if reason:
         session.add(
             ContinuityFinding(
@@ -479,6 +504,7 @@ def undo_latest(session: Session, unit_id) -> AcceptanceResult:
 
         result = accept(session, inverse.id)
         latest.status = "reverted"
+        _resolve_open_findings(session, latest.id)
         session.flush()
 
         trace.step("Reverted the latest accepted change")
