@@ -362,6 +362,35 @@ class TestStagePlay:
             "A room furnished comfortably and tastefully, but not extravagantly"
         )
 
+    def test_inline_cues_split_into_a_speaker_and_a_speech(self):
+        """Shaw and Chekhov put the cue and its speech on one line
+        ("HIGGINS. Nonsense!", "THE DAUGHTER [chilled] I'm cold."). Each line
+        yields a character unit and a dialogue unit; a Title-case setting on the
+        same shape is not mistaken for one."""
+        play = (
+            "Title: Inline\n\nACT I\n\n"
+            "A drawing-room in Wimpole Street. Rain outside.\n\n"
+            "THE DAUGHTER [in the doorway] I am getting chilled to the bone.\n\n"
+            "HIGGINS. Nonsense! You are perfectly warm.\n\n"
+            "PICKERING. Right. Shall we go in?\n\n"
+            "ACT II\n\n"
+            "The same room the next morning.\n\n"
+            "HIGGINS. Good morning, Pickering.\n\n"
+            "PICKERING. Good morning to you.\n\n"
+            "ACT III\n\n"
+            "Mrs Higgins's drawing-room that afternoon.\n\n"
+            "HIGGINS. Mother, I have made a discovery.\n\n"
+            "PICKERING. A remarkable one, indeed.\n"
+        )
+        result = import_screenplay(play.encode(), "inline.txt")
+        assert result.accepted
+        speakers = {u.speaker_name for u in _units(result, UnitType.CHARACTER)}
+        assert speakers == {"THE DAUGHTER", "HIGGINS", "PICKERING"}
+        dialogue = [u.text for u in _units(result, UnitType.DIALOGUE)]
+        assert "Nonsense! You are perfectly warm." in dialogue
+        # The setting stays the heading, not a speaker.
+        assert result.scenes[0].heading == "A drawing-room in Wimpole Street. Rain outside"
+
     def test_a_screenplay_is_not_misread_as_a_stage_play(self, night_freight_fountain):
         """A real screenplay keeps its slugline format and its own adapter."""
         result = import_screenplay(night_freight_fountain, "night.fountain")

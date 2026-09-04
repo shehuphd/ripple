@@ -27,6 +27,7 @@ from ripple.adapters.base import (
     SourceAnchor,
     SourcePayload,
     UnitType,
+    inline_cue_split,
     parse_character_cue,
     stage_act_match,
     stage_scene_match,
@@ -173,6 +174,19 @@ class StagePlayAdapter:
                 # An act with no numbered scenes: the act is the scene.
                 scene = self._open(scenes, current_act, None)
                 need_setting = True
+
+            # A cue and its speech on one line (Shaw, Chekhov) split into two
+            # units. A setting, being Title case, never matches, so this cannot
+            # swallow the opening stage direction.
+            inline = inline_cue_split(stripped)
+            if inline:
+                name, speech = inline
+                need_setting = False
+                self._append(scene, UnitType.CHARACTER, name, offset, raw, name)
+                self._append(scene, UnitType.DIALOGUE, speech, offset, raw, name)
+                previous, speaker = UnitType.DIALOGUE, name
+                offset += advance
+                continue
 
             unit_type = self._classify(stripped, previous)
             if need_setting and unit_type is UnitType.ACTION:

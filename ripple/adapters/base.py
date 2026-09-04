@@ -327,6 +327,36 @@ def stage_scene_match(line: str) -> re.Match | None:
     ):
         return match
     return None
+
+
+# An inline cue puts the speaker and the speech on one line, as Shaw and Chekhov
+# do: "HIGGINS. Nonsense!" or "THE DAUGHTER [in the doorway] I'm chilled." The
+# speaker is a leading run of all-caps words; the speech begins after a period
+# and a space, or at a bracketed direction. A name cannot hold a lowercase
+# letter, so a Title-case setting ("Covent Garden at 11 p.m.") is never a cue.
+INLINE_CUE = re.compile(
+    r"^(?P<name>[A-Z0-9][A-Z0-9 '.\-]*?)"
+    r"(?:\.\s+(?=[A-Za-z\"'‘“])|\s*(?=\[))"
+    r"(?P<rest>\S.*)$"
+)
+
+
+def inline_cue_split(line: str) -> tuple[str, str] | None:
+    """Split "SPEAKER. words" or "SPEAKER [dir] words" into (name, speech), or
+    None when the line is not an inline cue."""
+    match = INLINE_CUE.match(line.strip())
+    if not match:
+        return None
+    name = match.group("name").strip().rstrip(".").strip()
+    speech = match.group("rest").strip()
+    words = name.split()
+    if not (2 <= len(name) <= 35 and 1 <= len(words) <= 5):
+        return None
+    if "SCENE" in words or "ACT" in words:
+        return None
+    if not any(character.isalpha() for character in name):
+        return None
+    return name, speech
 # Character cues carry optional extensions and an optional dual-dialogue caret.
 #
 # The name class is Unicode-aware rather than [A-Z]: MATIAS and MATÍAS are both

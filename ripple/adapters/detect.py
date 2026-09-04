@@ -14,6 +14,7 @@ from ripple.adapters.base import (
     SCENE_HEADING,
     DetectedFormat,
     SourcePayload,
+    inline_cue_split,
     parse_character_cue,
     stage_act_match,
     stage_scene_match,
@@ -132,7 +133,11 @@ def _detect_text_format(payload: SourcePayload) -> tuple[DetectedFormat, float]:
     stage_headings = sum(
         1 for line in stripped_lines if stage_act_match(line) or stage_scene_match(line)
     )
-    cue_lines = sum(1 for line in stripped_lines if parse_character_cue(line))
+    cue_lines = sum(
+        1
+        for line in stripped_lines
+        if parse_character_cue(line) or inline_cue_split(line)
+    )
     if stage_headings >= 3 and cue_lines >= 5:
         return DetectedFormat.STAGE_PLAY, 0.75
 
