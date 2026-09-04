@@ -387,6 +387,16 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .gdetail h3{margin:0 0 3px;font-size:15px;font-weight:600}
 .gdetail .kv{display:flex;padding:6px 0;font-size:13px;border-bottom:.5px solid var(--bd)}
 .gdetail .kv span:last-child{margin-left:auto;color:var(--t2)}
+/* A section heading in the detail pane reads as a heading: a chip in the
+   entity's own department hue, rather than an eyebrow of letter-spaced
+   micro-text. The label is a .tag, so it takes the department colours the
+   node and the list rows already use; this rule only gives it a heading's
+   weight and size. Its count keeps the right edge the rows below align to. */
+.gdetail .gsec{display:flex;align-items:center;gap:8px;
+  margin:18px 0 7px;font-size:13px;font-weight:400}
+.gdetail .gsec-lb{border-radius:7px;padding:4px 10px;font-size:12.5px;
+  font-weight:600;letter-spacing:0}
+.gdetail .gsec-ct{margin-left:auto;color:var(--t2);font-size:12.5px}
 .gcanvas{position:relative;background:var(--inset);
   background-image:linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),
     linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);

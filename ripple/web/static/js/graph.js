@@ -766,11 +766,11 @@ if (scriptCanvas) {
         ? `<p class="tiny" style="margin-bottom:12px">${esc(card.description)}</p>`
         : ''}
       ${attributes
-        ? `<div class="sgroup" style="padding-left:0">Attributes</div>${attributes}`
+        ? `<h4 class="gsec"><span class="tag gsec-lb ${esc(card.type)}">Attributes</span></h4>${attributes}`
         : ''}
       ${aliases}
-      <div class="sgroup" style="padding-left:0">Assertions
-        <span class="num" style="float:right">${card.assertions.length}</span></div>
+      <h4 class="gsec"><span class="tag gsec-lb ${esc(card.type)}">Assertions</span>
+        <span class="num gsec-ct">${card.assertions.length}</span></h4>
       ${rows || '<div class="empty">Nothing cites this entity yet.</div>'}`;
   }
 
