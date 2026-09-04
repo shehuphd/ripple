@@ -389,7 +389,25 @@ class TestStagePlay:
         dialogue = [u.text for u in _units(result, UnitType.DIALOGUE)]
         assert "Nonsense! You are perfectly warm." in dialogue
         # The setting stays the heading, not a speaker.
-        assert result.scenes[0].heading == "A drawing-room in Wimpole Street. Rain outside"
+        assert result.scenes[0].heading == "A drawing-room in Wimpole Street"
+
+    def test_a_long_descriptive_setting_becomes_a_clean_first_sentence(self):
+        """Chekhov opens an act with a paragraph of description. The location is
+        its first sentence, not a mid-line fragment; a short two-part place
+        stays whole (covered by the Shakespeare heading test)."""
+        play = (
+            "Title: Long Setting\n\nACT I\n\n"
+            "A room which is still called the nursery. One of the doors leads "
+            "into Anya's room. Dawn, the sun rises during the scene.\n\n"
+            "LOPAKHIN. The train's arrived, thank God.\n\n"
+            "ACT II\n\nIn a field. An old shrine.\n\n"
+            "LOPAKHIN. You must decide.\n\n"
+            "ACT III\n\nA drawing-room.\n\n"
+            "LOPAKHIN. The estate is sold.\n"
+        )
+        result = import_screenplay(play.encode(), "long.txt")
+        assert result.accepted
+        assert result.scenes[0].heading == "A room which is still called the nursery"
 
     def test_a_screenplay_is_not_misread_as_a_stage_play(self, night_freight_fountain):
         """A real screenplay keeps its slugline format and its own adapter."""

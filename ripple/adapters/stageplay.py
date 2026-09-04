@@ -89,14 +89,23 @@ def _bracketed_direction(text: str) -> bool:
 
 
 def _location_of(setting: str) -> str:
-    """Reduce a setting line to a location name: strip brackets, italics, and a
-    leading "SCENE" label, then keep the first sentence when it runs long."""
+    """Reduce a setting to a location name: strip brackets, italics, and a
+    leading "SCENE" label, then keep whole sentences up to a clean length. A
+    short two-part place ("Elsinore. A platform before the Castle") is kept
+    whole; a long descriptive paragraph (Chekhov's opening) is cut to its first
+    sentence rather than a mid-line fragment."""
     text = setting.strip().strip("[]_ ").strip()
-    text = re.sub(r"^SCENE\b\s*[.\-:—]*\s*", "", text, flags=re.IGNORECASE)
-    if len(text) > MAX_LOCATION_CHARS:
-        sentence = re.match(r"(.+?[.!?])(?:\s|$)", text)
-        text = sentence.group(1) if sentence else text[:MAX_LOCATION_CHARS]
-    return text.strip().rstrip(".").strip()
+    text = re.sub(r"^(?:THE\s+)?(?:SAME\s+)?SCENE\b[.\-:—\s]*", "", text, flags=re.I)
+    parts = re.split(r"(?<=[.!?])\s+", text)
+    location = ""
+    for part in parts:
+        candidate = f"{location} {part.strip()}".strip()
+        if location and len(candidate) > MAX_LOCATION_CHARS:
+            break
+        location = candidate
+        if len(location) >= 25:
+            break
+    return (location or text[:MAX_LOCATION_CHARS]).strip().rstrip(".").strip()
 
 
 class StagePlayAdapter:
@@ -125,6 +134,7 @@ class StagePlayAdapter:
         scene: ParsedScene | None = None
         current_act: int | None = None
         need_setting = False
+        setting_parts: list[str] = []
         previous: UnitType | None = None
         speaker: str | None = None
         started = False
@@ -158,6 +168,7 @@ class StagePlayAdapter:
                 scene = self._open(scenes, current_act, _ordinal(scene_match.group("num")))
                 started = True
                 previous = speaker = None
+                setting_parts = []
                 if setting:
                     scene.heading = _location_of(setting)
                     self._append(scene, UnitType.SCENE_HEADING, stripped, offset, raw)
@@ -174,6 +185,7 @@ class StagePlayAdapter:
                 # An act with no numbered scenes: the act is the scene.
                 scene = self._open(scenes, current_act, None)
                 need_setting = True
+                setting_parts = []
 
             # A cue and its speech on one line (Shaw, Chekhov) split into two
             # units. A setting, being Title case, never matches, so this cannot
@@ -190,10 +202,21 @@ class StagePlayAdapter:
 
             unit_type = self._classify(stripped, previous)
             if need_setting and unit_type is UnitType.ACTION:
-                scene.heading = _location_of(stripped) or scene.heading
-                self._append(scene, UnitType.SCENE_HEADING, stripped, offset, raw)
-                need_setting = False
-                previous = UnitType.SCENE_HEADING
+                # A setting can wrap over several physical lines. Accumulate
+                # them until a sentence completes, so the location is a clean
+                # sentence rather than a mid-line fragment.
+                setting_parts.append(stripped)
+                joined = " ".join(setting_parts)
+                scene.heading = _location_of(joined) or scene.heading
+                emit = (
+                    UnitType.SCENE_HEADING
+                    if len(setting_parts) == 1
+                    else UnitType.ACTION
+                )
+                self._append(scene, emit, stripped, offset, raw)
+                previous = emit
+                if re.search(r"[.!?]", joined) or len(setting_parts) >= 5:
+                    need_setting = False
                 offset += advance
                 continue
 

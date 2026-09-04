@@ -12,3 +12,6 @@ __pycache__/
 data/
 fixtures/studio-pdfs/
 .test-runs/
+
+# macOS Finder metadata
+.DS_Store
