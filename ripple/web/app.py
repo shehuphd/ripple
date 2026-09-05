@@ -814,14 +814,42 @@ def reports_page(request: Request, session: Session = Depends(get_session)):
     ).all()
     items = [
         {
-            "tag": report.severity,
-            "tag_class": {"high": "stunt", "medium": "prop", "low": "set_design"}.get(
-                report.severity, ""
-            ),
-            "title": report.summary,
-            "sub": f"{script.title} · {change_set.kind} · {change_set.status}"
-            + (f" · {report.model_id}" if report.model_id else " · deterministic"),
-            "right": report.generated_at.strftime("%d %b %H:%M"),
+            "cells": {
+                "when": {
+                    "text": report.generated_at.strftime("%d %b %H:%M"),
+                    "class": "tiny muted num",
+                },
+                "severity": {
+                    "text": report.severity,
+                    "tag": True,
+                    "tag_class": {
+                        "high": "stunt",
+                        "medium": "prop",
+                        "low": "set_design",
+                    }.get(report.severity, ""),
+                },
+                "summary": {"text": report.summary},
+                "script": {"text": script.title, "class": "tiny"},
+                "kind": {"text": change_set.kind, "class": "tiny muted"},
+                "status": {"text": change_set.status, "class": "tiny muted"},
+                "model": {
+                    "text": report.model_id or "deterministic",
+                    "class": "tiny muted",
+                },
+            },
+            "sort": {
+                "when": report.generated_at.isoformat(),
+                # High first when the column is sorted the way it opens, so
+                # the ranking is by weight rather than by alphabet.
+                "severity": {"high": 3, "medium": 2, "low": 1}.get(
+                    report.severity, 0
+                ),
+                "summary": report.summary,
+                "script": script.title,
+                "kind": change_set.kind,
+                "status": change_set.status,
+                "model": report.model_id or "deterministic",
+            },
         }
         for report, change_set, script in rows
     ]
@@ -832,6 +860,15 @@ def reports_page(request: Request, session: Session = Depends(get_session)):
         active="reports",
         subtitle=f"{len(items)} report(s) · one per proposal",
         items=items,
+        columns=[
+            {"key": "when", "label": "Generated"},
+            {"key": "severity", "label": "Severity", "numeric": True},
+            {"key": "summary", "label": "Report"},
+            {"key": "script", "label": "Script"},
+            {"key": "kind", "label": "Kind"},
+            {"key": "status", "label": "Status"},
+            {"key": "model", "label": "Model"},
+        ],
         empty="No reports yet. Edit a line and press See ripple.",
         lock=None,
     )
@@ -864,20 +901,46 @@ def findings_page(
     rows = session.execute(query).all()
     items = [
         {
-            "tag": finding.status,
-            "tag_class": {
-                "open": "stunt",
-                "dismissed": "",
-                "resolved": "set_design",
-            }.get(finding.status, ""),
-            "title": finding.message,
-            "sub": f"{script.title} · {finding.finding_type} · {finding.severity}"
-            + (
-                f" · dismissed: {finding.dismissal_reason}"
-                if finding.dismissal_reason
-                else ""
-            ),
-            "right": finding.created_at.strftime("%d %b %H:%M"),
+            "cells": {
+                "when": {
+                    "text": finding.created_at.strftime("%d %b %H:%M"),
+                    "class": "tiny muted num",
+                },
+                "status": {
+                    "text": finding.status,
+                    "tag": True,
+                    "tag_class": {
+                        "open": "stunt",
+                        "dismissed": "",
+                        "resolved": "set_design",
+                    }.get(finding.status, ""),
+                },
+                "message": {
+                    "text": finding.message,
+                    "sub": (
+                        f"dismissed: {finding.dismissal_reason}"
+                        if finding.dismissal_reason
+                        else None
+                    ),
+                },
+                "script": {"text": script.title, "class": "tiny"},
+                "type": {"text": finding.finding_type, "class": "tiny muted"},
+                "severity": {"text": finding.severity, "class": "tiny muted"},
+            },
+            "sort": {
+                "when": finding.created_at.isoformat(),
+                # Open first, then dismissed, then resolved: the order the
+                # user works through them in.
+                "status": {"open": 3, "dismissed": 2, "resolved": 1}.get(
+                    finding.status, 0
+                ),
+                "message": finding.message,
+                "script": script.title,
+                "type": finding.finding_type,
+                "severity": {"high": 3, "medium": 2, "low": 1}.get(
+                    finding.severity, 0
+                ),
+            },
             "actions": [
                 {
                     "label": "Review",
@@ -922,6 +985,15 @@ def findings_page(
         + (f" · {chosen.title}" if chosen is not None else "")
         + " · warnings do not block a decision",
         items=items,
+        columns=[
+            {"key": "when", "label": "Raised"},
+            {"key": "status", "label": "Status", "numeric": True},
+            {"key": "message", "label": "Finding"},
+            {"key": "script", "label": "Script"},
+            {"key": "type", "label": "Type"},
+            {"key": "severity", "label": "Severity", "numeric": True},
+            {"key": "actions", "label": ""},
+        ],
         empty=(
             f"No findings for {chosen.title}." if chosen is not None
             else "No findings yet."
@@ -960,39 +1032,51 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
         )
 
     def tokens_of(call: ModelCall) -> str:
+        """The split behind the total: the columns carry the rest."""
         if call.input_tokens is None and call.output_tokens is None:
             return "no token counts"
         counts = f"{call.input_tokens or 0} in · {call.output_tokens or 0} out"
         if call.reasoning_tokens:
             counts += f" · {call.reasoning_tokens} reasoning"
-        cost = pricing.display(cost_of(call))
-        if cost:
-            counts += f" · {cost}"
         return counts
 
     items = [
         {
-            "tag": call.outcome,
-            "tag_class": {
-                "ok": "set_design",
-                "cached": "set_design",
-                "budget_refused": "prop",
-            }.get(call.outcome, "stunt"),
-            "title": f"{call.purpose} · {call.model_id}",
-            "sub": " · ".join(
-                part
-                for part in (
-                    script.title if script else None,
-                    call.prompt_version,
-                    tokens_of(call),
-                    f"{call.duration_ms} ms" if call.duration_ms else None,
-                    call.error_message,
-                )
-                if part
-            ),
-            "right": call.created_at.strftime("%d %b %H:%M"),
-            # What the sort control orders on, kept apart from the display
-            # strings so a cost sorts as a number and a date as a date.
+            "cells": {
+                "when": {
+                    "text": call.created_at.strftime("%d %b %H:%M"),
+                    "class": "tiny muted num",
+                },
+                "outcome": {
+                    "text": call.outcome,
+                    "tag": True,
+                    "tag_class": {
+                        "ok": "set_design",
+                        "cached": "set_design",
+                        "budget_refused": "prop",
+                    }.get(call.outcome, "stunt"),
+                },
+                "purpose": {
+                    "text": call.purpose,
+                    "sub": call.error_message or call.prompt_version,
+                },
+                "model": {"text": call.model_id, "class": "tiny muted"},
+                "script": {
+                    "text": script.title if script else "—",
+                    "class": "tiny",
+                },
+                "tokens": {
+                    "text": f"{(call.input_tokens or 0) + (call.output_tokens or 0) + (call.reasoning_tokens or 0):,}",
+                    "sub": tokens_of(call),
+                },
+                "cost": {"text": pricing.display(cost_of(call)) or "—"},
+                "duration": {
+                    "text": f"{call.duration_ms} ms" if call.duration_ms else "—",
+                    "class": "tiny muted",
+                },
+            },
+            # What the columns order on, kept apart from the display strings
+            # so a cost sorts as a number and a date as a date.
             "sort": {
                 "when": call.created_at.isoformat(),
                 "purpose": call.purpose,
@@ -1043,15 +1127,15 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
             + f" · {budget_note}"
         ),
         items=items,
-        sorts=[
-            {"key": "when", "label": "Time", "numeric": False},
-            {"key": "purpose", "label": "Purpose", "numeric": False},
-            {"key": "model", "label": "Model", "numeric": False},
-            {"key": "script", "label": "Script", "numeric": False},
+        columns=[
+            {"key": "when", "label": "Time"},
+            {"key": "outcome", "label": "Outcome"},
+            {"key": "purpose", "label": "Purpose"},
+            {"key": "model", "label": "Model"},
+            {"key": "script", "label": "Script"},
             {"key": "tokens", "label": "Tokens", "numeric": True},
             {"key": "cost", "label": "Cost", "numeric": True},
             {"key": "duration", "label": "Duration", "numeric": True},
-            {"key": "outcome", "label": "Outcome", "numeric": False},
         ],
         empty="No model calls recorded yet. Every call is recorded here, "
         "successes and refusals alike.",

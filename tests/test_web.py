@@ -2411,19 +2411,37 @@ class TestSpendTable:
         assert "data-tokens=" in body
 
 
-class TestTracesSorting:
-    def test_the_traces_page_offers_a_sort_control(self, client, judged):
+class TestSortableTables:
+    def test_traces_columns_carry_what_they_sort_on(self, client, judged):
         script_id = _first_script(client)
         client.post(f"/api/scripts/{script_id}/ask", data={"question": "Who?"})
         body = client.get("/traces").text
-        assert 'id="list-sort"' in body
-        assert 'id="pager-size"' in body
-        # Sorting reads the row's own values, so a cost sorts as a number.
+        assert 'class="scripts listtable"' in body
+        assert 'data-sort="cost"' in body
         assert "data-sort-cost=" in body
         assert "data-sort-tokens=" in body
+        # A numeric column has to say so, or the browser sorts "9943" above
+        # "10020" as text.
         assert 'data-numeric="1"' in body
-
-    def test_a_list_without_sort_values_keeps_its_plain_pager(self, client):
-        body = client.get("/entities").text
         assert 'id="pager-size"' in body
-        assert 'id="list-sort"' not in body
+
+    def test_a_report_reaches_the_table_with_its_sort_values(
+        self, client, judged
+    ):
+        script_id = _first_script(client)
+        unit_id = _units(client, script_id)[0]
+        client.post(
+            f"/api/units/{unit_id}/preview",
+            data={"proposed_text": "A bicycle leans against the gate."},
+        )
+        body = client.get("/reports").text
+        assert 'class="scripts listtable"' in body
+        # Severity sorts by weight, so high leads whatever the alphabet says.
+        assert 'data-sort="severity"' in body
+        assert "data-sort-severity=" in body
+
+    def test_a_card_list_stays_a_card_list(self, client):
+        body = client.get("/entities").text
+        assert 'class="scripts listtable"' not in body
+        assert '<div class="list">' in body
+        assert 'id="pager-size"' in body

@@ -11,18 +11,7 @@
   <input id="list-search" placeholder="Search" autocomplete="off"
          aria-label="Search this list"></div>
 {% endif %}
-{% if items and sorts %}
-<label class="listsort tiny muted">Sort
-  <select class="field" id="list-sort" aria-label="Sort this list">
-    {% for option in sorts %}
-    <option value="{{ option.key }}"
-            {% if option.numeric %}data-numeric="1"{% endif %}>
-      {{ option.label }}</option>
-    {% endfor %}
-  </select></label>
-<button class="btn sm" id="list-dir" data-dir="desc"
-        aria-label="Reverse the sort order">↓</button>
-{% endif %}
+
 {% if header_action %}
 <button class="btn" id="header-action" data-post="{{ header_action.url }}"
         data-tip="{{ header_action.tip }}">{{ header_action.label }}</button>
@@ -37,7 +26,58 @@
 </div>
 {% endif %}
 
-{% if items %}
+{% if items and columns %}
+<div class="tscroll listtable-wrap">
+<table class="scripts listtable">
+  <thead><tr>
+    {% for column in columns %}
+    <th{% if column.numeric %} class="num"{% endif %}
+       {% if column.key != 'actions' %}data-sort="{{ column.key }}"
+       {% if column.numeric %}data-numeric="1"{% endif %}
+       {% if loop.first %}aria-sort="descending"{% endif %}{% endif %}>
+      {% if column.key == 'actions' %}{{ column.label }}
+      {% else %}<button type="button" class="sortbtn">{{ column.label }}</button>
+      {% endif %}</th>
+    {% endfor %}
+  </tr></thead>
+  <tbody id="list-rows">
+    {% for item in items %}
+    <tr {% for key, value in (item.sort or {}).items() %}data-sort-{{ key }}="{{ value }}" {% endfor %}>
+      {% for column in columns %}
+      {% set cell = (item.cells or {}).get(column.key) %}
+      <td{% if column.numeric %} class="num"{% endif %}>
+        {% if column.key == 'actions' %}
+          {% for act in item.actions or [] %}
+          {% if act.href %}<a class="btn sm" href="{{ act.href }}">{{ act.label }}</a>
+          {% else %}<button class="btn sm{{ ' danger' if act.danger }}" data-post="{{ act.url }}"
+                  {% if act.confirm %}data-confirm="{{ act.confirm }}"{% endif %}>{{ act.label }}</button>
+          {% endif %}
+          {% endfor %}
+        {% elif cell %}
+          {% if cell.tag %}<span class="tag {{ cell.tag_class }}">{{ cell.text }}</span>
+          {% else %}<span class="{{ cell.class }}">{{ cell.text }}</span>{% endif %}
+          {% if cell.sub %}<div class="tiny muted">{{ cell.sub }}</div>{% endif %}
+        {% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+<div class="empty hide" id="list-no-match">Nothing matches the search.</div>
+<div class="pager hide" id="pager">
+  <label class="tiny muted">Per page
+    <select class="field" id="pager-size">
+      <option value="25">25</option>
+      <option value="50">50</option>
+      <option value="100">100</option>
+    </select></label>
+  <button class="btn sm" id="pager-prev">‹ Previous</button>
+  <span class="pager-status" id="pager-status" aria-live="polite"></span>
+  <button class="btn sm" id="pager-next">Next ›</button>
+</div>
+{% elif items %}
 {% if batch_actions %}
 <div class="batch-head">
   <label class="batch-all"><input type="checkbox" id="batch-all">
@@ -154,8 +194,13 @@ document.querySelectorAll('.item [data-post]').forEach((button) => {
 /* Instant search and pagination over the rendered rows. The rows are all on
    the page already, so both are display toggles: no request, no reload. */
 (() => {
-  const list = document.querySelector('.list');
-  const rows = [...document.querySelectorAll('.list .item')];
+  // Search and paging work the same over a card list and over a table
+  // whose headers sort.
+  const table = document.getElementById('list-rows');
+  const list = table || document.querySelector('.list');
+  const rows = [...(table
+    ? table.querySelectorAll('tr')
+    : document.querySelectorAll('.list .item'))];
   if (!rows.length) return;
   const search = document.getElementById('list-search');
   const pager = document.getElementById('pager');
@@ -163,9 +208,10 @@ document.querySelectorAll('.item [data-post]').forEach((button) => {
   const prev = document.getElementById('pager-prev');
   const next = document.getElementById('pager-next');
   const sizeField = document.getElementById('pager-size');
-  const sortField = document.getElementById('list-sort');
-  const dirButton = document.getElementById('list-dir');
+  const headers = [...document.querySelectorAll('.listtable th[data-sort]')];
   const noMatch = document.getElementById('list-no-match');
+  let sortKey = headers.length ? headers[0].dataset.sort : null;
+  let ascending = false;
   let page = 0;
 
   // The page size is per list, so a long Traces page and a short Findings
@@ -188,16 +234,15 @@ document.querySelectorAll('.item [data-post]').forEach((button) => {
   }
 
   function ordered(hits) {
-    if (!sortField) return hits;
-    const key = sortField.value;
-    const numeric = sortField.selectedOptions[0].dataset.numeric === '1';
-    const ascending = dirButton.dataset.dir === 'asc';
+    if (!sortKey) return hits;
+    const header = headers.find((one) => one.dataset.sort === sortKey);
+    const numeric = header && header.dataset.numeric === '1';
     const value = (row) => {
-      const raw = row.dataset[`sort${key.charAt(0).toUpperCase()}${key.slice(1)}`];
+      const raw = row.dataset[`sort${sortKey.charAt(0).toUpperCase()}${sortKey.slice(1)}`];
       return numeric ? Number(raw || 0) : (raw || '').toLowerCase();
     };
-    // Sorted out of place, so the rows keep the order the server sent when
-    // no sort is chosen.
+    // Sorted out of place, so the rows keep the order the server sent until
+    // a header is clicked.
     return [...hits].sort((a, b) => {
       const left = value(a);
       const right = value(b);
@@ -214,10 +259,18 @@ document.querySelectorAll('.item [data-post]').forEach((button) => {
     if (page >= pages) page = pages - 1;
     hits.slice(page * size, (page + 1) * size).forEach((row) => {
       row.style.display = '';
-      if (sortField) list.appendChild(row);
+      if (sortKey) list.appendChild(row);
     });
     noMatch.classList.toggle('hide', hits.length > 0);
-    pager.classList.toggle('hide', hits.length <= size && !sortField);
+    pager.classList.toggle('hide', hits.length <= size && !table);
+    headers.forEach((header) => {
+      const on = header.dataset.sort === sortKey;
+      header.setAttribute(
+        'aria-sort', on ? (ascending ? 'ascending' : 'descending') : 'none'
+      );
+      header.classList.toggle('sorted', on);
+      header.classList.toggle('asc', on && ascending);
+    });
     const from = hits.length ? page * size + 1 : 0;
     const to = Math.min(hits.length, (page + 1) * size);
     status.textContent = `${from}–${to} of ${hits.length}`;
@@ -235,16 +288,20 @@ document.querySelectorAll('.item [data-post]').forEach((button) => {
     catch (e) { /* private mode */ }
     render();
   });
-  if (sortField) {
-    sortField.addEventListener('change', () => { page = 0; render(); });
-    dirButton.addEventListener('click', () => {
-      const ascending = dirButton.dataset.dir === 'asc';
-      dirButton.dataset.dir = ascending ? 'desc' : 'asc';
-      dirButton.textContent = ascending ? '↓' : '↑';
+  headers.forEach((header) => {
+    header.querySelector('.sortbtn').addEventListener('click', () => {
+      const key = header.dataset.sort;
+      // A column opens on the reading people ask for first: the biggest
+      // number, the newest date, the first word.
+      if (key === sortKey) ascending = !ascending;
+      else {
+        sortKey = key;
+        ascending = header.dataset.numeric !== '1' && key !== 'when';
+      }
       page = 0;
       render();
     });
-  }
+  });
   render();
 })();
 
