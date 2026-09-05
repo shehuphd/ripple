@@ -233,41 +233,63 @@ filterPane('history-search', 'ask-history', '.qrow', 'history-nomatch');
    because completed scenes replay from cache at no cost. */
 const build = document.getElementById('ask-build');
 if (build) {
+  const sceneLabel = document.getElementById('bp-scene');
+  const countLabel = document.getElementById('bp-count');
+  const bar = document.getElementById('bp-bar');
+  const spend = document.getElementById('bp-spend');
+  const rate = document.getElementById('bp-rate');
+  const cancel = document.getElementById('bp-cancel');
+  let activeRun = null;
+
+  /* The server drains the run; this only reports it. Reloading or leaving
+     the page changes nothing about the build. */
+  function paint(progress, started) {
+    const done = progress.completed + progress.failed;
+    sceneLabel.textContent = done < progress.total
+      ? `Extracting scene ${done + 1}`
+      : 'Finishing';
+    countLabel.textContent = `${done} of ${progress.total} scenes`
+      + (progress.failed ? ` · ${progress.failed} failed` : '');
+    bar.style.width =
+      `${Math.round((done / Math.max(progress.total, 1)) * 100)}%`;
+    spend.textContent =
+      `${(progress.assertions || 0).toLocaleString()} assertions extracted`
+      + (progress.cost ? ` · ${progress.cost}` : '');
+    if (done) {
+      const perScene = (performance.now() - started) / 1000 / done;
+      rate.textContent = `${perScene.toFixed(1)}s per scene`;
+    }
+  }
+
+  async function follow(runId, started) {
+    for (;;) {
+      await new Promise((resume) => { setTimeout(resume, 900); });
+      const progress = await api(`/api/extract/${runId}/progress`);
+      paint(progress, started);
+      if (progress.status === 'cancelled') return 'cancelled';
+      if (progress.pending === 0 && !progress.working) return 'done';
+    }
+  }
+
   build.addEventListener('click', async () => {
     build.disabled = true;
     document.getElementById('ask-idle').classList.add('hide');
     document.getElementById('ask-building').classList.remove('hide');
-    const sceneLabel = document.getElementById('bp-scene');
-    const countLabel = document.getElementById('bp-count');
-    const bar = document.getElementById('bp-bar');
-    const spend = document.getElementById('bp-spend');
-    const rate = document.getElementById('bp-rate');
+    const sub = document.getElementById('ask-sub');
+    if (sub) sub.textContent = `${sub.dataset.title}, building graph`;
     const started = performance.now();
+    let runId = null;
     try {
       const run = await api(`/api/scripts/${build.dataset.script}/extract`, {
-        method: 'POST',
+        method: 'POST', body: form({ background: 'true' }),
       });
-      let progress = run;
-      while (progress.pending > 0) {
-        const step = await api(`/api/extract/${run.run_id}/next`, {
-          method: 'POST',
-        });
-        progress = step.progress;
-        const done = progress.completed + progress.failed;
-        sceneLabel.textContent = done < progress.total
-          ? `Extracting scene ${done + 1}`
-          : 'Finishing';
-        countLabel.textContent = `${done} of ${progress.total} scenes`
-          + (progress.failed ? ` · ${progress.failed} failed` : '');
-        bar.style.width =
-          `${Math.round((done / Math.max(progress.total, 1)) * 100)}%`;
-        spend.textContent = `${progress.tokens.toLocaleString()} tokens`
-          + (progress.cost ? ` · ${progress.cost}` : '');
-        if (done) {
-          const perScene = (performance.now() - started) / 1000 / done;
-          rate.textContent = `${perScene.toFixed(1)}s per scene`;
-        }
-        if (step.done) break;
+      runId = run.run_id;
+      activeRun = runId;
+      ripple.trace('ask.build_started', { run: runId });
+      paint(run, started);
+      const outcome = await follow(runId, started);
+      if (outcome === 'cancelled') {
+        toast('Extraction cancelled. The scenes already read are in the graph.');
       }
       window.location.reload();
     } catch (error) {
@@ -277,4 +299,24 @@ if (build) {
       build.disabled = false;
     }
   });
+
+  // Cancelling asks twice, then stops the run after the scene in flight.
+  if (cancel) {
+    cancel.addEventListener('click', async () => {
+      if (!activeRun) return;
+      if (cancel.textContent === 'Cancel') {
+        cancel.textContent = 'Confirm';
+        return;
+      }
+      cancel.disabled = true;
+      cancel.textContent = 'Cancelling…';
+      try {
+        await api(`/api/extract/${activeRun}/cancel`, { method: 'POST' });
+      } catch (error) {
+        toast(error.message, true);
+        cancel.disabled = false;
+        cancel.textContent = 'Cancel';
+      }
+    });
+  }
 }

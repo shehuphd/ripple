@@ -746,42 +746,42 @@ async function driveRun(runId) {
   const cancel = document.getElementById('run-cancel');
   panel.style.display = 'block';
   // Cancelling asks twice: the first press arms the button, the second stops
-  // the loop once the scene in flight has been saved.
-  let cancelRequested = false;
+  // the run once the scene in flight has been saved.
   if (cancel) {
     cancel.style.display = '';
     cancel.disabled = false;
     cancel.textContent = 'Cancel';
-    cancel.onclick = () => {
+    cancel.onclick = async () => {
       if (cancel.textContent === 'Cancel') {
         cancel.textContent = 'Confirm';
         return;
       }
-      cancelRequested = true;
       cancel.disabled = true;
       cancel.textContent = 'Cancelling…';
+      try {
+        await api(`/api/extract/${runId}/cancel`, { method: 'POST' });
+        ripple.trace('extract.cancelled', { run: runId });
+      } catch (error) {
+        toast(error.message, true);
+      }
     };
   }
-  let progress = null;
+  // The server drains the run, so this reports rather than drives it: closing
+  // the tab no longer stops the build.
+  let progress = await api(`/api/extract/${runId}/background`, {
+    method: 'POST',
+  });
   for (;;) {
-    const step = await api(`/api/extract/${runId}/next`, { method: 'POST' });
-    progress = step.progress;
     const done = progress.completed + progress.failed;
     bar.style.width =
       `${Math.round((done / Math.max(progress.total, 1)) * 100)}%`;
     count.textContent =
       `${done} of ${progress.total} · ${progress.failed} failed`
       + spendLabel(progress);
-    if (step.done || progress.pending === 0) break;
-    if (cancelRequested) {
-      progress = await api(`/api/extract/${runId}/cancel`, { method: 'POST' });
-      ripple.trace('extract.cancelled', {
-        run: runId,
-        completed: progress.completed,
-        pending: progress.pending,
-      });
-      break;
-    }
+    if (progress.status === 'cancelled') break;
+    if (progress.pending === 0 && !progress.working) break;
+    await new Promise((resume) => { setTimeout(resume, 900); });
+    progress = await api(`/api/extract/${runId}/progress`);
   }
   if (cancel) cancel.style.display = 'none';
   return progress;

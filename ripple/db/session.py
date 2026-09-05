@@ -24,8 +24,10 @@ from ripple.db.models import Base
 logger = logging.getLogger(__name__)
 
 DEFAULT_URL = "sqlite+pysqlite:///data/ripple.db"
-# Short, so a locked database fails a startup probe rather than hanging it.
-SQLITE_TIMEOUT_SECONDS = 0.5
+# A background extraction worker writes while requests read, so a write lock
+# has to be waited out rather than failed on. WAL keeps readers out of the
+# writer's way, leaving only writer-against-writer contention, which is brief.
+SQLITE_TIMEOUT_SECONDS = 5.0
 
 
 def database_url() -> str:
@@ -57,11 +59,20 @@ def create_db_engine(url: str | None = None, echo: bool = False) -> Engine:
 
     if engine.dialect.name == "sqlite":
 
+        file_backed = ":memory:" not in resolved
+
         @event.listens_for(engine, "connect")
-        def _enforce_foreign_keys(dbapi_connection, _record) -> None:
-            """SQLite ignores foreign keys unless told otherwise, per connection."""
+        def _connection_pragmas(dbapi_connection, _record) -> None:
+            """SQLite ignores foreign keys unless told otherwise, per connection.
+
+            Write-ahead logging is set alongside them so a reader never blocks
+            on the extraction worker's writes. It is a property of the database
+            file, not the connection, and an in-memory database cannot take it.
+            """
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
+            if file_backed:
+                cursor.execute("PRAGMA journal_mode=WAL")
             cursor.close()
 
     return engine

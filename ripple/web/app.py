@@ -69,6 +69,7 @@ from ripple.db.repository import (
     unavailable_models,
 )
 from ripple.db.session import create_all, create_db_engine, session_factory
+from ripple.extraction import worker as extraction_worker
 from ripple.extraction.service import (
     cancel_run,
     claim_next_scene,
@@ -2383,6 +2384,7 @@ def restore_scene(scene_id: str, session: Session = Depends(get_session)):
 def begin_extraction(
     script_id: str,
     force: bool = Form(False),
+    background: bool = Form(False),
     session: Session = Depends(get_session),
 ):
     """Create an extraction run for a script.
@@ -2390,6 +2392,10 @@ def begin_extraction(
     `force` re-reads every scene instead of replaying the cache, which is what
     the reader's Rebuild asks for. It bills each scene, so the page confirms
     before sending it.
+
+    `background` hands the run to a worker thread and lets the page poll,
+    instead of the page posting once per scene. A build then survives the tab
+    that started it.
     """
     provider_name, model_id = settings_service.selected_model(session)
     if not provider_name or not model_id:
@@ -2398,7 +2404,14 @@ def begin_extraction(
         run = start_run(session, _uuid(script_id), model_id, force=force)
     except ValueError:
         raise HTTPException(404, "No such script") from None
-    return progress(session, run.id).__dict__
+    payload = progress(session, run.id).__dict__
+    if background:
+        # Committed before the worker starts: it opens its own sessions, and
+        # they must be able to see the run and its jobs.
+        session.commit()
+        extraction_worker.start(_sessions, get_provider(provider_name), run.id)
+        payload["background"] = True
+    return payload
 
 
 @app.post("/api/extract/{run_id}/next")
@@ -2425,6 +2438,30 @@ def extract_next(run_id: str, session: Session = Depends(get_session)):
         }
     except ValueError:
         raise HTTPException(404, "No such extraction run") from None
+
+
+@app.post("/api/extract/{run_id}/background")
+def background_extraction(run_id: str, session: Session = Depends(get_session)):
+    """Hand an existing run to a worker thread.
+
+    The draft link creates its run server-side, so the reader arrives holding
+    a run id rather than starting one; this is how that run gets drained
+    without the page posting per scene.
+    """
+    provider_name, _ = settings_service.selected_model(session)
+    if not provider_name:
+        raise HTTPException(400, "No provider selected.")
+    try:
+        payload = progress(session, _uuid(run_id)).__dict__
+    except ValueError:
+        raise HTTPException(404, "No such extraction run") from None
+    session.commit()
+    started = extraction_worker.start(
+        _sessions, get_provider(provider_name), _uuid(run_id)
+    )
+    payload["background"] = True
+    payload["working"] = started or extraction_worker.is_running(run_id)
+    return payload
 
 
 @app.post("/api/extract/{run_id}/cancel")
@@ -2456,11 +2493,13 @@ def mark_reviewed(script_id: str, session: Session = Depends(get_session)):
 
 @app.get("/api/extract/{run_id}/progress")
 def extraction_progress(run_id: str, session: Session = Depends(get_session)):
-    """Current run progress."""
+    """Current run progress, and whether a worker is still draining it."""
     try:
-        return progress(session, _uuid(run_id)).__dict__
+        payload = progress(session, _uuid(run_id)).__dict__
     except ValueError:
         raise HTTPException(404, "No such extraction run") from None
+    payload["working"] = extraction_worker.is_running(run_id)
+    return payload
 
 
 @app.get("/api/scripts/{script_id}/runs")

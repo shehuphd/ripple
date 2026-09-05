@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-04 12:21:22 UTC
+Last updated: 2026-09-05 21:49:37 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
 
@@ -68,6 +68,7 @@ Every file in the repository and what it does. Directories the application write
 | `extraction/prompt.py` | Per-scene prompt, `OUTPUT_SCHEMA`, and the cache-key fingerprint. |
 | `extraction/service.py` | Resumable per-scene extraction runs with atomic scene claiming. |
 | `extraction/validate.py` | Schema and predicate-rule validation of model output before any row is written. |
+| `extraction/worker.py` | Background extraction: one thread per run drains the pending scenes so a build outlives the page that started it; the page polls progress instead of posting per scene. |
 | `extraction/judge.py` | Code-side verification of preview verdicts: unlisted ids dropped, deleted evidence downgrades a hold, missing verdicts fail the preview. |
 | `extraction/continuity_judge.py` | The continuity judgement contract: prompt, schema, and verification, every claim cited to listed evidence. |
 

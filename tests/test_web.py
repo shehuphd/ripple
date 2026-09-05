@@ -2530,3 +2530,97 @@ class TestNeedsReviewSurfacing:
         script_id = _first_script(client)
         body = client.get(f"/scripts/{script_id}").text
         assert "This import needs a review" not in body
+
+
+@pytest.fixture
+def extracting(monkeypatch, tmp_path):
+    """Route extraction to a fixture provider that answers every scene."""
+    import json
+
+    from ripple.llm.fixture import FixtureProvider
+
+    reply = json.dumps({
+        "entities": [
+            {"id": "e1", "type": "prop", "name": "Lantern", "conf": 0.9}
+        ],
+        "assertions": [],
+    })
+    provider = FixtureProvider(tmp_path / "extract-fixtures", default_reply=reply)
+    monkeypatch.setattr(web, "get_provider", lambda name: provider)
+    monkeypatch.setattr(
+        web.settings_service,
+        "selected_model",
+        lambda session: ("fixture", "fixture-cheap"),
+    )
+    return provider
+
+
+class TestBackgroundExtraction:
+    """A build outlives the page that started it: a worker drains the run
+    while the page polls."""
+
+    def test_a_background_run_drains_without_the_page_posting_scenes(
+        self, client, extracting
+    ):
+        import time
+
+        script_id = _first_script(client)
+        started = client.post(
+            f"/api/scripts/{script_id}/extract", data={"background": "true"}
+        ).json()
+        assert started["background"] is True
+        run_id = started["run_id"]
+        # No /next calls at all: only the worker advances the run.
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            progress = client.get(f"/api/extract/{run_id}/progress").json()
+            if progress["pending"] == 0 and not progress["working"]:
+                break
+            time.sleep(0.2)
+        assert progress["pending"] == 0
+        assert progress["completed"] > 0
+        assert progress["status"] in ("ready", "partially_ready")
+
+    def test_progress_counts_the_assertions_the_run_wrote(self, client, extracting):
+        import time
+
+        script_id = _first_script(client)
+        run_id = client.post(
+            f"/api/scripts/{script_id}/extract", data={"background": "true"}
+        ).json()["run_id"]
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            progress = client.get(f"/api/extract/{run_id}/progress").json()
+            if progress["pending"] == 0 and not progress["working"]:
+                break
+            time.sleep(0.2)
+        assert progress["assertions"] > 0
+
+    def test_an_existing_run_can_be_handed_to_a_worker(self, client, extracting):
+        script_id = _first_script(client)
+        run_id = client.post(f"/api/scripts/{script_id}/extract").json()["run_id"]
+        response = client.post(f"/api/extract/{run_id}/background")
+        assert response.status_code == 200
+        assert response.json()["background"] is True
+
+    def test_a_cancelled_run_stays_cancelled_when_its_last_scene_lands(
+        self, client, extracting
+    ):
+        """The scene in flight still completes and still counts; its landing
+        must not report the run as ready."""
+        import os
+        import uuid as _uuid_mod
+
+        from ripple.db.models import ExtractionRun
+        from ripple.db.session import create_db_engine, session_factory
+        from ripple.extraction.service import _roll_up
+
+        script_id = _first_script(client)
+        run_id = client.post(f"/api/scripts/{script_id}/extract").json()["run_id"]
+        client.post(f"/api/extract/{run_id}/cancel")
+        engine = create_db_engine(os.environ["DATABASE_URL"])
+        with session_factory(engine)() as db:
+            run = db.get(ExtractionRun, _uuid_mod.UUID(run_id))
+            assert run.status == "cancelled"
+            _roll_up(db, run)
+            assert run.status == "cancelled"

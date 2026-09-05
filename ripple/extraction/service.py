@@ -112,6 +112,9 @@ class RunProgress:
     completed: int
     failed: int
     pending: int
+    # Assertions this run has written, which is the substance figure the
+    # build screen shows beside the spend.
+    assertions: int = 0
     tokens: int = 0
     cost_usd: float | None = None
     cost: str | None = None
@@ -976,7 +979,14 @@ def _endpoint_id(kind: str, local_id: str, resolved: dict[str, Entity], job):
 
 
 def _roll_up(session: Session, run: ExtractionRun) -> None:
-    """Set the run status from its scenes' statuses."""
+    """Set the run status from its scenes' statuses.
+
+    A cancelled run keeps that status: the scene in flight when the user
+    cancelled still finishes and still counts, and its completion must not
+    report the run as ready.
+    """
+    if run.status == "cancelled":
+        return
     outstanding = (
         session.scalar(
             select(func.count())
@@ -1065,6 +1075,17 @@ def progress(session: Session, run_id) -> RunProgress:
         )
         or 0
     )
+    # What the run has put in the graph, which is what the build screen
+    # reports: the rows carry the run that wrote them, so a rebuild counts
+    # its own work rather than the graph it inherited.
+    assertions = (
+        session.scalar(
+            select(func.count())
+            .select_from(Assertion)
+            .where(Assertion.extraction_run_id == run_id)
+        )
+        or 0
+    )
     calls = list(
         session.scalars(
             select(ModelCall).where(
@@ -1088,6 +1109,7 @@ def progress(session: Session, run_id) -> RunProgress:
         completed=run.completed_scenes,
         failed=run.failed_scenes,
         pending=outstanding,
+        assertions=assertions,
         tokens=tokens,
         cost_usd=cost,
         cost=pricing.display(cost),

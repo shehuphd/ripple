@@ -537,6 +537,19 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .ask-empty-ic.pulse{animation:ask-pulse 1.6s ease-in-out infinite}
 @keyframes ask-pulse{0%,100%{opacity:1}50%{opacity:.45}}
 @media (prefers-reduced-motion:reduce){.ask-empty-ic.pulse{animation:none}}
+/* The build spinner: a turning arc on the same disc the idle icon uses, so
+   the state change reads as motion starting rather than the panel redrawing.
+   Under reduced motion it holds still as a ring, since the progress bar and
+   the scene counter already say the build is moving. */
+.spinner{width:84px;height:84px;border-radius:50%;background:var(--raised);
+  border:.5px solid var(--bd2);margin:0 auto 36px;position:relative}
+.spinner::after{content:"";position:absolute;inset:26px;border-radius:50%;
+  border:2px solid var(--bd2);border-top-color:var(--ac);
+  animation:spin 900ms linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){
+  .spinner::after{animation:none;border-color:var(--ac) var(--bd2) var(--bd2)}}
+.ask-empty .build-progress + .btn{margin-top:26px}
 .build-progress{max-width:430px;margin:34px auto 0;text-align:left}
 .build-row{display:flex;justify-content:space-between;font-size:13px;
   color:var(--t2)}

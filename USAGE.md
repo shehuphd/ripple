@@ -54,7 +54,7 @@ Under the cap, **Billable actions** lists what has been billed, one row per acti
 
 ## Building a graph
 
-Open a script and press **Build graph**. Extraction runs one scene per model call, in the browser's control: each scene commits independently, so a failure late in a run keeps everything before it, and re-running resumes from the unfinished scenes instead of restarting. A scene already extracted from identical input under the same prompt and model is served from the cache with no call and no spend. Before the model reads a scene, a deterministic pre-pass records what code can parse: the speaking cast from dialogue cues and the location from the heading, each citing its line, at no model cost.
+Open a script and press **Build graph**. Extraction runs one scene per model call on the server: each scene commits independently, so a failure late in a run keeps everything before it, and re-running resumes from the unfinished scenes instead of restarting. The page reports progress rather than driving it, so you can leave the screen, reload, or close the tab and the build carries on. A scene already extracted from identical input under the same prompt and model is served from the cache with no call and no spend. Before the model reads a scene, a deterministic pre-pass records what code can parse: the speaking cast from dialogue cues and the location from the heading, each citing its line, at no model cost.
 
 A run reports its spend as it goes: the progress counter and the finished label carry the tokens used and, for a model the pricing registry knows, the dollar cost (from the bundled `rates` snapshot). A run served from cache reports nothing spent.
 
