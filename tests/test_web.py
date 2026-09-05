@@ -2363,3 +2363,25 @@ class TestSpendSurface:
         )
         assert progress.tokens == 0
         assert progress.cost is None
+
+
+class TestCancellingARun:
+    def test_cancelling_closes_the_run_before_any_scene_is_read(
+        self, client, judged
+    ):
+        script_id = _first_script(client)
+        started = client.post(f"/api/scripts/{script_id}/extract").json()
+        response = client.post(f"/api/extract/{started['run_id']}/cancel")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "cancelled"
+        assert body["pending"] == 0
+        # A cancelled run answers "done" to the loop still asking for scenes.
+        step = client.post(f"/api/extract/{started['run_id']}/next").json()
+        assert step["done"] is True
+
+    def test_cancelling_an_unknown_run_is_a_404(self, client, judged):
+        import uuid
+
+        response = client.post(f"/api/extract/{uuid.uuid4()}/cancel")
+        assert response.status_code == 404

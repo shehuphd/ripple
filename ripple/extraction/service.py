@@ -260,6 +260,20 @@ def start_run(
         if already_done is not None:
             reused += 1
             continue
+        # A run abandoned mid-flight (a closed tab, a server restart) leaves
+        # pending or failed rows behind, and the cache key is unique across
+        # runs. The leftover goes so this run can hold a job for the scene;
+        # its spend record lives in ModelCall and the traces, untouched.
+        session.execute(
+            delete(SceneExtraction).where(
+                SceneExtraction.scene_id == scene.id,
+                SceneExtraction.input_hash == digest,
+                SceneExtraction.prompt_version == prompt_version,
+                SceneExtraction.model_id == model_id,
+                SceneExtraction.status != "completed",
+            ),
+            execution_options={"synchronize_session": False},
+        )
         session.add(
             SceneExtraction(
                 extraction_run_id=run.id,
@@ -993,6 +1007,42 @@ def _roll_up(session: Session, run: ExtractionRun) -> None:
             "running": "analysing",
             "partially_ready": "partially_ready",
         }.get(run.status, script.graph_status)
+
+
+def cancel_run(session: Session, run_id) -> ExtractionRun:
+    """Stop a run after the scene in flight.
+
+    The pending jobs are deleted rather than kept: the cache key is unique
+    across runs, so a leftover row would collide with the job a later build
+    creates for the same scene. Completed scenes keep their rows and their
+    facts, so that later build resumes instead of starting over.
+    """
+    run = session.get(ExtractionRun, run_id)
+    if run is None:
+        raise ValueError(f"no extraction run with id {run_id}")
+    session.execute(
+        delete(SceneExtraction).where(
+            SceneExtraction.extraction_run_id == run.id,
+            SceneExtraction.status == "pending",
+        ),
+        execution_options={"synchronize_session": False},
+    )
+    run.status = "cancelled"
+    if run.completed_at is None:
+        run.completed_at = _now()
+    script = session.get(Script, run.script_id)
+    if script is not None and script.graph_status == "analysing":
+        script.graph_status = (
+            "partially_ready" if run.completed_scenes else "not_analysed"
+        )
+    session.flush()
+    logger.info(
+        "cancelled run %s with %d of %d scenes done",
+        run.id,
+        run.completed_scenes,
+        run.total_scenes,
+    )
+    return run
 
 
 def progress(session: Session, run_id) -> RunProgress:

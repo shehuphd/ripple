@@ -743,7 +743,25 @@ async function driveRun(runId) {
   const panel = document.getElementById('run');
   const bar = document.getElementById('run-bar');
   const count = document.getElementById('run-count');
+  const cancel = document.getElementById('run-cancel');
   panel.style.display = 'block';
+  // Cancelling asks twice: the first press arms the button, the second stops
+  // the loop once the scene in flight has been saved.
+  let cancelRequested = false;
+  if (cancel) {
+    cancel.style.display = '';
+    cancel.disabled = false;
+    cancel.textContent = 'Cancel';
+    cancel.onclick = () => {
+      if (cancel.textContent === 'Cancel') {
+        cancel.textContent = 'Confirm';
+        return;
+      }
+      cancelRequested = true;
+      cancel.disabled = true;
+      cancel.textContent = 'Cancelling…';
+    };
+  }
   let progress = null;
   for (;;) {
     const step = await api(`/api/extract/${runId}/next`, { method: 'POST' });
@@ -755,7 +773,17 @@ async function driveRun(runId) {
       `${done} of ${progress.total} · ${progress.failed} failed`
       + spendLabel(progress);
     if (step.done || progress.pending === 0) break;
+    if (cancelRequested) {
+      progress = await api(`/api/extract/${runId}/cancel`, { method: 'POST' });
+      ripple.trace('extract.cancelled', {
+        run: runId,
+        completed: progress.completed,
+        pending: progress.pending,
+      });
+      break;
+    }
   }
+  if (cancel) cancel.style.display = 'none';
   return progress;
 }
 
@@ -768,7 +796,16 @@ if (pendingRun) {
     document.getElementById('run-label').textContent =
       'Extracting the changed scenes';
     try {
-      await driveRun(pendingRun);
+      const outcome = await driveRun(pendingRun);
+      if (outcome && outcome.status === 'cancelled') {
+        document.getElementById('run-label').textContent =
+          'Extraction cancelled';
+        toast('Extraction cancelled before the draft report could be '
+          + 'built.');
+        window.history.replaceState(null, '', window.location.pathname);
+        setTimeout(() => window.location.reload(), 1600);
+        return;
+      }
       document.getElementById('run-label').textContent =
         'Comparing the drafts';
       const report = await api(`/api/scripts/${scriptId}/draft-report`, {
@@ -827,7 +864,10 @@ if (extract) {
         completed: progress ? progress.completed : null,
         failed: progress ? progress.failed : null,
       });
-      label.textContent = 'Extraction finished' + spendLabel(progress);
+      const stopped = progress && progress.status === 'cancelled';
+      label.textContent =
+        (stopped ? 'Extraction cancelled' : 'Extraction finished')
+        + spendLabel(progress);
       setTimeout(() => window.location.reload(), 900);
     } catch (error) {
       ripple.trace('extract.stopped', { error: error.message });

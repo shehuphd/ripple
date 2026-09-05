@@ -28,6 +28,7 @@ from ripple.extraction.prompt import PROMPT_VERSION, build_prompt, input_hash
 from ripple.extraction.service import (
     MAX_ATTEMPTS,
     _scene_units,
+    cancel_run,
     claim_next_scene,
     extract_scene,
     pending_scene_count,
@@ -387,6 +388,79 @@ class TestClaiming:
         finally:
             first_session.close()
             second_session.close()
+
+    def test_a_build_over_an_abandoned_run_replaces_its_leftover_jobs(
+        self, session, script
+    ):
+        """A closed tab or a restart leaves the old run's pending rows in
+        place; the next build takes them over instead of colliding with the
+        unique cache key."""
+        abandoned = start_run(session, script.id, MODEL)
+        session.commit()
+        fresh = start_run(session, script.id, MODEL)
+        session.commit()
+        assert fresh.total_scenes == len(script.scenes)
+        leftover = session.scalar(
+            select(func.count())
+            .select_from(SceneExtraction)
+            .where(SceneExtraction.extraction_run_id == abandoned.id)
+        )
+        assert leftover == 0
+
+    def test_cancelling_closes_the_run_and_drops_its_pending_jobs(
+        self, session, script
+    ):
+        run = start_run(session, script.id, MODEL)
+        job = claim_next_scene(session, run.id)
+        job.status = "completed"
+        run.completed_scenes = 1
+        session.flush()
+
+        cancel_run(session, run.id)
+
+        assert run.status == "cancelled"
+        assert run.completed_at is not None
+        pending = session.scalar(
+            select(func.count())
+            .select_from(SceneExtraction)
+            .where(
+                SceneExtraction.extraction_run_id == run.id,
+                SceneExtraction.status == "pending",
+            )
+        )
+        assert pending == 0
+        assert session.get(Script, script.id).graph_status == "partially_ready"
+        assert claim_next_scene(session, run.id) is None
+
+    def test_a_build_after_a_cancel_resumes_from_the_completed_scenes(
+        self, session, script
+    ):
+        """The pending jobs go with the cancel, so a later run can hold the
+        cache key for the scenes still to do, and only those."""
+        first = start_run(session, script.id, MODEL)
+        job = claim_next_scene(session, first.id)
+        job.status = "completed"
+        first.completed_scenes = 1
+        session.flush()
+        cancel_run(session, first.id)
+
+        second = start_run(session, script.id, MODEL)
+        fresh = session.scalar(
+            select(func.count())
+            .select_from(SceneExtraction)
+            .where(
+                SceneExtraction.extraction_run_id == second.id,
+                SceneExtraction.status == "pending",
+            )
+        )
+        assert fresh == len(script.scenes) - 1
+
+    def test_cancelling_a_fresh_run_returns_the_script_to_unanalysed(
+        self, session, script
+    ):
+        run = start_run(session, script.id, MODEL)
+        cancel_run(session, run.id)
+        assert session.get(Script, script.id).graph_status == "not_analysed"
 
     def test_a_run_creates_one_job_per_scene(self, session, script):
         run = start_run(session, script.id, MODEL)

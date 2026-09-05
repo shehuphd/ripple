@@ -99,8 +99,10 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
   <a href="/settings">Choose a model</a></div>
 {% endif %}
 <div id="run" class="card" style="display:none;margin-bottom:14px" aria-live="polite">
-  <div style="display:flex"><strong id="run-label">Extracting</strong>
-    <span class="tiny muted num" id="run-count" style="margin-left:auto"></span></div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <strong id="run-label">Extracting</strong>
+    <span class="tiny muted num" id="run-count" style="margin-left:auto"></span>
+    <button class="btn" id="run-cancel" style="display:none">Cancel</button></div>
   <div class="track"><i id="run-bar" style="width:0"></i></div>
 </div>
 

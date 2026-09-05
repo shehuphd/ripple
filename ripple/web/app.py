@@ -70,6 +70,7 @@ from ripple.db.repository import (
 )
 from ripple.db.session import create_all, create_db_engine, session_factory
 from ripple.extraction.service import (
+    cancel_run,
     claim_next_scene,
     extract_scene,
     pending_scene_count,
@@ -2224,6 +2225,16 @@ def extract_next(run_id: str, session: Session = Depends(get_session)):
         }
     except ValueError:
         raise HTTPException(404, "No such extraction run") from None
+
+
+@app.post("/api/extract/{run_id}/cancel")
+def cancel_extraction(run_id: str, session: Session = Depends(get_session)):
+    """Stop the run; scenes already extracted stay in the graph."""
+    try:
+        cancel_run(session, _uuid(run_id))
+    except ValueError:
+        raise HTTPException(404, "No such extraction run") from None
+    return progress(session, _uuid(run_id)).__dict__
 
 
 @app.get("/api/extract/{run_id}/progress")
