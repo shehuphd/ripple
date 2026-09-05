@@ -26,10 +26,23 @@
 </div>
 {% endif %}
 
-{% if items and columns %}
+{% if items %}
+{% if batch_actions %}
+<div class="batch-head">
+  <label class="batch-all"><input type="checkbox" id="batch-all">
+    Select all matching</label>
+</div>
+{% endif %}
 <div class="tscroll listtable-wrap">
 <table class="scripts listtable">
+  <colgroup>
+    {% if batch_actions %}<col class="checkcol">{% endif %}
+    {% for column in columns %}
+    <col{% if column.width %} style="width:{{ column.width }}"{% endif %}>
+    {% endfor %}
+  </colgroup>
   <thead><tr>
+    {% if batch_actions %}<th class="checkcol"></th>{% endif %}
     {% for column in columns %}
     <th{% if column.numeric %} class="num"{% endif %}
        {% if column.key != 'actions' %}data-sort="{{ column.key }}"
@@ -42,7 +55,17 @@
   </tr></thead>
   <tbody id="list-rows">
     {% for item in items %}
-    <tr {% for key, value in (item.sort or {}).items() %}data-sort-{{ key }}="{{ value }}" {% endfor %}>
+    <tr class="{{ 'selectable' if item.id and item.batch_kinds }}"
+        {% if item.id %}data-id="{{ item.id }}"{% endif %}
+        {% if item.batch_kinds %}data-kinds="{{ item.batch_kinds|join(',') }}"{% endif %}
+        {% if item.assertions is defined %}data-assertions="{{ item.assertions }}"{% endif %}
+        {% for key, value in (item.sort or {}).items() %}data-sort-{{ key }}="{{ value }}" {% endfor %}>
+      {% if batch_actions %}
+      <td class="checkcol">
+        {% if item.id and item.batch_kinds %}
+        <input type="checkbox" class="row-check" aria-label="Select this row">
+        {% endif %}</td>
+      {% endif %}
       {% for column in columns %}
       {% set cell = (item.cells or {}).get(column.key) %}
       <td{% if column.numeric %} class="num"{% endif %}>
@@ -77,54 +100,6 @@
   <span class="pager-status" id="pager-status" aria-live="polite"></span>
   <button class="btn sm" id="pager-next">Next ›</button>
 </div>
-{% elif items %}
-{% if batch_actions %}
-<div class="batch-head">
-  <label class="batch-all"><input type="checkbox" id="batch-all">
-    Select all matching</label>
-</div>
-{% endif %}
-<div class="list">
-  {% for item in items %}
-  <div class="item{{ ' selectable' if item.id and item.batch_kinds }}"
-       {% if item.id %}data-id="{{ item.id }}"{% endif %}
-       {% for key, value in (item.sort or {}).items() %}data-sort-{{ key }}="{{ value }}" {% endfor %}
-       {% if item.batch_kinds %}data-kinds="{{ item.batch_kinds|join(',') }}"{% endif %}
-       {% if item.assertions is defined %}data-assertions="{{ item.assertions }}"{% endif %}>
-    {% if batch_actions %}
-      {% if item.id and item.batch_kinds %}
-      <input type="checkbox" class="row-check" aria-label="Select this row">
-      {% else %}<span class="row-check-spacer"></span>{% endif %}
-    {% endif %}
-    {% if item.tag %}<span class="tag {{ item.tag_class }}">{{ item.tag }}</span>{% endif %}
-    <div class="grow">
-      <div>{{ item.title }}</div>
-      {% if item.sub %}<div class="sub">{{ item.sub }}</div>{% endif %}
-    </div>
-    {% if item.actions %}<span class="acts">
-      {% for act in item.actions %}
-      {% if act.href %}<a class="btn sm" href="{{ act.href }}">{{ act.label }}</a>
-      {% else %}<button class="btn sm{{ ' danger' if act.danger }}" data-post="{{ act.url }}"
-              {% if act.confirm %}data-confirm="{{ act.confirm }}"{% endif %}>{{ act.label }}</button>
-      {% endif %}
-      {% endfor %}
-    </span>{% endif %}
-    {% if item.right %}<span class="r">{{ item.right }}</span>{% endif %}
-  </div>
-  {% endfor %}
-</div>
-<div class="pager hide" id="pager">
-  <label class="tiny muted">Per page
-    <select class="field" id="pager-size">
-      <option value="25">25</option>
-      <option value="50">50</option>
-      <option value="100">100</option>
-    </select></label>
-  <button class="btn sm" id="pager-prev">‹ Previous</button>
-  <span class="pager-status" id="pager-status" aria-live="polite"></span>
-  <button class="btn sm" id="pager-next">Next ›</button>
-</div>
-<div class="empty hide" id="list-no-match">Nothing matches the search.</div>
 {% if batch_actions %}
 <div class="batch-bar hide" id="batch-bar" role="region" aria-label="Batch actions">
   <span class="batch-count" id="batch-count">0 selected</span>
@@ -167,7 +142,7 @@ if (headerAction) {
   });
 }
 
-document.querySelectorAll('.item [data-post]').forEach((button) => {
+document.querySelectorAll('#list-rows [data-post]').forEach((button) => {
   button.addEventListener('click', async () => {
     // A row action that names a consequence confirms first; a destructive one
     // (Dismiss) reddens its confirm button too.
@@ -194,13 +169,9 @@ document.querySelectorAll('.item [data-post]').forEach((button) => {
 /* Instant search and pagination over the rendered rows. The rows are all on
    the page already, so both are display toggles: no request, no reload. */
 (() => {
-  // Search and paging work the same over a card list and over a table
-  // whose headers sort.
   const table = document.getElementById('list-rows');
-  const list = table || document.querySelector('.list');
-  const rows = [...(table
-    ? table.querySelectorAll('tr')
-    : document.querySelectorAll('.list .item'))];
+  if (!table) return;
+  const rows = [...table.querySelectorAll('tr')];
   if (!rows.length) return;
   const search = document.getElementById('list-search');
   const pager = document.getElementById('pager');
@@ -259,10 +230,10 @@ document.querySelectorAll('.item [data-post]').forEach((button) => {
     if (page >= pages) page = pages - 1;
     hits.slice(page * size, (page + 1) * size).forEach((row) => {
       row.style.display = '';
-      if (sortKey) list.appendChild(row);
+      if (sortKey) table.appendChild(row);
     });
     noMatch.classList.toggle('hide', hits.length > 0);
-    pager.classList.toggle('hide', hits.length <= size && !table);
+    pager.classList.toggle('hide', false);
     headers.forEach((header) => {
       const on = header.dataset.sort === sortKey;
       header.setAttribute(
@@ -313,7 +284,7 @@ document.querySelectorAll('.item [data-post]').forEach((button) => {
 (() => {
   const bar = document.getElementById('batch-bar');
   if (!bar) return;
-  const rows = [...document.querySelectorAll('.list .item.selectable')];
+  const rows = [...document.querySelectorAll('.selectable')];
   if (!rows.length) return;
   const search = document.getElementById('list-search');
   const all = document.getElementById('batch-all');

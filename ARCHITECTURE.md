@@ -104,7 +104,7 @@ You upload a screenplay and Ripple reads it into a web of who and what each scen
 
 ### Observability
 
-- Each build, preview, and accept opens its own `traceact` span; the Traces page lists every model call newest-first with purpose, tokens, duration, and outcome, and can launch traceact's full viewer pre-filtered to a run.
+- Each build, preview, and accept opens its own `traceact` span; the Traces page tables every model call newest-first with purpose, model, script, tokens, cost, duration, and outcome, sorts on any of those columns, and can launch traceact's full viewer pre-filtered to a run.
 - The `model_calls` audit table records every call including refusals, so billed tokens are never invisible to the budget gate.
 - Each run record carries a priced ledger; every act and estimate states the date of the `rates` price snapshot in use, and shows a dash rather than a wrong number when a model is unpriced.
 - Continuity findings, change sets, and reports are all queryable list pages, so the "why did the graph change" trail is on record, not just the fact that it did.

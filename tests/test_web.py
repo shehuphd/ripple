@@ -2440,8 +2440,38 @@ class TestSortableTables:
         assert 'data-sort="severity"' in body
         assert "data-sort-severity=" in body
 
-    def test_a_card_list_stays_a_card_list(self, client):
+    def test_entities_keep_their_batch_checkboxes_in_the_table(self, client):
         body = client.get("/entities").text
+        assert 'class="scripts listtable"' in body
+        assert 'class="row-check"' in body
+        assert 'id="batch-bar"' in body
+        assert 'data-batch-kind="merge"' in body
+
+    def test_assertions_sort_state_before_the_alphabet(self, client):
+        body = client.get("/assertions").text
+        assert 'data-sort="state"' in body
+        assert "data-sort-confidence=" in body
+
+    def test_a_column_carries_its_own_width(self, client, judged):
+        """Fixed widths hold the layout when a sort brings a long value into
+        a column."""
+        script_id = _first_script(client)
+        client.post(f"/api/scripts/{script_id}/ask", data={"question": "Who?"})
+        body = client.get("/traces").text
+        assert "<colgroup>" in body
+        assert 'style="width:' in body
+
+    def test_every_populated_audit_list_renders_as_a_sortable_table(
+        self, client
+    ):
+        # Reports and findings need a preview to have rows at all; the two
+        # graph lists carry the seeded script's own.
+        for path in ("/entities", "/assertions"):
+            body = client.get(path).text
+            assert 'class="scripts listtable"' in body, path
+            assert "<colgroup>" in body, path
+
+    def test_an_empty_list_says_so_instead_of_drawing_a_table(self, client):
+        body = client.get("/reports").text
         assert 'class="scripts listtable"' not in body
-        assert '<div class="list">' in body
-        assert 'id="pager-size"' in body
+        assert "No reports yet." in body

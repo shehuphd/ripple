@@ -48,6 +48,8 @@ Open **Settings** from the sidebar. It has three tabs.
 
 **Spend** shows the recorded model spend (calls, tokens in, tokens out, by purpose) and takes one number: a cap on total recorded tokens. When the recorded total reaches the cap, every model call refuses before contacting the provider and tells you so. Raising or clearing the cap reopens the gate.
 
+Under the cap, **Billable actions** lists what has been billed, one row per action rather than one per call: a graph build covers its per-scene calls, a ripple preview covers its judge, continuity, and synthesis calls, and each question stands on its own with the question shown under it. Every column sorts, the table pages, and the search box filters it.
+
 **Interface** chooses what opening a script shows first: the production graph (the default) or the reader.
 
 ## Building a graph
@@ -55,6 +57,8 @@ Open **Settings** from the sidebar. It has three tabs.
 Open a script and press **Build graph**. Extraction runs one scene per model call, in the browser's control: each scene commits independently, so a failure late in a run keeps everything before it, and re-running resumes from the unfinished scenes instead of restarting. A scene already extracted from identical input under the same prompt and model is served from the cache with no call and no spend. Before the model reads a scene, a deterministic pre-pass records what code can parse: the speaking cast from dialogue cues and the location from the heading, each citing its line, at no model cost.
 
 A run reports its spend as it goes: the progress counter and the finished label carry the tokens used and, for a model the pricing registry knows, the dollar cost (from the bundled `rates` snapshot). A run served from cache reports nothing spent.
+
+**Cancel** stops a run. It asks for a second press, then stops after the scene being read, so that scene's spend buys a scene in the graph rather than being thrown away. Scenes already extracted keep their facts, and pressing Build graph later picks up the scenes still to do and bills only those.
 
 The button is gated on billable work. Once the graph is built and every scene's content matches its cached extraction, it disables, with the reason in its tooltip. When scenes have changed since the last build (an added or restored scene, a linked draft, or a switched model), it reads **Update graph** and its tooltip counts the changed scenes; only those are billed, since the rest replay from cache. An accepted ripple does not count: its judgement already applied the graph changes, so acceptance marks the scene's new content as extracted, provided the pre-edit content had been extracted under the same prompt and model.
 
@@ -177,7 +181,7 @@ A written answer also carries a grounding tag: "no ungrounded entities" when eve
 - **Ripple reports** lists every preview's stored report.
 - **Entities** and **Assertions** list the graph row by row, with evidence. Suspected duplicate entities lead the Entities list: same-type pairs whose names or recorded aliases overlap, each with **Merge** and **Keep separate**. Merging moves every fact onto the more-cited entity, keeps the other name as an alias so later mentions resolve to it, and records the decision on the Reports page; keeping them separate stops the suggestion.
 - **Batch actions.** Both lists have a checkbox per row and a **Select all matching** control that respects the search box, so a batch is scoped to what the list is showing. A floating bar names the count and offers the actions that apply to the selection: on Entities, **Merge selected** folds every ticked duplicate pair, **Keep selected separate** records them as distinct, and **Delete selected** removes entities after a confirm that names the assertions the cascade also removes; on Assertions, **Deactivate selected** takes rows out of the active graph while keeping them, and **Reactivate selected** returns deactivated rows to it (the Assertions list shows deactivated rows too, muted and marked `inactive`; a reactivation blocked by an active row already holding the same fact is skipped). Each button lights only for the selected rows it can act on.
-- **Traces** lists every model call, newest first: purpose, model, token counts, duration, and outcome, with the spend ledger in the header. Rows are application data, deleted with their script; the list has no batch delete, because removing a model-call row would move the spend totals. **Open in TraceAct viewer** launches (or reuses) the local viewer over Ripple's whole `data/traces` log in map view.
+- **Traces** tables every model call, newest first: time, outcome, purpose, model, script, tokens, cost, and duration, with the spend ledger in the header. Clicking a column header sorts by it, and clicking again reverses it; the same holds on Reports, Findings, Entities, and Assertions, where severity and status order by weight instead of alphabetically. Each table pages at 25, 50, or 100 rows, and the choice is remembered per page. Rows are application data, deleted with their script; the list has no batch delete, because removing a model-call row would move the spend totals. **Open in TraceAct viewer** launches (or reuses) the local viewer over Ripple's whole `data/traces` log in map view.
 
 | Trace outcome | Meaning |
 |---|---|

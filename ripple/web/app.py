@@ -861,13 +861,13 @@ def reports_page(request: Request, session: Session = Depends(get_session)):
         subtitle=f"{len(items)} report(s) · one per proposal",
         items=items,
         columns=[
-            {"key": "when", "label": "Generated"},
-            {"key": "severity", "label": "Severity", "numeric": True},
-            {"key": "summary", "label": "Report"},
-            {"key": "script", "label": "Script"},
-            {"key": "kind", "label": "Kind"},
-            {"key": "status", "label": "Status"},
-            {"key": "model", "label": "Model"},
+            {"key": "when", "label": "Generated", "width": "9%"},
+            {"key": "severity", "label": "Severity", "numeric": True, "width": "9%"},
+            {"key": "summary", "label": "Report", "width": "36%"},
+            {"key": "script", "label": "Script", "width": "13%"},
+            {"key": "kind", "label": "Kind", "width": "11%"},
+            {"key": "status", "label": "Status", "width": "10%"},
+            {"key": "model", "label": "Model", "width": "12%"},
         ],
         empty="No reports yet. Edit a line and press See ripple.",
         lock=None,
@@ -986,13 +986,13 @@ def findings_page(
         + " · warnings do not block a decision",
         items=items,
         columns=[
-            {"key": "when", "label": "Raised"},
-            {"key": "status", "label": "Status", "numeric": True},
-            {"key": "message", "label": "Finding"},
-            {"key": "script", "label": "Script"},
-            {"key": "type", "label": "Type"},
-            {"key": "severity", "label": "Severity", "numeric": True},
-            {"key": "actions", "label": ""},
+            {"key": "when", "label": "Raised", "width": "9%"},
+            {"key": "status", "label": "Status", "numeric": True, "width": "9%"},
+            {"key": "message", "label": "Finding", "width": "34%"},
+            {"key": "script", "label": "Script", "width": "12%"},
+            {"key": "type", "label": "Type", "width": "13%"},
+            {"key": "severity", "label": "Severity", "numeric": True, "width": "9%"},
+            {"key": "actions", "label": "", "width": "14%"},
         ],
         empty=(
             f"No findings for {chosen.title}." if chosen is not None
@@ -1031,6 +1031,13 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
             call.reasoning_tokens,
         )
 
+    def total_tokens(call: ModelCall) -> int:
+        return (
+            (call.input_tokens or 0)
+            + (call.output_tokens or 0)
+            + (call.reasoning_tokens or 0)
+        )
+
     def tokens_of(call: ModelCall) -> str:
         """The split behind the total: the columns carry the rest."""
         if call.input_tokens is None and call.output_tokens is None:
@@ -1066,7 +1073,7 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
                     "class": "tiny",
                 },
                 "tokens": {
-                    "text": f"{(call.input_tokens or 0) + (call.output_tokens or 0) + (call.reasoning_tokens or 0):,}",
+                    "text": f"{total_tokens(call):,}",
                     "sub": tokens_of(call),
                 },
                 "cost": {"text": pricing.display(cost_of(call)) or "—"},
@@ -1082,9 +1089,7 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
                 "purpose": call.purpose,
                 "model": call.model_id,
                 "script": script.title if script else "",
-                "tokens": (call.input_tokens or 0)
-                + (call.output_tokens or 0)
-                + (call.reasoning_tokens or 0),
+                "tokens": total_tokens(call),
                 "cost": cost_of(call) if cost_of(call) is not None else -1,
                 "duration": call.duration_ms or 0,
                 "outcome": call.outcome,
@@ -1128,14 +1133,14 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
         ),
         items=items,
         columns=[
-            {"key": "when", "label": "Time"},
-            {"key": "outcome", "label": "Outcome"},
-            {"key": "purpose", "label": "Purpose"},
-            {"key": "model", "label": "Model"},
-            {"key": "script", "label": "Script"},
-            {"key": "tokens", "label": "Tokens", "numeric": True},
-            {"key": "cost", "label": "Cost", "numeric": True},
-            {"key": "duration", "label": "Duration", "numeric": True},
+            {"key": "when", "label": "Time", "width": "9%"},
+            {"key": "outcome", "label": "Outcome", "width": "11%"},
+            {"key": "purpose", "label": "Purpose", "width": "20%"},
+            {"key": "model", "label": "Model", "width": "14%"},
+            {"key": "script", "label": "Script", "width": "13%"},
+            {"key": "tokens", "label": "Tokens", "numeric": True, "width": "15%"},
+            {"key": "cost", "label": "Cost", "numeric": True, "width": "9%"},
+            {"key": "duration", "label": "Duration", "numeric": True, "width": "9%"},
         ],
         empty="No model calls recorded yet. Every call is recorded here, "
         "successes and refusals alike.",
@@ -1292,18 +1297,36 @@ def entities_page(request: Request, session: Session = Depends(get_session)):
                 {
                     "id": f"{pair.keep.id}:{pair.absorb.id}",
                     "batch_kinds": ["merge", "keep_separate"],
-                    "tag": "duplicate?",
-                    "tag_class": "duplicate",
-                    "title": (
-                        f"{pair.keep.canonical_name} and "
-                        f"{pair.absorb.canonical_name}"
-                    ),
-                    "sub": (
-                        f"{script.title} · {pair.keep.entity_type} · "
-                        f"{pair.reason}; merging keeps "
-                        f"{pair.keep.canonical_name} and records the other "
-                        "name as its alias"
-                    ),
+                    "cells": {
+                        "type": {
+                            "text": "duplicate?",
+                            "tag": True,
+                            "tag_class": "duplicate",
+                        },
+                        "name": {
+                            "text": (
+                                f"{pair.keep.canonical_name} and "
+                                f"{pair.absorb.canonical_name}"
+                            ),
+                            "sub": (
+                                f"{pair.reason}; merging keeps "
+                                f"{pair.keep.canonical_name} and records the "
+                                "other name as its alias"
+                            ),
+                        },
+                        "script": {"text": script.title, "class": "tiny"},
+                        "aliases": {"text": "", "class": "tiny muted"},
+                        "uses": {"text": ""},
+                    },
+                    "sort": {
+                        "type": "duplicate?",
+                        "name": pair.keep.canonical_name,
+                        "script": script.title,
+                        "aliases": "",
+                        # Suspected duplicates lead the list however it is
+                        # sorted by use count, since they need a decision.
+                        "uses": -1,
+                    },
                     "actions": [
                         {
                             "url": (
@@ -1342,14 +1365,27 @@ def entities_page(request: Request, session: Session = Depends(get_session)):
                 "id": str(entity.id),
                 "batch_kinds": ["delete"],
                 "assertions": uses,
-                "tag": entity.entity_type.replace("_", " "),
-                "tag_class": entity.entity_type,
-                "title": entity.canonical_name,
-                "sub": f"{script.title}"
-                + (
-                    f" · also: {', '.join(sorted(set(aliases))[:4])}" if aliases else ""
-                ),
-                "right": f"{uses} assertions",
+                "cells": {
+                    "type": {
+                        "text": entity.entity_type.replace("_", " "),
+                        "tag": True,
+                        "tag_class": entity.entity_type,
+                    },
+                    "name": {"text": entity.canonical_name},
+                    "script": {"text": script.title, "class": "tiny"},
+                    "aliases": {
+                        "text": ", ".join(sorted(set(aliases))[:4]) or "—",
+                        "class": "tiny muted",
+                    },
+                    "uses": {"text": str(uses)},
+                },
+                "sort": {
+                    "type": entity.entity_type,
+                    "name": entity.canonical_name,
+                    "script": script.title,
+                    "aliases": str(len(set(aliases))),
+                    "uses": uses,
+                },
             }
         )
     return _list_page(
@@ -1359,6 +1395,14 @@ def entities_page(request: Request, session: Session = Depends(get_session)):
         active="entities",
         subtitle=f"{len(items)} entity(s) across every script",
         items=items,
+        columns=[
+            {"key": "type", "label": "Type", "width": "11%"},
+            {"key": "name", "label": "Name", "width": "22%"},
+            {"key": "script", "label": "Script", "width": "14%"},
+            {"key": "aliases", "label": "Also known as", "width": "26%"},
+            {"key": "uses", "label": "Assertions", "numeric": True, "width": "11%"},
+            {"key": "actions", "label": "", "width": "16%"},
+        ],
         empty="No entities yet.",
         lock=_graph_lock(session),
         batch_actions=[
@@ -1419,34 +1463,45 @@ def assertions_page(request: Request, session: Session = Depends(get_session)):
             obj = labels.get(row.object_entity_id or row.object_scene_id, "?")
             return subject, obj
 
-        for row in active_rows[:500]:
+        def _row(row: Assertion, active: bool, script=script) -> dict:
             subject, obj = _label(row)
-            items.append(
-                {
-                    "id": str(row.id),
-                    "batch_kinds": ["deactivate"],
-                    "tag": row.predicate.replace("_", " "),
-                    "tag_class": "location",
-                    "title": f"{subject} → {obj}",
-                    "sub": f"{script.title} · {row.provenance}"
-                    + (f" · {row.model_id}" if row.model_id else ""),
-                    "right": f"{row.confidence:.2f}",
-                }
-            )
-        for row in inactive_rows[:200]:
-            subject, obj = _label(row)
-            items.append(
-                {
-                    "id": str(row.id),
-                    "batch_kinds": ["reactivate"],
-                    "tag": row.predicate.replace("_", " "),
-                    "tag_class": "off",
-                    "title": f"{subject} → {obj}",
-                    "sub": f"inactive · {script.title} · {row.provenance}"
-                    + (f" · {row.model_id}" if row.model_id else ""),
-                    "right": f"{row.confidence:.2f}",
-                }
-            )
+            return {
+                "id": str(row.id),
+                "batch_kinds": ["deactivate" if active else "reactivate"],
+                "cells": {
+                    "state": {
+                        "text": "active" if active else "inactive",
+                        "tag": True,
+                        "tag_class": "set_design" if active else "off",
+                    },
+                    "predicate": {
+                        "text": row.predicate.replace("_", " "),
+                        "tag": True,
+                        "tag_class": "location" if active else "off",
+                    },
+                    "claim": {"text": f"{subject} → {obj}"},
+                    "script": {"text": script.title, "class": "tiny"},
+                    "source": {
+                        "text": row.provenance,
+                        "sub": row.model_id or None,
+                        "class": "tiny muted",
+                    },
+                    "confidence": {"text": f"{row.confidence:.2f}"},
+                },
+                "sort": {
+                    # Active first, so a sort by state opens on the graph as
+                    # it stands.
+                    "state": 1 if active else 0,
+                    "predicate": row.predicate,
+                    "claim": f"{subject} {obj}",
+                    "script": script.title,
+                    "source": row.provenance,
+                    "confidence": row.confidence,
+                },
+            }
+
+        items.extend(_row(row, True) for row in active_rows[:500])
+        items.extend(_row(row, False) for row in inactive_rows[:200])
     return _list_page(
         request,
         session,
@@ -1456,6 +1511,14 @@ def assertions_page(request: Request, session: Session = Depends(get_session)):
         + (f", {inactive_total} inactive" if inactive_total else "")
         + " assertion(s)",
         items=items,
+        columns=[
+            {"key": "state", "label": "State", "numeric": True, "width": "9%"},
+            {"key": "predicate", "label": "Predicate", "width": "13%"},
+            {"key": "claim", "label": "Assertion", "width": "28%"},
+            {"key": "script", "label": "Script", "width": "14%"},
+            {"key": "source", "label": "Source", "width": "23%"},
+            {"key": "confidence", "label": "Confidence", "numeric": True, "width": "13%"},
+        ],
         empty="No assertions yet.",
         lock=_graph_lock(session),
         batch_actions=[
