@@ -254,6 +254,7 @@ if (build) {
       `${Math.round((done / Math.max(progress.total, 1)) * 100)}%`;
     spend.textContent =
       `${(progress.assertions || 0).toLocaleString()} assertions extracted`
+      + ` · ${(progress.tokens || 0).toLocaleString()} tokens`
       + (progress.cost ? ` · ${progress.cost}` : '');
     if (done) {
       const perScene = (performance.now() - started) / 1000 / done;

@@ -777,6 +777,9 @@ async function driveRun(runId) {
       `${Math.round((done / Math.max(progress.total, 1)) * 100)}%`;
     count.textContent =
       `${done} of ${progress.total} · ${progress.failed} failed`
+      + (progress.assertions
+        ? ` · ${progress.assertions.toLocaleString()} assertions`
+        : '')
       + spendLabel(progress);
     if (progress.status === 'cancelled') break;
     if (progress.pending === 0 && !progress.working) break;
