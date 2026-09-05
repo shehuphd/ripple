@@ -128,7 +128,10 @@ class TestConfiguration:
     def test_the_judgement_output_cap_matches_extraction(self):
         from ripple.extraction.service import MAX_OUTPUT_TOKENS as EXTRACT_CAP
 
-        assert MAX_OUTPUT_TOKENS == EXTRACT_CAP == 8192
+        # Hidden reasoning bills against the same ceiling as the answer, and
+        # a full stage-play act costs the model thousands of thinking tokens
+        # before it writes, so both caps leave room for both.
+        assert MAX_OUTPUT_TOKENS == EXTRACT_CAP == 24576
 
     def test_tracing_is_off_by_default_in_this_test_run(self, tmp_path, monkeypatch):
         """The autouse fixture must actually disable durable trace writing."""

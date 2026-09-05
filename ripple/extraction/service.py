@@ -77,8 +77,11 @@ logger = logging.getLogger(__name__)
 # One retry. A second identical call to a model that produced malformed output
 # usually produces malformed output again, and each attempt costs money.
 MAX_ATTEMPTS = 2
-# Capped so one pathological scene cannot consume the run's budget.
-MAX_OUTPUT_TOKENS = 8192
+# Capped so one pathological scene cannot consume the run's budget. Hidden
+# reasoning bills against the same ceiling as the answer, and on a full
+# stage-play act the model spends 5-8k tokens thinking before it writes, so
+# the ceiling leaves room for both.
+MAX_OUTPUT_TOKENS = 24576
 
 
 @dataclass(frozen=True)

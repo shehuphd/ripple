@@ -2205,7 +2205,7 @@ class TestPreviewFailureSurface:
         # short of the cap rather than mis-blaming the model's own limit.
         assert "fake-judge" in body["message"]
         assert "1024" in body["message"]
-        assert "8192" in body["message"]
+        assert "24576" in body["message"]
         assert "max_tokens" in body["message"]
         assert "reason before answering" in body["message"]
         # The trace id field is always present; with tracing off it is null.

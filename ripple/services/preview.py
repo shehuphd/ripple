@@ -94,7 +94,7 @@ RETRYABLE_CODES = {"rate_limited", "provider_unavailable", "timeout", "network_e
 # gemini-flash to spend it before finishing a verdict list. Only tokens
 # produced are billed, so the headroom costs nothing on models that
 # answer within it.
-MAX_OUTPUT_TOKENS = 8192
+MAX_OUTPUT_TOKENS = 24576
 
 
 class PreviewRefused(Exception):
