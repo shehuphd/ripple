@@ -110,13 +110,27 @@
         <div class="tscroll">
         <table class="scripts spend-table">
           <thead><tr>
-            <th>When</th><th>Action</th><th>Script</th><th>Model</th>
-            <th class="num">Calls</th><th class="num">Tokens</th>
-            <th class="num">Cost</th>
+            <th data-sort="when" aria-sort="descending">
+              <button type="button" class="sortbtn">When</button></th>
+            <th data-sort="action"><button type="button" class="sortbtn">Action</button></th>
+            <th data-sort="script"><button type="button" class="sortbtn">Script</button></th>
+            <th data-sort="model"><button type="button" class="sortbtn">Model</button></th>
+            <th class="num" data-sort="calls">
+              <button type="button" class="sortbtn">Calls</button></th>
+            <th class="num" data-sort="tokens">
+              <button type="button" class="sortbtn">Tokens</button></th>
+            <th class="num" data-sort="cost">
+              <button type="button" class="sortbtn">Cost</button></th>
           </tr></thead>
           <tbody id="spend-rows">
             {% for row in spend_actions %}
-            <tr>
+            <tr data-when="{{ row.when or '' }}"
+                data-action="{{ row.action }}"
+                data-script="{{ row.script }}"
+                data-model="{{ row.model }}"
+                data-calls="{{ row.call_count }}"
+                data-tokens="{{ row.tokens }}"
+                data-cost="{{ row.cost_usd if row.cost_usd is not none else -1 }}">
               <td class="tiny muted num">{{ row.when[:16].replace('T', ' ') if row.when }}</td>
               <td>{{ row.action }}
                 {% if row.detail %}<div class="tiny muted">{{ row.detail }}</div>{% endif %}</td>
@@ -132,6 +146,19 @@
         </div>
         <div class="tiny muted hide" id="spend-nomatch">
           No action matches that search.</div>
+        <div class="spend-foot" id="spend-foot">
+          <label class="tiny muted">Per page
+            <select class="field" id="spend-size">
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select></label>
+          <span class="tiny muted num" id="spend-range"></span>
+          <span class="spend-pager">
+            <button class="btn" id="spend-prev" type="button">Previous</button>
+            <button class="btn" id="spend-next" type="button">Next</button>
+          </span>
+        </div>
         {% else %}
         <div class="tiny muted">No model call has been recorded yet.</div>
         {% endif %}

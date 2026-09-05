@@ -234,24 +234,97 @@ document.querySelectorAll('input[name="landing"]').forEach((radio) => {
   });
 });
 
-/* Instant search over the billable-actions table. The rows are already in the
-   page, so filtering is local: no request, no reload. */
+/* The billable-actions table: search, sort, and paging, all over the rows
+   already in the page. No request, no reload. */
 const spendSearch = document.getElementById('spend-search');
 if (spendSearch) {
-  const spendRows = [...document.querySelectorAll('#spend-rows tr')];
+  const allRows = [...document.querySelectorAll('#spend-rows tr')];
+  const body = document.getElementById('spend-rows');
   const noMatch = document.getElementById('spend-nomatch');
   const count = document.getElementById('spend-count');
-  spendSearch.addEventListener('input', () => {
+  const range = document.getElementById('spend-range');
+  const sizeField = document.getElementById('spend-size');
+  const prev = document.getElementById('spend-prev');
+  const next = document.getElementById('spend-next');
+  const headers = [...document.querySelectorAll('.spend-table th[data-sort]')];
+  const NUMERIC = new Set(['calls', 'tokens', 'cost']);
+
+  let sortKey = 'when';
+  let ascending = false;
+  let page = 0;
+  let size = 25;
+  try {
+    const saved = parseInt(localStorage.getItem('spend-page-size'), 10);
+    if ([25, 50, 100].includes(saved)) size = saved;
+  } catch (e) { /* private mode */ }
+  sizeField.value = String(size);
+
+  const value = (row, key) => (NUMERIC.has(key)
+    ? Number(row.dataset[key] || 0)
+    : (row.dataset[key] || '').toLowerCase());
+
+  function draw() {
     const needle = spendSearch.value.trim().toLowerCase();
-    let shown = 0;
-    spendRows.forEach((row) => {
-      const hit = !needle || row.textContent.toLowerCase().includes(needle);
-      row.style.display = hit ? '' : 'none';
-      if (hit) shown += 1;
+    const matched = allRows.filter(
+      (row) => !needle || row.textContent.toLowerCase().includes(needle)
+    );
+    matched.sort((a, b) => {
+      const left = value(a, sortKey);
+      const right = value(b, sortKey);
+      if (left === right) return 0;
+      return (left < right ? -1 : 1) * (ascending ? 1 : -1);
     });
-    noMatch.classList.toggle('hide', shown > 0);
+    const pages = Math.max(1, Math.ceil(matched.length / size));
+    if (page >= pages) page = pages - 1;
+    const from = page * size;
+    const shown = matched.slice(from, from + size);
+    // Reordering rows in place keeps one DOM node per action, so a sort
+    // never rebuilds the table from strings the page has already parsed.
+    allRows.forEach((row) => { row.style.display = 'none'; });
+    shown.forEach((row) => { row.style.display = ''; body.appendChild(row); });
+
+    noMatch.classList.toggle('hide', matched.length > 0);
     count.textContent = needle
-      ? `${shown} of ${spendRows.length} action(s)`
-      : `${spendRows.length} action(s)`;
+      ? `${matched.length} of ${allRows.length} action(s)`
+      : `${allRows.length} action(s)`;
+    range.textContent = matched.length
+      ? `${from + 1}–${from + shown.length} of ${matched.length}`
+      : '';
+    prev.disabled = page === 0;
+    next.disabled = page >= pages - 1;
+    document.getElementById('spend-foot').classList.toggle(
+      'hide', matched.length <= size && page === 0
+    );
+    headers.forEach((header) => {
+      const on = header.dataset.sort === sortKey;
+      header.setAttribute(
+        'aria-sort', on ? (ascending ? 'ascending' : 'descending') : 'none'
+      );
+      header.classList.toggle('sorted', on);
+      header.classList.toggle('asc', on && ascending);
+    });
+  }
+
+  spendSearch.addEventListener('input', () => { page = 0; draw(); });
+  headers.forEach((header) => {
+    header.querySelector('.sortbtn').addEventListener('click', () => {
+      const key = header.dataset.sort;
+      // A new column starts on the reading most people want first: biggest
+      // number, earliest word, newest date.
+      if (key === sortKey) ascending = !ascending;
+      else { sortKey = key; ascending = !NUMERIC.has(key) && key !== 'when'; }
+      page = 0;
+      draw();
+    });
   });
+  sizeField.addEventListener('change', () => {
+    size = parseInt(sizeField.value, 10) || 25;
+    page = 0;
+    try { localStorage.setItem('spend-page-size', String(size)); }
+    catch (e) { /* private mode */ }
+    draw();
+  });
+  prev.addEventListener('click', () => { page -= 1; draw(); });
+  next.addEventListener('click', () => { page += 1; draw(); });
+  draw();
 }

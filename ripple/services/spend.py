@@ -249,6 +249,9 @@ def actions(session: Session) -> list[dict]:
                 "call_count": len(group["calls"]),
                 "tokens": tokens,
                 "cost": pricing.display(cost),
+                # The number behind the display string, so the table can sort
+                # on cost without parsing "$0.0050" back out of the cell.
+                "cost_usd": cost,
             }
         )
     rows.sort(key=lambda row: row["when"] or "", reverse=True)

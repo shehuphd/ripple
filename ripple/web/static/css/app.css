@@ -202,14 +202,25 @@ table.scripts tbody tr:hover{background:var(--raised)}
 table.scripts tbody tr.on{background:#15242b;font-weight:600}
 /* The billable-actions ledger: a long table inside a settings card, so it
    scrolls in its own box with the header staying put. */
-.tscroll{max-height:420px;overflow:auto;border:.5px solid var(--bd);
+/* Paging bounds the table's length, so it grows with the page instead of
+   scrolling inside its own box, and one scrollbar moves the settings pane.
+   The horizontal rule is for a narrow window, where the columns win. */
+.tscroll{overflow-x:auto;border:.5px solid var(--bd);
   border-radius:9px;margin-top:11px}
 .tscroll table.scripts{border:0;border-radius:0}
-table.spend-table th{position:sticky;top:0;background:var(--card);z-index:1}
 table.spend-table td{padding:10px 14px;vertical-align:top}
 table.spend-table tbody tr{cursor:default}
 table.spend-table th.num, table.spend-table td.num{text-align:right}
 #spend-search{width:100%;margin-top:11px}
+.sortbtn{background:none;border:0;padding:0;font:inherit;color:inherit;
+  cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.sortbtn:hover{color:var(--t1)}
+table.spend-table th.sorted .sortbtn{color:var(--t1)}
+table.spend-table th.sorted .sortbtn::after{content:"\2193";font-size:10px}
+table.spend-table th.sorted.asc .sortbtn::after{content:"\2191"}
+.spend-foot{display:flex;align-items:center;gap:12px;margin-top:11px}
+.spend-pager{margin-left:auto;display:flex;gap:7px}
+#spend-size{padding:4px 7px;margin-left:6px}
 table.scripts .title{font-family:var(--serif);font-size:17px;display:flex;
   align-items:center;gap:11px}
 table.scripts .title .ic{color:var(--t4);font-size:13px}

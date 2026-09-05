@@ -135,6 +135,14 @@ class TestBillableActions:
         rows = actions(session)
         assert [row["action"] for row in rows] == ["Ask the graph", "Ask the graph"]
 
+    def test_a_row_carries_the_cost_as_a_number_for_sorting(self, session):
+        from datetime import datetime
+
+        self.stamp(session, "query", datetime(2026, 9, 1, 10, 0))
+        row = actions(session)[0]
+        assert "cost_usd" in row
+        assert row["cost_usd"] is None or isinstance(row["cost_usd"], float)
+
     def test_an_empty_ledger_has_no_actions(self, session):
         assert actions(session) == []
 

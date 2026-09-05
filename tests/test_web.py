@@ -2404,3 +2404,8 @@ class TestSpendTable:
         body = client.get("/settings").text
         assert "Ask the graph" in body
         assert 'id="spend-search"' in body
+        # Sorting and paging read the row's own values, so the numbers the
+        # table sorts on have to reach the markup.
+        assert 'data-sort="tokens"' in body
+        assert 'id="spend-size"' in body
+        assert "data-tokens=" in body
