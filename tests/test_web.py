@@ -2409,3 +2409,21 @@ class TestSpendTable:
         assert 'data-sort="tokens"' in body
         assert 'id="spend-size"' in body
         assert "data-tokens=" in body
+
+
+class TestTracesSorting:
+    def test_the_traces_page_offers_a_sort_control(self, client, judged):
+        script_id = _first_script(client)
+        client.post(f"/api/scripts/{script_id}/ask", data={"question": "Who?"})
+        body = client.get("/traces").text
+        assert 'id="list-sort"' in body
+        assert 'id="pager-size"' in body
+        # Sorting reads the row's own values, so a cost sorts as a number.
+        assert "data-sort-cost=" in body
+        assert "data-sort-tokens=" in body
+        assert 'data-numeric="1"' in body
+
+    def test_a_list_without_sort_values_keeps_its_plain_pager(self, client):
+        body = client.get("/entities").text
+        assert 'id="pager-size"' in body
+        assert 'id="list-sort"' not in body

@@ -944,8 +944,20 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
         select(ModelCall, Script)
         .outerjoin(Script, ModelCall.script_id == Script.id)
         .order_by(ModelCall.created_at.desc())
-        .limit(200)
+        # The page sorts and pages in the browser, so the window has to be
+        # wide enough that a sort by cost means something. Older calls than
+        # this stay in the database and in the trace files.
+        .limit(1000)
     ).all()
+
+    def cost_of(call: ModelCall) -> float | None:
+        return pricing.cost_usd(
+            "google",
+            call.model_id,
+            call.input_tokens,
+            call.output_tokens,
+            call.reasoning_tokens,
+        )
 
     def tokens_of(call: ModelCall) -> str:
         if call.input_tokens is None and call.output_tokens is None:
@@ -953,15 +965,7 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
         counts = f"{call.input_tokens or 0} in · {call.output_tokens or 0} out"
         if call.reasoning_tokens:
             counts += f" · {call.reasoning_tokens} reasoning"
-        cost = pricing.display(
-            pricing.cost_usd(
-                "google",
-                call.model_id,
-                call.input_tokens,
-                call.output_tokens,
-                call.reasoning_tokens,
-            )
-        )
+        cost = pricing.display(cost_of(call))
         if cost:
             counts += f" · {cost}"
         return counts
@@ -987,6 +991,20 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
                 if part
             ),
             "right": call.created_at.strftime("%d %b %H:%M"),
+            # What the sort control orders on, kept apart from the display
+            # strings so a cost sorts as a number and a date as a date.
+            "sort": {
+                "when": call.created_at.isoformat(),
+                "purpose": call.purpose,
+                "model": call.model_id,
+                "script": script.title if script else "",
+                "tokens": (call.input_tokens or 0)
+                + (call.output_tokens or 0)
+                + (call.reasoning_tokens or 0),
+                "cost": cost_of(call) if cost_of(call) is not None else -1,
+                "duration": call.duration_ms or 0,
+                "outcome": call.outcome,
+            },
         }
         for call, script in rows
     ]
@@ -1025,6 +1043,16 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
             + f" · {budget_note}"
         ),
         items=items,
+        sorts=[
+            {"key": "when", "label": "Time", "numeric": False},
+            {"key": "purpose", "label": "Purpose", "numeric": False},
+            {"key": "model", "label": "Model", "numeric": False},
+            {"key": "script", "label": "Script", "numeric": False},
+            {"key": "tokens", "label": "Tokens", "numeric": True},
+            {"key": "cost", "label": "Cost", "numeric": True},
+            {"key": "duration", "label": "Duration", "numeric": True},
+            {"key": "outcome", "label": "Outcome", "numeric": False},
+        ],
         empty="No model calls recorded yet. Every call is recorded here, "
         "successes and refusals alike.",
         lock=None,

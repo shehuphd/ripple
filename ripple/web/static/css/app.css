@@ -220,6 +220,10 @@ table.spend-table th.sorted .sortbtn::after{content:"\2193";font-size:10px}
 table.spend-table th.sorted.asc .sortbtn::after{content:"\2191"}
 .spend-foot{display:flex;align-items:center;gap:12px;margin-top:11px}
 .spend-pager{margin-left:auto;display:flex;gap:7px}
+.listsort{display:flex;align-items:center;gap:6px;margin-left:8px}
+.listsort .field{padding:5px 8px}
+#pager-size{padding:4px 7px;margin-left:6px}
+.pager label{display:flex;align-items:center;margin-right:auto}
 #spend-size{padding:4px 7px;margin-left:6px}
 table.scripts .title{font-family:var(--serif);font-size:17px;display:flex;
   align-items:center;gap:11px}

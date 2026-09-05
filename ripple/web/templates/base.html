@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/static/css/ripple-tokens.css?v={{ asset_version }}">
 <link rel="stylesheet" href="/static/css/app.css?v={{ asset_version }}">
 </head>
-<body>
+<body{% if active %} data-list="{{ active }}"{% endif %}>
 <div class="win" id="shell">
   <aside class="side">
     <div class="side-top">
