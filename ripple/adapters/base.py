@@ -21,7 +21,11 @@ from typing import Protocol, runtime_checkable
 # not a screenplay long before it reaches a parser.
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_SCENES = 400
-MAX_UNITS_PER_SCENE = 500
+# A stage play's acts are its scenes, and a full act of Chekhov or Wilde runs
+# to 1,500 units, so the ceiling is sized for an act rather than a screenplay
+# scene. It exists to bound a pathological parse (a mailing-list archive read
+# as one scene), not to trim literature.
+MAX_UNITS_PER_SCENE = 2000
 
 
 class UnitType(str, Enum):

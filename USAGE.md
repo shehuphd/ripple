@@ -238,6 +238,10 @@ Final Draft XML is parsed through `defusedxml`; external entities and entity exp
 
 ## Tracing and debugging
 
+### Import outcomes
+
+An import ends in one of four outcomes, shown on its library row. **Accepted** parsed with no concerns. **Accepted with warnings** parsed with notes you may want to read (the row's tooltip carries them). **Needs review** means the importer wants a human to check the parse before a graph is built on it: the text is OCR-derived, the structure gave a weak screenplay signal, or a size ceiling touched the file. Opening the script shows a banner naming each warning, and **Mark reviewed** closes the review once you've looked; the warnings stay on the library row. **Rejected** did not import, with the reason in the upload banner.
+
 Meaningful actions (import, extraction, preview, accept, undo, query, draft linking, renames) are traced with TraceAct to `data/traces/traces.jsonl`, full payloads included: every model call's complete prompt, reply, and token usage (answer, hidden reasoning, input), every preview's edits, every query's question and answer. The traces are the debugging record; when something fails, its trace says why. They stay on the local machine, out of version control, and credential-shaped values are still caught by value-pattern redaction. The Traces page remains the application's own model-call audit; the reader's page decisions also mirror to the browser console, where the traceact-browser extension can capture them.
 
 In the browser, `ripple.debug()` in the console dumps the frontend decision log (API outcomes, preview results, draft transitions, settings changes), `ripple.debug('preview')` filters it, and `ripple.debug.table()` renders it as a table.

@@ -30,7 +30,13 @@
       <td class="num">{{ row.pages }}</td>
       <td class="num">{{ row.scenes }}</td>
       <td class="num">{{ row.runtime }}</td>
-      <td><span class="status">{{ row.outcome_label }}</span></td>
+      <td><span class="status"
+          {% if row.warnings %}data-tip="{{ row.warnings|join(' ') }}"{% endif %}
+          >{{ row.outcome_label }}</span>
+        {% if row.warnings %}
+        <div class="tiny muted">{{ row.warnings|length }} import
+          warning{{ '' if row.warnings|length == 1 else 's' }}</div>
+        {% endif %}</td>
       <td style="text-align:right">
         <button class="btn sm danger" data-delete="{{ row.id }}">Delete</button></td>
     </tr>

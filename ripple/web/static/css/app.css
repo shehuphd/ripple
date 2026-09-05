@@ -205,6 +205,11 @@ table.scripts tbody tr.on{background:#15242b;font-weight:600}
 /* Paging bounds the table's length, so it grows with the page instead of
    scrolling inside its own box, and one scrollbar moves the settings pane.
    The horizontal rule is for a narrow window, where the columns win. */
+/* The import-review banner: amber-edged so it reads as the reader's one
+   attention item, matching the Build graph gleam's colour family. */
+.review-banner{border-color:color-mix(in srgb, var(--amber) 45%, var(--bd))}
+.review-banner strong{color:var(--amber)}
+.review-banner li{margin-top:3px;color:var(--t2)}
 .tscroll{overflow-x:auto;border:.5px solid var(--bd);
   border-radius:9px;margin-top:11px}
 .tscroll table.scripts{border:0;border-radius:0}

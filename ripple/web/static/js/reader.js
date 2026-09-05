@@ -1014,3 +1014,23 @@ if (sceneSearch) {
     sceneNoMatch.classList.toggle('hide', shown > 0 || !sceneRows.length);
   });
 }
+
+/* A needs_review import shows its stored warnings until a human closes them. */
+const markReviewed = document.getElementById('mark-reviewed');
+if (markReviewed) {
+  markReviewed.addEventListener('click', async () => {
+    const scriptId = window.location.pathname.split('/').pop();
+    markReviewed.disabled = true;
+    try {
+      await api(`/api/scripts/${scriptId}/mark-reviewed`, {
+        method: 'POST', body: form({}),
+      });
+      ripple.trace('import.marked_reviewed', { script: scriptId });
+      document.getElementById('review-banner').remove();
+      toast('Marked reviewed. The warnings stay on the library row.');
+    } catch (error) {
+      toast(error.message, true);
+      markReviewed.disabled = false;
+    }
+  });
+}

@@ -9,8 +9,7 @@ from __future__ import annotations
 import pytest
 
 from ripple.adapters import DetectedFormat, ImportOutcome, UnitType, import_screenplay
-from ripple.adapters.base import SourcePayload
-from ripple.adapters.base import parse_character_cue
+from ripple.adapters.base import SourcePayload, parse_character_cue
 from ripple.adapters.detect import detect_format
 from ripple.adapters.stageplay import StagePlayAdapter
 
@@ -452,6 +451,15 @@ class TestCrossFormat:
         second = import_screenplay(fountain_bytes, "b.fountain")
         assert first.content_hash == second.content_hash
         assert len(first.content_hash) == 64
+
+
+class TestUnitCap:
+    def test_a_full_act_fits_under_the_unit_ceiling(self):
+        """A stage play's acts are its scenes; the ceiling is sized for an
+        act of Chekhov (1,475 units in the corpus), not a screenplay scene."""
+        from ripple.adapters.base import MAX_UNITS_PER_SCENE
+
+        assert MAX_UNITS_PER_SCENE >= 1500
 
 
 class TestStagePlayFrontMatter:

@@ -2475,3 +2475,58 @@ class TestSortableTables:
         body = client.get("/reports").text
         assert 'class="scripts listtable"' not in body
         assert "No reports yet." in body
+
+
+class TestNeedsReviewSurfacing:
+    def _flag(self, client, script_id):
+        """Put a stored warning on a script and mark it needs_review."""
+        import os
+
+        from ripple.db.models import Import, Script
+        from ripple.db.session import create_db_engine, session_factory
+
+        engine = create_db_engine(os.environ["DATABASE_URL"])
+        with session_factory(engine)() as db:
+            import uuid as _uuid_mod
+
+            script = db.get(Script, _uuid_mod.UUID(script_id))
+            script.import_status = "needs_review"
+            record = db.query(Import).filter_by(script_id=script.id).first()
+            record.warnings_json = [
+                {"code": "unit_limit", "message": "Scene 1 was truncated."}
+            ]
+            db.commit()
+
+    def test_the_reader_names_what_to_review(self, client):
+        script_id = _first_script(client)
+        self._flag(client, script_id)
+        body = client.get(f"/scripts/{script_id}").text
+        assert "This import needs a review" in body
+        assert "Scene 1 was truncated." in body
+        assert 'id="mark-reviewed"' in body
+
+    def test_the_library_row_carries_the_warnings(self, client):
+        script_id = _first_script(client)
+        self._flag(client, script_id)
+        body = client.get("/").text
+        assert "1 import" in body
+        assert "Scene 1 was truncated." in body
+
+    def test_marking_reviewed_closes_the_queue_and_keeps_the_warnings(
+        self, client
+    ):
+        script_id = _first_script(client)
+        self._flag(client, script_id)
+        response = client.post(f"/api/scripts/{script_id}/mark-reviewed")
+        assert response.status_code == 200
+        assert response.json()["import_status"] == "accepted_with_warnings"
+        reader_body = client.get(f"/scripts/{script_id}").text
+        assert "This import needs a review" not in reader_body
+        assert "Scene 1 was truncated." in client.get("/").text
+        # A second press has no queue entry to close.
+        assert client.post(f"/api/scripts/{script_id}/mark-reviewed").status_code == 400
+
+    def test_an_accepted_script_shows_no_banner(self, client):
+        script_id = _first_script(client)
+        body = client.get(f"/scripts/{script_id}").text
+        assert "This import needs a review" not in body

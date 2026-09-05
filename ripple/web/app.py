@@ -472,6 +472,11 @@ def library(
                 "outcome_label": OUTCOME_LABELS.get(
                     script.import_status, script.import_status
                 ),
+                "warnings": [
+                    warning.get("message", "")
+                    for warning in (record.warnings_json or [])
+                    if warning.get("message")
+                ] if record else [],
             }
         )
 
@@ -670,6 +675,24 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
         .where(Assertion.script_id == script.id, Assertion.active.is_(True))
         .limit(1)
     ) is not None
+    # "Needs review" without the reasons on screen is a label pointing at
+    # the database; the banner puts the stored warnings where the review
+    # happens.
+    review_warnings = []
+    if script.import_status == "needs_review":
+        record = session.scalar(
+            select(Import).where(Import.script_id == script.id).limit(1)
+        )
+        review_warnings = [
+            warning.get("message", "")
+            for warning in (record.warnings_json or [])
+            if warning.get("message")
+        ] if record else []
+        if not review_warnings:
+            review_warnings = [
+                "The importer was not confident in this parse; check the "
+                "scene list against the source."
+            ]
     return templates.TemplateResponse(
         request,
         "reader.html",
@@ -681,6 +704,7 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
             "model": model,
             "pending_scenes": pending,
             "has_graph": has_graph,
+            "review_warnings": review_warnings,
             "counts": sidebar_counts(session),
         },
     )
@@ -2411,6 +2435,23 @@ def cancel_extraction(run_id: str, session: Session = Depends(get_session)):
     except ValueError:
         raise HTTPException(404, "No such extraction run") from None
     return progress(session, _uuid(run_id)).__dict__
+
+
+@app.post("/api/scripts/{script_id}/mark-reviewed")
+def mark_reviewed(script_id: str, session: Session = Depends(get_session)):
+    """Close a needs_review import after a human has looked.
+
+    The script's status becomes accepted_with_warnings, so the warnings stay
+    visible in the library without holding the review queue open; the Import
+    record keeps the original outcome for the audit.
+    """
+    script = session.get(Script, _uuid(script_id))
+    if script is None:
+        raise HTTPException(404, "No such script")
+    if script.import_status != "needs_review":
+        raise HTTPException(400, "This script is not waiting on a review.")
+    script.import_status = "accepted_with_warnings"
+    return {"import_status": script.import_status}
 
 
 @app.get("/api/extract/{run_id}/progress")
