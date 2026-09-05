@@ -2624,3 +2624,37 @@ class TestBackgroundExtraction:
             assert run.status == "cancelled"
             _roll_up(db, run)
             assert run.status == "cancelled"
+
+
+class TestAgentSettingsSurface:
+    def test_the_interface_tab_carries_the_ask_ripple_controls(self, client):
+        body = client.get("/settings").text
+        assert "Ask Ripple" in body
+        assert 'data-agent="agent_draft_around_cut"' in body
+        assert 'data-agent="agent_show_plan"' in body
+        assert 'data-agent="agent_keep_conversations"' in body
+        assert 'id="agent-ceiling"' in body
+        # The rail names the models tab for what it configures.
+        assert ">\n      Models</button>" in body or "Models</button>" in body
+
+    def test_a_setting_persists_across_a_reload(self, client):
+        response = client.post(
+            "/api/settings/agent",
+            data={"key": "agent_draft_around_cut", "value": "off"},
+        )
+        assert response.status_code == 200
+        assert response.json()["draft_around_cut"] is False
+        body = client.get("/settings").text
+        assert 'aria-pressed="false"' in body
+
+    def test_a_refused_value_says_why(self, client):
+        response = client.post(
+            "/api/settings/agent",
+            data={"key": "agent_tool_ceiling", "value": "7"},
+        )
+        assert response.status_code == 400
+        assert "6, 12, 24, 48" in response.json()["detail"]
+
+    def test_no_light_theme_control_ships(self, client):
+        body = client.get("/settings").text
+        assert "Light theme" not in body

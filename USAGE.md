@@ -42,15 +42,15 @@ A rejected import changes nothing. Deleting a script first shows a deletion prev
 
 ## Settings
 
-Open **Settings** from the sidebar. It has three tabs.
+Open **Settings** from the sidebar. It has three sections: Models, Spend, and Interface.
 
-**API keys** holds the provider credential and the model choice. Paste a Google AI Studio key and press Validate; the key is checked against the provider's own models endpoint, never against a guessed format, so any key Google issues works. A valid key is stored in `data/secrets.env` (owner-only file permissions), never in the database and never sent back to the browser. Then pick a **main model** and, optionally, a **fallback model**. When the main model refuses for an availability reason (dead on this key, an outage, a rate limit, a timeout), the same call runs once against the fallback; during extraction the fallback also answers when the main model's reply fails validation (malformed, truncated, or naming nothing in a scene with content), so a cheap main model with a stronger fallback is the recommended pairing. A model recorded as unavailable on your key is disabled in the picker until a later call succeeds on it.
+**Models** holds the provider credential and the model choice. Paste a Google AI Studio key and press Validate; the key is checked against the provider's own models endpoint, never against a guessed format, so any key Google issues works. A valid key is stored in `data/secrets.env` (owner-only file permissions), never in the database and never sent back to the browser. Then pick a **main model** and, optionally, a **fallback model**. When the main model refuses for an availability reason (dead on this key, an outage, a rate limit, a timeout), the same call runs once against the fallback; during extraction the fallback also answers when the main model's reply fails validation (malformed, truncated, or naming nothing in a scene with content), so a cheap main model with a stronger fallback is the recommended pairing. A model recorded as unavailable on your key is disabled in the picker until a later call succeeds on it.
 
 **Spend** shows the recorded model spend (calls, tokens in, tokens out, by purpose) and takes one number: a cap on total recorded tokens. When the recorded total reaches the cap, every model call refuses before contacting the provider and tells you so. Raising or clearing the cap reopens the gate.
 
 Under the cap, **Billable actions** lists what has been billed, one row per action rather than one per call: a graph build covers its per-scene calls, a ripple preview covers its judge, continuity, and synthesis calls, and each question stands on its own with the question shown under it. Every column sorts, the table pages, and the search box filters it.
 
-**Interface** chooses what opening a script shows first: the production graph (the default) or the reader.
+**Interface** holds two groups. **Ask Ripple** governs the agent: whether omitting a scene also drafts patches for the neighbouring scenes or reports what breaks and stops, whether the plan renders before any drafting spend, how many tool calls one turn may make, and whether conversations persist per script. **Reader** chooses what opening a script shows first: the production graph (the default) or the reader itself.
 
 ## Building a graph
 

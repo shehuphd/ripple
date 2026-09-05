@@ -379,6 +379,79 @@ def set_landing_view(session: Session, view: str) -> None:
     session.flush()
 
 
+# How Ask Ripple behaves. Stored as interface preferences because that is
+# what they are: the agent's powers are fixed in code, and these only change
+# how much it does before it stops and asks.
+AGENT_TOOL_CEILINGS = (6, 12, 24, 48)
+AGENT_DEFAULTS = {
+    "agent_draft_around_cut": "on",
+    "agent_show_plan": "on",
+    "agent_keep_conversations": "on",
+    "agent_tool_ceiling": "12",
+}
+
+
+@dataclass(frozen=True)
+class AgentSettings:
+    """The Ask Ripple preferences, with the defaults already applied."""
+
+    draft_around_cut: bool = True
+    show_plan: bool = True
+    keep_conversations: bool = True
+    tool_ceiling: int = 12
+
+
+def get_agent_settings(session: Session) -> AgentSettings:
+    """The stored agent preferences; a missing row means the default."""
+    stored = {
+        row.key: row.value
+        for row in session.scalars(
+            select(UiPreference).where(UiPreference.key.in_(AGENT_DEFAULTS))
+        )
+    }
+
+    def flag(key: str) -> bool:
+        return stored.get(key, AGENT_DEFAULTS[key]) == "on"
+
+    default_ceiling = AGENT_DEFAULTS["agent_tool_ceiling"]
+    try:
+        ceiling = int(stored.get("agent_tool_ceiling", default_ceiling))
+    except ValueError:
+        ceiling = int(AGENT_DEFAULTS["agent_tool_ceiling"])
+    if ceiling not in AGENT_TOOL_CEILINGS:
+        ceiling = int(AGENT_DEFAULTS["agent_tool_ceiling"])
+    return AgentSettings(
+        draft_around_cut=flag("agent_draft_around_cut"),
+        show_plan=flag("agent_show_plan"),
+        keep_conversations=flag("agent_keep_conversations"),
+        tool_ceiling=ceiling,
+    )
+
+
+def set_agent_setting(session: Session, key: str, value: str) -> None:
+    """Persist one agent preference, refusing a key or value it does not know."""
+    if key not in AGENT_DEFAULTS:
+        raise ValueError(f"no agent setting named {key!r}")
+    if key == "agent_tool_ceiling":
+        try:
+            number = int(value)
+        except ValueError:
+            raise ValueError("the tool ceiling must be a whole number") from None
+        if number not in AGENT_TOOL_CEILINGS:
+            allowed = ", ".join(str(one) for one in AGENT_TOOL_CEILINGS)
+            raise ValueError(f"the tool ceiling must be one of {allowed}")
+        value = str(number)
+    elif value not in ("on", "off"):
+        raise ValueError(f"{key} is on or off, not {value!r}")
+
+    row = session.get(UiPreference, key)
+    if row is None:
+        session.add(UiPreference(key=key, value=value))
+    else:
+        row.value = value
+    session.flush()
+
+
 def _dead_model_key(provider_id: str, model_id: str) -> str:
     """A fixed-length row key: model identifiers can exceed the key column."""
     digest = hashlib.sha256(f"{provider_id}\x00{model_id}".encode()).hexdigest()[:16]
@@ -420,6 +493,7 @@ def unavailable_models(session: Session, provider_id: str) -> set[str]:
 
 
 __all__ = [
+    "AgentSettings",
     "DeletionCounts",
     "clear_all_graphs",
     "clear_model_unavailable",
@@ -427,12 +501,14 @@ __all__ = [
     "delete_script",
     "deletion_preview",
     "get_active_model",
+    "get_agent_settings",
     "get_fallback_model",
     "get_landing_view",
     "graph_labels",
     "mark_model_unavailable",
     "persist_import",
     "set_active_model",
+    "set_agent_setting",
     "set_fallback_model",
     "set_landing_view",
     "unavailable_models",

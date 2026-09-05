@@ -13,7 +13,7 @@
 <div class="settings-split">
   <nav class="settings-rail" role="tablist" aria-label="Settings sections">
     <button class="stab on" role="tab" data-tab="keys" id="tab-keys" aria-controls="pane-keys" aria-selected="true">
-      API keys</button>
+      Models</button>
     <button class="stab" role="tab" data-tab="spend" id="tab-spend" aria-controls="pane-spend" aria-selected="false">
       Spend</button>
     <button class="stab" role="tab" data-tab="interface" id="tab-interface" aria-controls="pane-interface" aria-selected="false">
@@ -166,6 +166,72 @@
     </section>
 
     <section class="cards hide" data-pane="interface" role="tabpanel" id="pane-interface" aria-labelledby="tab-interface" tabindex="0">
+      <h3 class="setgroup">Ask Ripple</h3>
+      <div class="card" id="agent-card">
+        <div class="setopt">
+          <div class="grow">
+            <strong>Draft around a cut</strong>
+            <p class="tiny muted">When a scene is omitted, Ripple proposes text
+              patches to the neighbouring scenes in the same turn. Every patch
+              is gated behind Confirm like any other edit. Report only computes
+              the orphaned references and stops there.</p>
+          </div>
+          <div class="seg" role="group" aria-label="Draft around a cut">
+            <button class="segbtn {{ 'on' if agent.draft_around_cut }}"
+                    data-agent="agent_draft_around_cut" data-value="on"
+                    aria-pressed="{{ 'true' if agent.draft_around_cut else 'false' }}">
+              Draft around a cut</button>
+            <button class="segbtn {{ 'on' if not agent.draft_around_cut }}"
+                    data-agent="agent_draft_around_cut" data-value="off"
+                    aria-pressed="{{ 'false' if agent.draft_around_cut else 'true' }}">
+              Report only</button>
+          </div>
+        </div>
+
+        <div class="setopt">
+          <div class="grow">
+            <strong>Show the plan before drafting</strong>
+            <p class="tiny muted">The coverage list and per-scene intentions
+              render in chat before any drafting spend. Turning this off drafts
+              immediately and still gates on Confirm.</p>
+          </div>
+          <button class="switch {{ 'on' if agent.show_plan }}"
+                  data-agent="agent_show_plan" role="switch"
+                  aria-checked="{{ 'true' if agent.show_plan else 'false' }}"
+                  aria-label="Show the plan before drafting"><i></i></button>
+        </div>
+
+        <div class="setopt">
+          <div class="grow">
+            <strong>Tool call ceiling per turn</strong>
+            <p class="tiny muted">Caps model-directed calls inside one turn, on
+              top of the global token budget.</p>
+          </div>
+          <select class="field" id="agent-ceiling" aria-label="Tool call ceiling per turn">
+            {% for choice in tool_ceilings %}
+            <option value="{{ choice }}"
+                    {% if choice == agent.tool_ceiling %}selected{% endif %}>
+              {{ choice }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="setopt">
+          <div class="grow">
+            <strong>Keep conversations per script</strong>
+            <p class="tiny muted">Conversations persist beside question history.
+              Pending change sets from an abandoned conversation are rejected on
+              close.</p>
+          </div>
+          <button class="switch {{ 'on' if agent.keep_conversations }}"
+                  data-agent="agent_keep_conversations" role="switch"
+                  aria-checked="{{ 'true' if agent.keep_conversations else 'false' }}"
+                  aria-label="Keep conversations per script"><i></i></button>
+        </div>
+        <div class="result tiny" aria-live="polite" id="agent-result"></div>
+      </div>
+
+      <h3 class="setgroup">Reader</h3>
       <div class="card" id="landing-card">
         <div class="hd"><h2>Opening a script</h2></div>
         <label class="grow" style="cursor:pointer">

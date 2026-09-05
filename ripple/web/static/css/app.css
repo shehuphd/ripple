@@ -230,6 +230,36 @@ table.listtable .btn.sm{margin-left:6px}
 table.listtable col.checkcol{width:34px}
 table.listtable td.checkcol{padding-right:0}
 .listtable-wrap{margin-bottom:6px}
+/* Settings: a group heading above a card of options, each option a label
+   and its control on one row. */
+.setgroup{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--t4);margin:22px 0 9px}
+.settings-panes .setgroup:first-child{margin-top:0}
+.setopt{display:flex;align-items:flex-start;gap:18px;padding:15px 0;
+  border-bottom:.5px solid var(--bd)}
+.setopt:last-of-type{border-bottom:0}
+.setopt .grow{display:block}
+.setopt strong{font-size:13.5px;font-weight:500;display:block}
+.setopt p{margin:5px 0 0;max-width:52ch;line-height:1.6}
+.setopt .field{flex:0 0 auto}
+/* A switch reads as on or off by position and by fill, so the state survives
+   a reader who cannot see the accent. */
+.switch{flex:0 0 auto;width:42px;height:24px;border-radius:999px;padding:0;
+  background:var(--inset);border:.5px solid var(--bd2);cursor:pointer;
+  position:relative;transition:background .15s ease}
+.switch i{position:absolute;top:2px;left:2px;width:18px;height:18px;
+  border-radius:50%;background:var(--t3);transition:transform .15s ease,background .15s ease}
+.switch.on{background:var(--ac);border-color:var(--ac)}
+.switch.on i{transform:translateX(18px);background:#fff}
+.switch:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.switch,.switch i{transition:none}}
+.seg{display:flex;flex:0 0 auto;background:var(--inset);border-radius:8px;
+  border:.5px solid var(--bd2);overflow:hidden}
+.segbtn{padding:7px 13px;font-size:12.5px;background:none;border:0;
+  color:var(--t3);cursor:pointer}
+.segbtn.on{background:var(--raised);color:var(--t1);font-weight:500;
+  box-shadow:inset 0 0 0 .5px var(--bd2)}
+.segbtn:focus-visible{outline:2px solid var(--ac);outline-offset:-2px}
 #spend-search{width:100%;margin-top:11px}
 .sortbtn{background:none;border:0;padding:0;font:inherit;color:inherit;
   cursor:pointer;display:inline-flex;align-items:center;gap:5px}

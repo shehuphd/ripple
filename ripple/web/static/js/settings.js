@@ -328,3 +328,58 @@ if (spendSearch) {
   next.addEventListener('click', () => { page += 1; draw(); });
   draw();
 }
+
+/* Ask Ripple behaviour. Each control writes one preference the moment it
+   changes; the agent reads them when it runs. */
+const agentCard = document.getElementById('agent-card');
+if (agentCard) {
+  const result = document.getElementById('agent-result');
+
+  async function save(key, value, say) {
+    try {
+      await api('/api/settings/agent', {
+        method: 'POST', body: form({ key, value }),
+      });
+      ripple.trace('settings.agent_changed', { setting: key, value });
+      result.textContent = say;
+    } catch (error) {
+      result.textContent = error.message;
+      return false;
+    }
+    return true;
+  }
+
+  agentCard.querySelectorAll('.switch[data-agent]').forEach((toggle) => {
+    toggle.addEventListener('click', async () => {
+      const next = toggle.classList.contains('on') ? 'off' : 'on';
+      const label = toggle.getAttribute('aria-label');
+      if (!await save(toggle.dataset.agent, next, `${label}: ${next}.`)) return;
+      toggle.classList.toggle('on', next === 'on');
+      toggle.setAttribute('aria-checked', next === 'on' ? 'true' : 'false');
+    });
+  });
+
+  agentCard.querySelectorAll('.segbtn[data-agent]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const group = button.closest('.seg');
+      const value = button.dataset.value;
+      const say = value === 'on'
+        ? 'Ripple drafts patches around a cut scene.'
+        : 'Ripple reports what a cut breaks and stops there.';
+      if (!await save(button.dataset.agent, value, say)) return;
+      group.querySelectorAll('.segbtn').forEach((one) => {
+        const on = one === button;
+        one.classList.toggle('on', on);
+        one.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    });
+  });
+
+  const ceiling = document.getElementById('agent-ceiling');
+  if (ceiling) {
+    ceiling.addEventListener('change', () => {
+      save('agent_tool_ceiling', ceiling.value,
+        `A turn stops after ${ceiling.value} tool calls.`);
+    });
+  }
+}

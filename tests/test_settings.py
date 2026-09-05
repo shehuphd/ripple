@@ -395,3 +395,57 @@ class TestValidationNeverTouchesTheEnvironment:
         assert observed["api_key"] == "candidate-key-123"
         assert observed["env"] is None
         assert "SPY_PROVIDER_KEY" not in os.environ
+
+
+class TestAgentSettings:
+    """Ask Ripple's behaviour is stored as interface preferences: what the
+    agent may do is fixed in code, and these only say how far it goes before
+    it stops and asks."""
+
+    @pytest.fixture
+    def session(self):
+        engine = create_db_engine("sqlite+pysqlite:///:memory:")
+        create_all(engine)
+        instance = session_factory(engine)()
+        yield instance
+        instance.close()
+
+    def test_the_defaults_apply_with_no_rows_stored(self, session):
+        from ripple.db.repository import get_agent_settings
+
+        settings = get_agent_settings(session)
+        assert settings.draft_around_cut is True
+        assert settings.show_plan is True
+        assert settings.keep_conversations is True
+        assert settings.tool_ceiling == 12
+
+    def test_a_stored_choice_survives_a_new_session(self, session):
+        from ripple.db.repository import get_agent_settings, set_agent_setting
+
+        set_agent_setting(session, "agent_draft_around_cut", "off")
+        set_agent_setting(session, "agent_tool_ceiling", "24")
+        session.commit()
+        settings = get_agent_settings(session)
+        assert settings.draft_around_cut is False
+        assert settings.tool_ceiling == 24
+
+    def test_an_unknown_setting_or_value_is_refused(self, session):
+        from ripple.db.repository import set_agent_setting
+
+        with pytest.raises(ValueError):
+            set_agent_setting(session, "agent_light_theme", "on")
+        with pytest.raises(ValueError):
+            set_agent_setting(session, "agent_show_plan", "maybe")
+        with pytest.raises(ValueError):
+            set_agent_setting(session, "agent_tool_ceiling", "7")
+
+    def test_a_ceiling_stored_out_of_range_falls_back_to_the_default(
+        self, session
+    ):
+        """A row written by an older build, or by hand, cannot uncap a turn."""
+        from ripple.db.models import UiPreference
+        from ripple.db.repository import get_agent_settings
+
+        session.add(UiPreference(key="agent_tool_ceiling", value="9999"))
+        session.flush()
+        assert get_agent_settings(session).tool_ceiling == 12
