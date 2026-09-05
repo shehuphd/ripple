@@ -139,7 +139,18 @@ GRAPH_STATUSES = ("not_analysed", "analysing", "partially_ready", "ready", "fail
 # Where a script came from: imported by the application at startup, or
 # uploaded by a user. Seeding trusts the marker, not the title.
 SCRIPT_ORIGINS = ("bundled", "upload")
-MODEL_CALL_PURPOSES = ("extract", "judge", "continuity", "synthesize", "query")
+MODEL_CALL_PURPOSES = (
+    "extract",
+    "judge",
+    "continuity",
+    "synthesize",
+    "query",
+    # Ask Ripple: the orchestrator's own turns, and the toolless drafter it
+    # sends screenplay text to. Separate purposes because they are separate
+    # models with separate powers, and the ledger should say which ran.
+    "agent",
+    "draft",
+)
 MODEL_CALL_OUTCOMES = (
     "ok",
     # The reply was replayed from an identical earlier call at zero cost.
@@ -864,6 +875,72 @@ class QueryLog(Base):
     model_id: Mapped[str | None] = mapped_column(String(120))
     prompt_version: Mapped[str | None] = mapped_column(String(32))
     asked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+# What a conversation turn can be. "user" is what the person typed; "ripple"
+# is one agent turn, tool chips and all; "applied" is the summary written
+# after a change set was accepted from the conversation.
+CONVERSATION_ROLES = ("user", "ripple", "applied")
+
+
+class Conversation(Base):
+    """One Ask Ripple thread over one script.
+
+    Kept so the sidebar can list past threads and replay them at no cost. A
+    conversation is a record of what was proposed and decided; the graph
+    itself is never read from here.
+    """
+
+    __tablename__ = "conversations"
+    __table_args__ = (
+        Index("ix_conversations_script_time", "script_id", "updated_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    script_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scripts.id", ondelete="CASCADE")
+    )
+    title: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    turns: Mapped[list["ConversationTurn"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="ConversationTurn.created_at",
+    )
+
+
+class ConversationTurn(Base):
+    """One message in a thread, with everything the page drew from it.
+
+    `payload` holds the rendered turn: tool chips, the coverage list, the
+    ripple card, the spend line. Storing it means a replayed conversation
+    costs nothing and shows what was actually said at the time, rather than
+    what the graph would say now. `messages` holds the provider-neutral turn
+    history the next turn continues from.
+    """
+
+    __tablename__ = "conversation_turns"
+    __table_args__ = (
+        _in("role", CONVERSATION_ROLES),
+        Index("ix_conversation_turns_thread", "conversation_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE")
+    )
+    role: Mapped[str] = mapped_column(String(16))
+    text: Mapped[str] = mapped_column(Text, default="")
+    payload_json: Mapped[dict | None] = mapped_column(JSON, default=dict)
+    messages_json: Mapped[list | None] = mapped_column(JSON, default=list)
+    change_set_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("change_sets.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    conversation: Mapped[Conversation] = relationship(back_populates="turns")
 
 
 class ModelCall(Base):

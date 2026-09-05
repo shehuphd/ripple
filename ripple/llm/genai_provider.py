@@ -10,6 +10,7 @@ record the same model-call audit rows and are gated by the same budget.
 
 from __future__ import annotations
 
+import base64
 import os
 from typing import Any
 
@@ -19,10 +20,12 @@ from google.genai import types
 
 from ripple.llm.base import (
     DEFAULT_REASONING_EFFORT,
+    AgentReply,
     GenerationResult,
     ModelInfo,
     ProviderError,
     ProviderNotConfigured,
+    ToolCall,
     infer_tier,
     is_text_model,
 )
@@ -127,6 +130,136 @@ class GoogleGenaiProvider:
             raise ProviderError("network_error", str(error)) from error
 
         return _to_result(response, model_id, self.name)
+
+    def converse(
+        self,
+        model_id: str,
+        messages: list[dict[str, Any]],
+        *,
+        system: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        max_output_tokens: int = 2048,
+        reasoning_effort: str | None = DEFAULT_REASONING_EFFORT,
+    ) -> AgentReply:
+        """One agent turn: the model answers or asks for tools.
+
+        Automatic function calling stays off. The SDK would otherwise run a
+        Python callable on the model's say-so; Ripple executes tools itself,
+        after validating the arguments against the conversation's own script.
+        """
+        config = types.GenerateContentConfig(
+            system_instruction=system,
+            max_output_tokens=max_output_tokens,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                disable=True
+            ),
+        )
+        if tools:
+            config.tools = [
+                types.Tool(
+                    function_declarations=[
+                        types.FunctionDeclaration(**declaration)
+                        for declaration in tools
+                    ]
+                )
+            ]
+        if reasoning_effort:
+            config.thinking_config = types.ThinkingConfig(
+                thinking_level=reasoning_effort
+            )
+
+        client = genai.Client(api_key=self._api_key(None))
+        try:
+            response = client.models.generate_content(
+                model=model_id, contents=_to_contents(messages), config=config
+            )
+        except genai_errors.APIError as error:
+            raise _to_provider_error(error) from error
+        except Exception as error:  # transport failures below the SDK
+            raise ProviderError("network_error", str(error)) from error
+
+        return _to_agent_reply(response, model_id, self.name)
+
+
+def _to_contents(messages: list[dict[str, Any]]) -> list[types.Content]:
+    """Map Ripple's neutral message list onto the SDK's contents.
+
+    A tool result goes back as a function response part rather than as text,
+    so the model reads it as its own call returning rather than as a user
+    saying something. That distinction is what keeps a screenplay line quoted
+    inside a tool result from reading as an instruction.
+    """
+    contents: list[types.Content] = []
+    for message in messages:
+        role = message.get("role")
+        if role == "tool":
+            contents.append(
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part.from_function_response(
+                            name=message["name"],
+                            response=message.get("response") or {},
+                        )
+                    ],
+                )
+            )
+        elif role == "model" and message.get("tool_calls"):
+            parts = []
+            for call in message["tool_calls"]:
+                part = types.Part.from_function_call(
+                    name=call["name"], args=call.get("arguments") or {}
+                )
+                # The signature the model attached when it made this call.
+                # Gemini refuses a replayed function call without it.
+                signature = call.get("thought_signature")
+                if signature:
+                    part.thought_signature = base64.b64decode(signature)
+                parts.append(part)
+            contents.append(types.Content(role="model", parts=parts))
+        else:
+            contents.append(
+                types.Content(
+                    role="model" if role == "model" else "user",
+                    parts=[types.Part.from_text(text=message.get("text") or "")],
+                )
+            )
+    return contents
+
+
+def _to_agent_reply(
+    response: types.GenerateContentResponse, model_id: str, provider_name: str
+) -> AgentReply:
+    """Map the SDK response onto a turn that may carry tool calls."""
+    result = _to_result(response, model_id, provider_name)
+    calls: list[ToolCall] = []
+    if response.candidates:
+        for part in response.candidates[0].content.parts or []:
+            call = getattr(part, "function_call", None)
+            if call is not None and call.name:
+                signature = getattr(part, "thought_signature", None)
+                calls.append(
+                    ToolCall(
+                        name=call.name,
+                        arguments=dict(call.args or {}),
+                        call_id=getattr(call, "id", None),
+                        thought_signature=(
+                            base64.b64encode(signature).decode("ascii")
+                            if signature
+                            else None
+                        ),
+                    )
+                )
+    return AgentReply(
+        text=result.text,
+        tool_calls=calls,
+        model_id=result.model_id,
+        provider=result.provider,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        reasoning_tokens=result.reasoning_tokens,
+        finish_reason=result.finish_reason,
+    )
 
 
 def _response_text(response: types.GenerateContentResponse) -> str:

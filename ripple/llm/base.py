@@ -14,7 +14,7 @@ from client state.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
@@ -167,6 +167,45 @@ def infer_tier(model_id: str) -> Tier:
     return Tier.MID
 
 
+@dataclass(frozen=True)
+class ToolCall:
+    """One action a model asked for, before anything has run it."""
+
+    name: str
+    arguments: dict[str, Any]
+    call_id: str | None = None
+    # Gemini signs the hidden reasoning behind a function call and requires
+    # the signature back when the call is replayed in the turn history; a
+    # history without it is rejected. Base64 text, so it survives JSON.
+    thought_signature: str | None = None
+
+
+@dataclass
+class AgentReply:
+    """One turn from a model that may call tools instead of answering.
+
+    Either the model asked for tools or it wrote an answer; a turn carrying
+    both is possible, and the caller runs the tools before reading the text.
+    """
+
+    text: str
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    model_id: str = ""
+    provider: str = ""
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    finish_reason: str | None = None
+
+    @property
+    def truncated(self) -> bool:
+        return (self.finish_reason or "").lower() in {
+            "max_tokens",
+            "length",
+            "max_output_tokens",
+        }
+
+
 @runtime_checkable
 class LLMProvider(Protocol):
     """Contract every provider adapter satisfies."""
@@ -182,6 +221,27 @@ class LLMProvider(Protocol):
 
         `api_key` checks a candidate credential without storing it anywhere,
         including the process environment.
+        """
+
+    def converse(
+        self,
+        model_id: str,
+        messages: list[dict[str, Any]],
+        *,
+        system: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        max_output_tokens: int = 2048,
+        reasoning_effort: str | None = DEFAULT_REASONING_EFFORT,
+    ) -> AgentReply:
+        """Continue a conversation, with tools the model may call.
+
+        `messages` is the turn history in provider-neutral form: each entry
+        carries a role of "user", "model", or "tool", with "text" for the
+        first two and "name" plus "response" for a tool result. The provider
+        maps that onto its own transport.
+
+        Optional: only the providers behind Ask Ripple implement it, and the
+        agent refuses to start on a provider that does not.
         """
 
     def generate(

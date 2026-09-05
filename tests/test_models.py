@@ -702,10 +702,11 @@ class TestModelCalls:
 
 
 class TestOutcomeVocabularyMigration:
-    def test_an_old_outcome_vocabulary_is_widened_on_startup(self, tmp_path):
-        """A database from before the cached/incomplete outcomes must accept
-        them after create_all, or the first replayed judge call fails its
-        CHECK constraint."""
+    def test_an_old_vocabulary_is_widened_on_startup(self, tmp_path):
+        """A database from before the cached/incomplete outcomes and the
+        agent/draft purposes must accept both after create_all, or the first
+        replayed judge call and the first agent turn fail their CHECK
+        constraints."""
         from ripple.db.session import create_db_engine
 
         url = f"sqlite+pysqlite:///{tmp_path}/old.db"
@@ -720,7 +721,9 @@ class TestOutcomeVocabularyMigration:
             current = connection.exec_driver_sql(
                 "SELECT sql FROM sqlite_master WHERE name='model_calls'"
             ).fetchone()[0]
-            old = current.replace("'cached', ", "").replace("'incomplete', ", "")
+            old = current
+            for member in ("'cached', ", "'incomplete', ", "'agent', ", "'draft', "):
+                old = old.replace(member, "")
             # A database this old also predates the later ADD COLUMN
             # migrations, which run after the rebuild; the copy must not
             # select columns the old table never had.
@@ -761,6 +764,8 @@ class TestOutcomeVocabularyMigration:
             }
         assert "'cached'" in rebuilt
         assert "'incomplete'" in rebuilt
+        assert "'agent'" in rebuilt
+        assert "'draft'" in rebuilt
         assert survivors == 1
         assert "ix_model_calls_purpose" in indexes
 

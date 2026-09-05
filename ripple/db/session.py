@@ -350,11 +350,12 @@ def _add_script_origin(engine: Engine) -> None:
 def _widen_model_call_outcomes(engine: Engine) -> None:
     """Rebuild `model_calls` in a database that predates the newer outcomes.
 
-    SQLite bakes CHECK constraints into the table's own DDL, so adding
-    "cached" and "incomplete" to the vocabulary never reaches an existing
-    database and the first such write would fail its constraint. The columns
-    are unchanged, so the rebuild is a straight copy. Postgres deployments
-    get fresh schemas and are not touched here.
+    SQLite bakes CHECK constraints into the table's own DDL, so a widened
+    vocabulary never reaches an existing database and the first such write
+    would fail its constraint: first the "cached" and "incomplete" outcomes,
+    then the "agent" and "draft" purposes. The columns are unchanged, so the
+    rebuild is a straight copy. Postgres deployments get fresh schemas and are
+    not touched here.
     """
     if engine.dialect.name != "sqlite":
         return
@@ -372,14 +373,16 @@ def _widen_model_call_outcomes(engine: Engine) -> None:
         # rebuild resumes from wherever it stopped rather than starting over.
         has_leftover = table_sql("model_calls_old") is not None
         current = table_sql("model_calls")
-        needs_widening = current is not None and "'cached'" not in current
+        # The needle is the NEWEST member, so a database widened for an
+        # earlier vocabulary is widened again for this one.
+        needs_widening = current is not None and "'agent'" not in current
         if not has_leftover and not needs_widening:
             if current is not None:
                 _ensure_model_call_indexes(connection)
                 connection.commit()
             return
 
-        logger.info("widening the model_calls outcome vocabulary")
+        logger.info("widening the model_calls vocabularies")
         connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
         if not has_leftover:
             connection.exec_driver_sql(

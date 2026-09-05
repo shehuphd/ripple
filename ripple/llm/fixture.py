@@ -16,7 +16,13 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from ripple.llm.base import GenerationResult, ModelInfo, ProviderError, Tier
+from ripple.llm.base import (
+    AgentReply,
+    GenerationResult,
+    ModelInfo,
+    ProviderError,
+    Tier,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +64,9 @@ class FixtureProvider:
         self.record = record
         self.default_reply = default_reply
         self.calls: list[dict[str, Any]] = []
+        # Agent turns queued by a test, and what the agent asked for.
+        self.turns: list[AgentReply] = []
+        self.conversations: list[dict[str, Any]] = []
 
     def is_configured(self) -> bool:
         """Always true: the fixture provider needs no credential."""
@@ -83,6 +92,47 @@ class FixtureProvider:
         self.directory.mkdir(parents=True, exist_ok=True)
         path = self.directory / f"{prompt_key(model_id, prompt, system)}.json"
         path.write_text(json.dumps({"reply": reply}), encoding="utf-8")
+
+    def script_turns(self, turns: list[AgentReply]) -> None:
+        """Queue the agent turns this provider will return, in order.
+
+        The agent loop is control flow, and control flow is what tests need
+        to pin: which tool the model asks for, what it does with the result,
+        when it stops. A queue of turns makes that deterministic and free.
+        """
+        self.turns = list(turns)
+
+    def converse(
+        self,
+        model_id: str,
+        messages: list[dict[str, Any]],
+        *,
+        system: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        max_output_tokens: int = 2048,
+        reasoning_effort: str | None = None,
+    ) -> AgentReply:
+        """Return the next queued turn, recording what it was asked."""
+        self.conversations.append(
+            {
+                "model_id": model_id,
+                "messages": messages,
+                "system": system,
+                "tools": [tool["name"] for tool in (tools or [])],
+            }
+        )
+        if not getattr(self, "turns", None):
+            return AgentReply(
+                text="No turn was queued for this call.",
+                model_id=model_id,
+                provider=self.name,
+                input_tokens=0,
+                output_tokens=0,
+            )
+        turn = self.turns.pop(0)
+        turn.model_id = turn.model_id or model_id
+        turn.provider = turn.provider or self.name
+        return turn
 
     def generate(
         self,
