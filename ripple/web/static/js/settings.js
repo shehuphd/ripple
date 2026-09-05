@@ -382,4 +382,14 @@ if (agentCard) {
         `A turn stops after ${ceiling.value} tool calls.`);
     });
   }
+
+  const floor = document.getElementById('agent-floor');
+  if (floor) {
+    floor.addEventListener('change', () => {
+      const say = floor.value === '0'
+        ? 'Every fact the judge accepts is proposed.'
+        : `Facts scoring below ${floor.value} are held back and named.`;
+      save('agent_confidence_floor', floor.value, say);
+    });
+  }
 }

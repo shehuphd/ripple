@@ -75,7 +75,7 @@ Test-order randomisation is enabled. A failure that depends on order is a bug in
 
 ## Status
 
-Working: import adapters, the demo corpus, persistence, provider settings, scene-level graph extraction with attributes, the judged ripple preview, the deterministic diff engine, continuity retrieval, the synthesizer, the change-set service with undo, the grounded Ask page (its own scripts and history panes, stored replays, and a grounding check, with injection-hardened queries), duplicate-entity detection and merges, batch actions across the list pages, a model-call audit with a token budget, a billable-actions ledger, and a fallback model, cancellable and resumable graph builds, and a web application covering the library, reader, ripple preview, graph views, sortable audit tables, and settings.
+Working: import adapters, the demo corpus, persistence, provider settings, scene-level graph extraction with attributes, the judged ripple preview, the deterministic diff engine, continuity retrieval, the synthesizer, the change-set service with undo, Ask Ripple (a chat over one script: grounded question answering with stored replays and a grounding check, and an agent for change requests that plans from graph coverage, drafts behind a minimal-edit guard and a confidence floor, previews through the judgement pipeline, and applies nothing itself — Confirm is a button), duplicate-entity detection and merges, batch actions across the list pages, a model-call audit with a token budget, a billable-actions ledger, and a fallback model, cancellable and resumable graph builds, and a web application covering the library, reader, ripple preview, graph views, sortable audit tables, and settings.
 
 Not yet deployed anywhere; local development only.
 

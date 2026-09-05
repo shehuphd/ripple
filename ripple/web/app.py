@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import unicodedata
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -46,6 +45,7 @@ from ripple.db.models import (
     ChangeOperation,
     ChangeSet,
     ContinuityFinding,
+    Conversation,
     Entity,
     EntityAlias,
     ExtractionRun,
@@ -58,6 +58,7 @@ from ripple.db.models import (
     ScriptUnit,
 )
 from ripple.db.repository import (
+    AGENT_CONFIDENCE_FLOORS,
     AGENT_TOOL_CEILINGS,
     LANDING_VIEWS,
     clear_all_graphs,
@@ -87,14 +88,17 @@ from ripple.graph.fixtures import seed_demo_graphs
 from ripple.graph.layout import DEPARTMENT_ORDER, script_layout
 from ripple.graph.layout import layout as graph_layout
 from ripple.llm import ProviderError, get_provider, get_query_provider
-from ripple.services import changeset, pricing, spend
+from ripple.services import agent, changeset, pricing, spend
+from ripple.services import conversations
 from ripple.services import draft_report as report_service
 from ripple.services import drafts as drafts_service
 from ripple.services import duplicates as duplicates_service
 from ripple.services import preview as preview_service
 from ripple.services import renames as renames_service
 from ripple.services import scenes as scenes_service
+from ripple.services.changeset import InvalidOperation
 from ripple.services.preview import PreviewFailed, PreviewRefused, PreviewResult
+from ripple.services.retrieval import build_packet
 from ripple.services.settings import SettingsService
 from ripple.services.synthesizer import (
     answer_question,
@@ -770,6 +774,10 @@ def ask_page(
             ),
             "lock": _graph_lock(session, chosen.id) if chosen else None,
             "model": settings_service.selected_model(session)[1],
+            "conversations": (
+                conversations.listing(session, chosen.id) if chosen else []
+            ),
+            "agent": get_agent_settings(session),
             "history": (
                 [
                     {
@@ -1600,6 +1608,7 @@ def settings_page(request: Request, session: Session = Depends(get_session)):
             "landing_view": get_landing_view(session),
             "agent": get_agent_settings(session),
             "tool_ceilings": AGENT_TOOL_CEILINGS,
+            "confidence_floors": AGENT_CONFIDENCE_FLOORS,
         },
     )
 
@@ -2880,30 +2889,9 @@ def confirm_rename_route(finding_id: str, session: Session = Depends(get_session
 # tokens and denies a large injected instruction a path in through the query.
 MAX_QUESTION_CHARS = 1024
 
-# The most entity names of one department the packet lists. A department this
-# large is enumerable by its count; listing every name past this would bloat
-# the packet with no gain. The count beside the names is always the true total.
-ROSTER_NAME_CAP = 80
-
-# The most assertions the packet carries when a question falls back to the whole
-# graph. Set above the largest demo-corpus script so scene-anchored and
-# aggregate questions see every assertion; it only truncates a far larger graph,
-# and a keyword-scoped question sends its focused hits regardless.
-PACKET_ASSERTION_CAP = 1000
 # The evidence panel shows a sample of the grounding units, not all of them; the
 # true total rides alongside so the count on screen is never mistaken for it.
 EVIDENCE_UNIT_SAMPLE = 6
-
-
-def _fold(text: str) -> str:
-    """Casefold and strip diacritics for keyword matching.
-
-    A question typed without accents must still find the accented entity: "bela"
-    matches "Béla", "matias" matches "Matías". NFKC (the entity-name normalizer)
-    keeps the accents, so this decomposes and drops the combining marks instead.
-    """
-    decomposed = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
 
 
 @app.post("/api/scripts/{script_id}/ask")
@@ -2916,7 +2904,15 @@ def ask_graph(
     script = session.get(Script, _uuid(script_id))
     if script is None:
         raise HTTPException(404, "No such script")
+    return grounded_answer(session, script, question)
 
+
+def grounded_answer(session: Session, script: Script, question: str) -> dict:
+    """The graph-grounded answer to one question, logged and cited.
+
+    Ask Ripple routes a question here rather than to the agent: a question
+    needs no tools, so it is answered on this path at this path's cost.
+    """
     # A question is a question, not a place to paste a payload. The cap keeps
     # a wall of injected instructions from arriving as a "query" and bounds the
     # input tokens a single ask can bill, before any provider contact.
@@ -2927,103 +2923,10 @@ def ask_graph(
             f"this one is {len(question)}.",
         )
 
-    labels = _labels(session, script.id)
-    terms = [_fold(w) for w in question.split() if len(w) > 3]
-    rows = list(
-        session.scalars(
-            select(Assertion).where(
-                Assertion.script_id == script.id, Assertion.active.is_(True)
-            )
-        )
-    )
-    # Heading as well as number: a script whose scenes carry no numbers would
-    # otherwise reach the model with no scene identity at all, and "which
-    # scenes use the mug" would be unanswerable from a graph that records it.
-    # Numbers are never invented, so the heading is the fallback identity.
-    scene_of = {
-        unit_id: {"number": number, "heading": heading}
-        for unit_id, number, heading in session.execute(
-            select(ScriptUnit.id, Scene.display_scene_number, Scene.heading)
-            .join(Scene)
-            .where(Scene.script_id == script.id)
-        ).all()
-    }
-    unit_text = dict(
-        session.execute(
-            select(ScriptUnit.id, ScriptUnit.current_text)
-            .join(Scene)
-            .where(Scene.script_id == script.id)
-        ).all()
-    )
-
-    mapped = []
-    keyword_hits = []
-    for row in rows:
-        subject = labels.get(row.subject_entity_id or row.subject_scene_id, "")
-        obj = labels.get(row.object_entity_id or row.object_scene_id, "")
-        haystack = _fold(f"{subject} {row.predicate} {obj}")
-        where = scene_of.get(row.source_unit_id) or {}
-        item = {
-            "id": str(row.id),
-            "subject": subject,
-            "predicate": row.predicate,
-            "object": obj,
-            "scene": where.get("number"),
-            "scene_heading": where.get("heading"),
-            "unit_id": str(row.source_unit_id),
-            "unit_text": unit_text.get(row.source_unit_id, ""),
-            "confidence": row.confidence,
-        }
-        mapped.append(item)
-        if terms and any(term in haystack for term in terms):
-            keyword_hits.append(item)
-    # A question that names graph content is scoped to its keyword hits, kept
-    # tight so the grounding count stays honest. A question that names nothing
-    # the keyword pass can match, a scene-anchored or aggregate one ("what props
-    # are in scene 8", "which scene has the most props"), falls back to the whole
-    # graph rather than a 40-row sample: those scenes' assertions carry no term
-    # to match, so a small sample misses them. A user query is infrequent and
-    # costs a fraction of a cent, so the cap holds a whole demo-corpus script and
-    # only bounds a pathologically large graph.
-    matched = (keyword_hits or mapped)[:PACKET_ASSERTION_CAP]
-
-    # Entities as a roster grouped by department type: the count and the names.
-    # A "who / list / name the X" question needs the names, not only the total;
-    # a packet with counts alone answered "the graph does not record the full
-    # list" about a graph that records every one. Keys are the entity_type
-    # vocabulary; "cast" is the characters. Names are capped per type so a huge
-    # department cannot crowd the packet, with the true count kept beside them.
-    roster: dict[str, dict[str, Any]] = {}
-    for etype, name in session.execute(
-        select(Entity.entity_type, Entity.canonical_name)
-        .where(Entity.script_id == script.id)
-        .order_by(Entity.entity_type, Entity.canonical_name)
-    ).all():
-        slot = roster.setdefault(etype, {"count": 0, "names": []})
-        slot["count"] += 1
-        if len(slot["names"]) < ROSTER_NAME_CAP:
-            slot["names"].append(name)
-
-    # Every scene in order, so scene enumeration ("list the scene headings",
-    # "what is the opening scene") answers from the packet rather than from
-    # whichever assertions happened to be sampled.
-    scene_list = [
-        {"number": number, "heading": heading}
-        for number, heading in session.execute(
-            select(Scene.display_scene_number, Scene.heading)
-            .where(Scene.script_id == script.id, Scene.omitted.is_(False))
-            .order_by(Scene.sequence_index)
-        ).all()
-    ]
-
-    facts = {
-        "title": script.title,
-        "scenes": len(scene_list),
-        "entities": sum(slot["count"] for slot in roster.values()),
-        "entities_by_type": roster,
-        "scene_list": scene_list,
-        "assertions": len(rows),
-    }
+    packet = build_packet(session, script, question)
+    matched = packet.assertions
+    facts = packet.facts
+    terms = [t for t in question.split() if len(t) > 3]
 
     # The Ask path runs through Google's google-genai SDK, not KeyCall's HTTP
     # path: a Google SDK generation on every asked question.
@@ -3114,6 +3017,188 @@ def ask_graph(
         )[:8],
         "ungrounded_entities": ungrounded,
     }
+
+
+# One Ask Ripple request. The agent's own ceilings bound what a turn spends;
+# this bounds what arrives, before any provider contact.
+MAX_RIPPLE_CHARS = 2000
+
+
+def _turn_payload(turn: agent.AgentTurn) -> dict:
+    """One agent turn as the chat renders it."""
+    preview = next(
+        (
+            run.payload
+            for run in reversed(turn.tools)
+            if run.name == "preview_edits" and run.ok
+        ),
+        None,
+    )
+    omission = next(
+        (
+            run.payload
+            for run in reversed(turn.tools)
+            if run.name == "preview_omit" and run.ok
+        ),
+        None,
+    )
+    return {
+        "reply": turn.reply,
+        "stage": turn.stage,
+        "tools": [
+            {"name": run.name, "summary": run.summary, "ok": run.ok}
+            for run in turn.tools
+        ],
+        "plan": turn.plan,
+        "ripple": preview,
+        "omission": omission,
+        "change_set_id": turn.change_set_id,
+        "drafts": len(turn.drafts),
+        "held_back": turn.held_back,
+        "model_calls": turn.model_calls,
+        "tokens": turn.tokens,
+        "cost": pricing.display(turn.cost_usd),
+        "stopped_at_ceiling": turn.stopped_at_ceiling,
+        "trace_id": turn.trace_id,
+    }
+
+
+def _thread(session: Session, conversation_id: str, script_id=None) -> Conversation:
+    """One conversation, checked against the script it belongs to."""
+    thread = session.get(Conversation, _uuid(conversation_id))
+    if thread is None or (script_id is not None and thread.script_id != script_id):
+        raise HTTPException(404, "No such conversation")
+    return thread
+
+
+@app.post("/api/scripts/{script_id}/ripple")
+def ripple_turn(
+    script_id: str,
+    message: str = Form(...),
+    conversation_id: str = Form(None),
+    stage: str = Form(None),
+    session: Session = Depends(get_session),
+):
+    """One Ask Ripple exchange: a question answered, or an agent turn.
+
+    There is one input box. A message that asks something is answered on the
+    grounded fast path at that path's cost; a message that asks for a change
+    opens a conversation and the agent works. Inside an open conversation
+    every message goes to the agent, which is holding the context.
+    """
+    script = session.get(Script, _uuid(script_id))
+    if script is None:
+        raise HTTPException(404, "No such script")
+    if len(message) > MAX_RIPPLE_CHARS:
+        raise HTTPException(
+            422,
+            f"A request can be at most {MAX_RIPPLE_CHARS} characters; "
+            f"this one is {len(message)}.",
+        )
+
+    agent_settings = get_agent_settings(session)
+    provider_name, model_id = settings_service.selected_model(session)
+    provider = get_query_provider(provider_name) if provider_name else None
+    thread = (
+        _thread(session, conversation_id, script.id) if conversation_id else None
+    )
+
+    if thread is None and not stage:
+        kind = agent.route_message(session, script, message, provider, model_id)
+        if kind == "question":
+            return {"kind": "answer", **grounded_answer(session, script, message)}
+
+    requested = (stage or "").strip()
+    chosen = (
+        requested
+        if requested in (agent.PLAN_STAGE, agent.DRAFT_STAGE)
+        else (agent.PLAN_STAGE if agent_settings.show_plan else agent.DRAFT_STAGE)
+    )
+
+    opened = thread is None
+    thread = thread or conversations.start(session, script, message)
+    history = [] if opened else conversations.history_for(session, thread)
+    conversations.add_turn(session, thread, "user", message)
+    try:
+        turn = agent.run_turn(
+            session,
+            script,
+            message,
+            provider,
+            model_id,
+            agent_settings,
+            history=history,
+            stage=chosen,
+        )
+    except agent.AgentRefused as error:
+        raise HTTPException(422, str(error)) from None
+
+    payload = _turn_payload(turn)
+    conversations.add_turn(
+        session,
+        thread,
+        "ripple",
+        turn.reply,
+        payload=payload,
+        messages=turn.messages,
+        change_set_id=turn.change_set_id,
+    )
+    return {
+        "kind": "turn",
+        "conversation": {"id": str(thread.id), "title": thread.title},
+        **payload,
+    }
+
+
+@app.get("/api/conversations/{conversation_id}")
+def conversation_detail(conversation_id: str, session: Session = Depends(get_session)):
+    """A stored thread, replayed at no cost."""
+    thread = _thread(session, conversation_id)
+    return {
+        "id": str(thread.id),
+        "title": thread.title,
+        "script_id": str(thread.script_id),
+        "turns": conversations.replay(session, thread),
+    }
+
+
+@app.post("/api/conversations/{conversation_id}/confirm")
+def confirm_conversation_change(
+    conversation_id: str,
+    change_set_id: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    """Accept a proposal from the chat, and record what it did.
+
+    Acceptance is a button on this page and nowhere else: the agent has no
+    tool that reaches this endpoint.
+    """
+    thread = _thread(session, conversation_id)
+    change_set = session.get(ChangeSet, _uuid(change_set_id))
+    if change_set is None or change_set.script_id != thread.script_id:
+        raise HTTPException(404, "No such proposal")
+    try:
+        accepted = changeset.accept(session, change_set.id)
+    except InvalidOperation as error:
+        raise HTTPException(409, str(error)) from None
+    script = session.get(Script, thread.script_id)
+    summary = conversations.applied_summary(session, script, change_set)
+    conversations.add_turn(
+        session,
+        thread,
+        "applied",
+        summary["text"],
+        payload=summary,
+        change_set_id=str(change_set.id),
+    )
+    return {"kind": "applied", "accepted": accepted.__dict__, **summary}
+
+
+@app.post("/api/conversations/{conversation_id}/close")
+def close_conversation(conversation_id: str, session: Session = Depends(get_session)):
+    """Reject whatever this thread left pending, so nothing waits unattended."""
+    thread = _thread(session, conversation_id)
+    return {"rejected": conversations.abandon_pending(session, thread)}
 
 
 @app.get("/api/queries/{query_id}")

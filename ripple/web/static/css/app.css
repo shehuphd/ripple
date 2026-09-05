@@ -584,30 +584,9 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .build-row{display:flex;justify-content:space-between;font-size:13px;
   color:var(--t2)}
 .build-row.tiny{color:var(--t4)}
-/* Ask the graph: scripts on the left, question history on the right, the
-   answer in a centred column between them. Both panes collapse and resize;
-   each scrolls on its own so a hundred scripts and a hundred questions never
-   compete for one scrollbar. */
-.askwrap{display:grid;grid-template-columns:minmax(0,1fr) var(--askpane-w,320px);
-  gap:16px;flex:1;min-height:0}
-.askwrap > *{overflow-y:auto;min-height:0}
-.askwrap.pane-off{grid-template-columns:minmax(0,1fr)}
-.askwrap.pane-off .askpane{display:none}
-@media(max-width:1080px){
-  .askwrap{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}
-}
-.askpane{position:relative;gap:0;padding:0 2px 0 14px}
 .pane-hd{display:flex;align-items:center;gap:9px;padding:2px 2px 10px}
 .pane-hd h2{font-size:13px;font-weight:600;margin:0}
 .pane-hd .meta{margin-left:auto;font-size:12px;color:var(--t4)}
-.qlist{display:flex;flex-direction:column}
-.qrow{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;
-  background:none;border:0;border-radius:6px;padding:8px 9px;font:inherit;
-  font-size:13px;color:var(--t2);cursor:pointer}
-.qrow:hover{background:var(--raised)}
-.qrow .qq{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  max-width:100%}
-.qrow .qt{color:var(--t4);font-size:11.5px}
 .side-nomatch{color:var(--t4);font-size:12.5px;padding:8px 9px;line-height:1.55}
 
 /* A pane edge you can drag. Sits over the border it moves, so the whole
@@ -630,18 +609,12 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
   padding:7px 9px 7px 26px;font:inherit;font-size:12.5px}
 .side-search input:focus{outline:none;border-color:var(--ac);
   box-shadow:0 0 0 3px var(--ac-w)}
-.ask-col{max-width:860px;margin:0 auto;padding:22px 8px 60px}
 .askbox{display:flex;align-items:center;gap:10px;background:var(--inset);
   border:.5px solid var(--bd2);border-radius:11px;padding:7px 7px 7px 15px;
   margin-bottom:18px}
 .askbox:focus-within{border-color:var(--ac);box-shadow:0 0 0 3px var(--ac-w)}
 .askbox .ic{color:var(--t4);font-size:15px;flex:0 0 auto}
 .askbox .btn{flex:0 0 auto;padding:9px 20px}
-.ask-hint{color:var(--t4);font-size:13px;line-height:1.6;padding:2px 2px 0}
-.ask-meta{display:flex;align-items:center;gap:12px;margin-bottom:16px;
-  color:var(--t3);font-size:12.5px}
-.ask-meta .grounded{margin-left:auto;flex:0 0 auto}
-.ask-card{margin-bottom:16px}
 /* The input carries no chrome of its own: the wrapper is the control, so the
    glyph, field, and button read as one pill. */
 .askbox input{flex:1;min-width:0;background:none;border:0;color:var(--t1);
@@ -655,9 +628,69 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .srow.qrow{width:100%;background:none;border:0;font:inherit;font-size:13px;
   color:var(--t2);cursor:pointer;text-align:left}
 .srow.qrow:hover{background:var(--raised)}
-.srow.qrow .lb{white-space:nowrap}
+.srow.qrow .lb{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cited .bd .h{text-transform:uppercase;margin-bottom:5px}
 .cited .pg{color:var(--t4);font-size:12px}
+
+/* Ask Ripple. One column of turns over one script, with the composer pinned
+   under it. A turn is an avatar, a label, and whatever the turn produced:
+   tool chips, prose, a coverage list, a ripple card, and the buttons that
+   decide it. The buttons are the only path to acceptance on this page. */
+.chatwrap{display:grid;grid-template-rows:minmax(0,1fr) auto;flex:1;
+  min-height:0}
+.chat{overflow-y:auto;min-height:0;padding:18px 8px 8px}
+.chat > *{max-width:900px;margin:0 auto}
+.chat-intro{padding:40px 4px 10px;color:var(--t2)}
+.chat-intro h2{font-size:17px;margin:0 0 10px}
+.chat-intro p{font-size:13.5px;line-height:1.65;max-width:62ch;margin:0}
+.chat-examples{display:flex;flex-wrap:wrap;gap:9px;margin-top:18px}
+
+.turn{display:grid;grid-template-columns:30px minmax(0,1fr);gap:14px;
+  padding:16px 4px}
+.turn .avatar{width:30px;height:30px;border-radius:8px;background:var(--inset);
+  border:.5px solid var(--bd2);display:flex;align-items:center;
+  justify-content:center;color:var(--t3);font-size:13px}
+.turn.ripple .avatar{color:var(--ac);border-color:var(--ac-d)}
+.turn .who{text-transform:uppercase;letter-spacing:.09em;font-size:11px;
+  color:var(--t4);margin-bottom:8px}
+.turn .said,.turn .answer{font-size:14.5px;line-height:1.65;color:var(--t1)}
+.turn .answer{white-space:pre-wrap}
+.turn .chatcard{margin-top:14px}
+.turn .chatcard .hd{display:flex;align-items:center;gap:10px;
+  margin-bottom:10px}
+.turn .chatcard .hd h2{font-size:13.5px;margin:0}
+.turn .chatcard .hd .meta{color:var(--t4);font-size:12px}
+.turn .chatcard .hd .tag,.turn .chatcard .hd .btn{margin-left:auto}
+.turn .chatcard .tscroll{margin:0 -17px -15px}
+.toolchips{margin-bottom:12px}
+.chip.running .dot{background:var(--ac);animation:chip-pulse 1.1s ease-in-out
+  infinite}
+.chip.bad{color:var(--amber);border-color:#3f3520}
+@keyframes chip-pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.chip.running .dot{animation:none}}
+.plantable tr.nochange td{color:var(--t3)}
+.plantable td.cite{color:var(--t4);font-size:11.5px;
+  text-transform:uppercase;letter-spacing:.05em}
+.tag.warning{color:var(--amber);border-color:#3f3520}
+.tag.error{color:var(--red);border-color:#3a2523}
+.tag.info{color:var(--t3);border-color:var(--bd)}
+.cardactions{display:flex;align-items:center;gap:10px;margin-top:14px}
+.cardactions .spend{margin-left:auto}
+.held{margin-top:10px;line-height:1.55}
+.banner{display:flex;align-items:center;gap:10px;background:var(--raised);
+  border:.5px solid var(--bd2);border-radius:8px;padding:11px 14px;
+  font-size:13px;color:var(--t2);margin-bottom:14px}
+.banner.ok{border-color:#20372c;color:var(--set)}
+.banner .btn{margin-left:auto}
+
+.composer{border-top:.5px solid var(--bd);padding:14px 8px 10px}
+.composer .askbox{max-width:900px;margin:0 auto}
+.composer-note{max-width:900px;margin:8px auto 0;padding-left:2px}
+.sendhint{flex:0 0 auto;display:flex;align-items:center;gap:6px}
+.sendhint kbd{font-family:var(--sf);font-size:11px;background:var(--raised);
+  border:.5px solid var(--bd2);border-radius:5px;padding:2px 6px;
+  color:var(--t3)}
+@media(max-width:760px){.sendhint{display:none}}
 
 /* Settings */
 .setrow{display:flex;align-items:center;gap:12px;margin-bottom:12px}

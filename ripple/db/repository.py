@@ -383,11 +383,18 @@ def set_landing_view(session: Session, view: str) -> None:
 # what they are: the agent's powers are fixed in code, and these only change
 # how much it does before it stops and asks.
 AGENT_TOOL_CEILINGS = (6, 12, 24, 48)
+
+# The confidence a proposed fact must reach before Ripple offers it. The judge
+# scores every proposed assertion; one scoring below the floor is dropped from
+# the proposal and named on the card, so a doubtful fact is reported rather
+# than slipped into an otherwise good change set. Zero offers everything.
+AGENT_CONFIDENCE_FLOORS = (0.0, 0.5, 0.6, 0.7, 0.8)
 AGENT_DEFAULTS = {
     "agent_draft_around_cut": "on",
     "agent_show_plan": "on",
     "agent_keep_conversations": "on",
     "agent_tool_ceiling": "12",
+    "agent_confidence_floor": "0.7",
 }
 
 
@@ -399,6 +406,7 @@ class AgentSettings:
     show_plan: bool = True
     keep_conversations: bool = True
     tool_ceiling: int = 12
+    confidence_floor: float = 0.7
 
 
 def get_agent_settings(session: Session) -> AgentSettings:
@@ -420,11 +428,18 @@ def get_agent_settings(session: Session) -> AgentSettings:
         ceiling = int(AGENT_DEFAULTS["agent_tool_ceiling"])
     if ceiling not in AGENT_TOOL_CEILINGS:
         ceiling = int(AGENT_DEFAULTS["agent_tool_ceiling"])
+    try:
+        floor = float(stored.get("agent_confidence_floor", "0.7"))
+    except ValueError:
+        floor = float(AGENT_DEFAULTS["agent_confidence_floor"])
+    if floor not in AGENT_CONFIDENCE_FLOORS:
+        floor = float(AGENT_DEFAULTS["agent_confidence_floor"])
     return AgentSettings(
         draft_around_cut=flag("agent_draft_around_cut"),
         show_plan=flag("agent_show_plan"),
         keep_conversations=flag("agent_keep_conversations"),
         tool_ceiling=ceiling,
+        confidence_floor=floor,
     )
 
 
@@ -441,6 +456,15 @@ def set_agent_setting(session: Session, key: str, value: str) -> None:
             allowed = ", ".join(str(one) for one in AGENT_TOOL_CEILINGS)
             raise ValueError(f"the tool ceiling must be one of {allowed}")
         value = str(number)
+    elif key == "agent_confidence_floor":
+        try:
+            floor = float(value)
+        except ValueError:
+            raise ValueError("the confidence floor must be a number") from None
+        if floor not in AGENT_CONFIDENCE_FLOORS:
+            allowed = ", ".join(f"{one:g}" for one in AGENT_CONFIDENCE_FLOORS)
+            raise ValueError(f"the confidence floor must be one of {allowed}")
+        value = f"{floor:g}"
     elif value not in ("on", "off"):
         raise ValueError(f"{key} is on or off, not {value!r}")
 

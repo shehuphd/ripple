@@ -165,6 +165,10 @@ def actions(session: Session) -> list[dict]:
     for call in calls:
         if call.purpose == "extract":
             kind = "build"
+        elif call.purpose in ("agent", "draft"):
+            # One Ask Ripple turn is one action: the orchestrator's calls and
+            # the drafter's calls answer a single request.
+            kind = "agent"
         elif call.change_set_id is None and call.purpose != "query":
             kind = "preview"
         else:
@@ -180,7 +184,10 @@ def actions(session: Session) -> list[dict]:
     for call in calls:
         if call.id in keys:
             key = keys[call.id]
-            label = "Graph build" if key[0] == "build" else "Ripple preview"
+            label = {
+                "build": "Graph build",
+                "agent": "Ask Ripple",
+            }.get(key[0], "Ripple preview")
         elif call.change_set_id is not None:
             key = ("preview", call.change_set_id)
             label = "Ripple preview"

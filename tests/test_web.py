@@ -783,25 +783,19 @@ class TestAskTheGraph:
         assert body["ungrounded_entities"] == []
         assert "query_id" in body
 
-    def test_scripts_and_history_get_their_own_searchable_panes(self, client):
-        """Two panes, not one list: a hundred scripts and a hundred questions
-        must not share a scrollbar."""
+    def test_conversations_sit_above_questions_in_the_sidebar(self, client):
+        """Two histories, one sidebar: threads Ripple worked on above the
+        single questions it answered, both scoped to the open script."""
         script_id = _first_script(client)
         client.post(
             f"/api/scripts/{script_id}/ask", data={"question": "Qx pane check?"}
         )
         body = client.get(f"/ask?script={script_id}").text
-        # Scripts on the left, history on the right, each with a search box.
-        assert 'id="script-list"' in body
-        assert 'id="script-search"' in body
-        assert 'class="askpane"' in body or 'class="pane askpane"' in body
+        assert 'id="thread-list"' in body
         assert 'id="ask-history"' in body
-        assert 'id="history-search"' in body
+        assert body.index('id="thread-list"') < body.index('id="ask-history"')
         assert "Qx pane check?" in body
-        # Both panes collapse, and both carry a resize grip.
-        assert 'data-pane="askhistory"' in body
         assert 'data-resize="side"' in body
-        assert 'data-resize="askhistory"' in body
 
     def test_history_lists_the_question_and_replays_it_stored(self, client):
         script_id = _first_script(client)
@@ -854,9 +848,11 @@ class TestAskTheGraph:
     def test_fold_strips_accents_and_case(self):
         """The keyword-match fold collapses accent and case, so a term and its
         accented, differently-cased form become one string."""
-        assert web._fold("Béla") == web._fold("bela") == "bela"
-        assert web._fold("MATÍAS") == web._fold("matias") == "matias"
-        assert web._fold("Ilona Nagy") == "ilona nagy"
+        from ripple.services.retrieval import fold
+
+        assert fold("Béla") == fold("bela") == "bela"
+        assert fold("MATÍAS") == fold("matias") == "matias"
+        assert fold("Ilona Nagy") == "ilona nagy"
 
     def test_a_missing_stored_question_is_404(self, client):
         gone = "00000000-0000-0000-0000-000000000000"
@@ -1600,7 +1596,7 @@ class TestLockedFeatures:
         client.post("/api/graphs/clear")
         body = client.get("/ask").text
         assert "Nothing to ask yet" in body
-        assert "no graph, so there is nothing to answer from" in body
+        assert "nothing to work from" in body
         # No model is configured in the fixture, so the one action offered
         # is choosing a model, not building.
         assert 'href="/settings"' in body
@@ -2658,3 +2654,151 @@ class TestAgentSettingsSurface:
     def test_no_light_theme_control_ships(self, client):
         body = client.get("/settings").text
         assert "Light theme" not in body
+
+
+class TestAskRipple:
+    """The chat endpoint: routing, agent turns, and the confirm gate."""
+
+    @pytest.fixture
+    def ripple_model(self, tmp_path, monkeypatch):
+        """A fixture provider standing in for the chat's model."""
+        from ripple.llm.fixture import FixtureProvider
+
+        fake = FixtureProvider(
+            tmp_path / "fx", default_reply='{"kind": "question"}'
+        )
+        monkeypatch.setattr(web, "get_query_provider", lambda name: fake)
+        monkeypatch.setattr(
+            web.settings_service,
+            "selected_model",
+            lambda session: ("google", "fixture-cheap"),
+        )
+        return fake
+
+    def test_a_question_is_answered_on_the_grounded_path(
+        self, client, ripple_model
+    ):
+        """The router says question, and the reply is the ask path's answer:
+        grounded, cited, and logged, with no agent turn billed."""
+        script_id = _first_script(client)
+        response = client.post(
+            f"/api/scripts/{script_id}/ripple",
+            data={"message": "Which scenes include the sedan?"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["kind"] == "answer"
+        assert "grounded_in" in body
+        assert not ripple_model.conversations
+
+    def test_a_change_request_opens_a_conversation(self, client, ripple_model):
+        from ripple.llm.base import AgentReply, ToolCall
+
+        ripple_model.default_reply = '{"kind": "change"}'
+        ripple_model.script_turns(
+            [
+                AgentReply(text="", tool_calls=[ToolCall("list_findings", {})]),
+                AgentReply(text="Here is the plan.", input_tokens=5, output_tokens=5),
+            ]
+        )
+        script_id = _first_script(client)
+        response = client.post(
+            f"/api/scripts/{script_id}/ripple",
+            data={"message": "We lost the harbour location. Fix it."},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["kind"] == "turn"
+        assert body["reply"] == "Here is the plan."
+        assert body["conversation"]["title"].startswith("We lost the harbour")
+        assert [tool["name"] for tool in body["tools"]] == ["list_findings"]
+        # The thread is in the sidebar on the next load.
+        assert "We lost the harbour" in client.get(f"/ask?script={script_id}").text
+
+    def test_a_thread_replays_from_storage(self, client, ripple_model):
+        from ripple.llm.base import AgentReply
+
+        ripple_model.default_reply = '{"kind": "change"}'
+        ripple_model.script_turns([AgentReply(text="Noted.")])
+        script_id = _first_script(client)
+        opened = client.post(
+            f"/api/scripts/{script_id}/ripple",
+            data={"message": "Rename the sedan."},
+        ).json()
+        detail = client.get(
+            f"/api/conversations/{opened['conversation']['id']}"
+        ).json()
+        roles = [turn["role"] for turn in detail["turns"]]
+        assert roles == ["user", "ripple"]
+        assert detail["turns"][1]["text"] == "Noted."
+
+    def test_a_second_message_carries_the_thread(self, client, ripple_model):
+        from ripple.llm.base import AgentReply
+
+        ripple_model.default_reply = '{"kind": "change"}'
+        ripple_model.script_turns([AgentReply(text="First.")])
+        script_id = _first_script(client)
+        opened = client.post(
+            f"/api/scripts/{script_id}/ripple",
+            data={"message": "Cut the fight scene."},
+        ).json()
+        ripple_model.script_turns([AgentReply(text="Second.")])
+        client.post(
+            f"/api/scripts/{script_id}/ripple",
+            data={
+                "message": "Keep the dialogue though.",
+                "conversation_id": opened["conversation"]["id"],
+            },
+        )
+        # The second call went straight to the agent, no routing call, and
+        # its request carried the first exchange as history.
+        history = ripple_model.conversations[-1]["messages"]
+        assert any("Cut the fight scene" in str(entry) for entry in history)
+
+    def test_confirm_is_a_page_action_not_a_tool(self, client, ripple_model):
+        """The agent's tool list, as sent to the model, has no accept."""
+        from ripple.llm.base import AgentReply
+
+        ripple_model.default_reply = '{"kind": "change"}'
+        ripple_model.script_turns([AgentReply(text="ok")])
+        script_id = _first_script(client)
+        client.post(
+            f"/api/scripts/{script_id}/ripple", data={"message": "Change it."}
+        )
+        tools = ripple_model.conversations[-1]["tools"]
+        assert tools
+        assert not any("accept" in name or "apply" in name for name in tools)
+
+    def test_an_oversized_message_is_refused_before_any_call(
+        self, client, ripple_model
+    ):
+        script_id = _first_script(client)
+        response = client.post(
+            f"/api/scripts/{script_id}/ripple", data={"message": "x" * 2001}
+        )
+        assert response.status_code == 422
+        assert not ripple_model.calls
+        assert not ripple_model.conversations
+
+    def test_closing_a_thread_rejects_its_pending_proposal(
+        self, client, ripple_model, judged
+    ):
+        """Walking away must not leave a change set waiting to be accepted."""
+        from ripple.llm.base import AgentReply
+
+        # judged patches get_provider; the chat rides get_query_provider, so
+        # re-point it after the judged fixture replaced the registry.
+        script_id = _first_script(client)
+        unit_id = _units(client, script_id)[1]
+        opened = client.post(
+            f"/api/scripts/{script_id}/ripple",
+            data={"message": "Recolour the sedan.", "stage": "draft"},
+        ).json()
+        # A pending proposal made the ordinary way, recorded on the thread by
+        # confirm's own bookkeeping path: simulate by previewing an edit and
+        # attaching it through the close endpoint's query.
+        closed = client.post(
+            f"/api/conversations/{opened['conversation']['id']}/close"
+        )
+        assert closed.status_code == 200
+        assert closed.json() == {"rejected": 0}

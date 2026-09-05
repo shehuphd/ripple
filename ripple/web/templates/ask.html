@@ -1,47 +1,52 @@
 {% extends "base.html" %}
-{% block title %}Ask the graph · Ripple{% endblock %}
+{% block title %}Ask Ripple · Ripple{% endblock %}
 
 {% block sidebar %}
-<div class="side-hd"><span>Scripts</span>
-  <span class="num">{{ scripts|length }}</span></div>
-<a class="srow side-fixed" href="/">
-  <span class="ic">‹</span><span class="lb">Library</span></a>
-<div class="side-search">
-  <span class="ic" aria-hidden="true">⌕</span>
-  <input id="script-search" placeholder="Search scripts" autocomplete="off"
-         aria-label="Search scripts">
-</div>
-<div class="side-scroll" id="script-list">
-  {% for row in scripts %}
-  <a class="srow {{ 'on' if script and row.id == script.id|string }}"
-     {% if script and row.id == script.id|string %}aria-current="page"{% endif %}
-     href="/ask?script={{ row.id }}">
-    <span class="ic">▤</span><span class="lb">{{ row.title }}</span>
-    <span class="ct num">{{ row.assertions }}</span></a>
+{% if script %}
+<a class="srow side-fixed" href="/reader?script={{ script.id }}">
+  <span class="ic">‹</span><span class="lb">{{ script.title }}</span></a>
+<div class="side-hd"><span>Conversations</span>
+  <span class="num" id="thread-count">{{ conversations|length }}</span></div>
+<div class="side-scroll" id="thread-list">
+  {% for row in conversations %}
+  <button class="srow qrow" data-thread="{{ row.id }}"
+          title="{{ row.title }} · {{ row.updated_at }}">
+    <span class="ic">≋</span><span class="lb">{{ row.title }}</span></button>
   {% endfor %}
-  <div class="side-nomatch hide" id="script-nomatch">No script matches.</div>
+  <div class="side-nomatch{{ ' hide' if conversations }}" id="thread-empty">
+    A request that changes the script opens a conversation here.</div>
 </div>
+<div class="side-hd"><span>Questions</span>
+  <span class="num" id="history-count">{{ history|length }}</span></div>
+<div class="side-scroll" id="ask-history">
+  {% for item in history %}
+  <button class="srow qrow" data-query="{{ item.id }}"
+          title="{{ item.question }} · {{ item.asked_at }}">
+    <span class="ic">◷</span><span class="lb">{{ item.question }}</span></button>
+  {% endfor %}
+  <div class="side-nomatch{{ ' hide' if history }}" id="history-empty">
+    Questions you ask appear here, and replay at no cost.</div>
+</div>
+{% else %}
+<div class="side-hd"><span>Scripts</span><span class="num">0</span></div>
+<a class="srow side-fixed" href="/"><span class="ic">‹</span>
+  <span class="lb">Library</span></a>
+{% endif %}
 <i class="pane-grip" role="separator" aria-orientation="vertical"
-   aria-label="Resize the scripts pane" tabindex="0"
+   aria-label="Resize the sidebar" tabindex="0"
    data-resize="side" data-resize-var="--side-w" data-edge="right"
    data-min="180" data-max="460"></i>
 {% endblock %}
 
 {% block toolbar %}
-<h1>Ask the graph</h1>
+<h1>Ask Ripple</h1>
 <span class="sub" id="ask-sub" data-title="{{ script.title if script }}">
-  {% if script %}{{ script.title }} · <span class="num">{{ assertions }}</span>
-    accepted assertions · <span class="num">{{ entities }}</span> entities
+  {% if script %}{{ script.title }}, base
+    <span class="num">v{{ script.current_version }}</span>
   {% else %}No scripts yet{% endif %}</span>
 <div class="right">
-  <button class="btn hide" id="export-answer"
-          data-tip="Download this answer and its citations as Markdown">
-    ⤓ Export answer</button>
-  {% if script %}
-  <button class="toggle" data-pane="askhistory" data-target=".askwrap"
-          data-tip="Show or hide the history pane"
-          aria-label="Toggle the history pane">⬒</button>
-  {% endif %}
+  {% if model %}<span class="chip" data-tip="The model Ask Ripple runs on">
+    ◎ {{ model }}</span>{% endif %}
 </div>
 {% endblock %}
 
@@ -52,10 +57,7 @@
   <div class="lock"><span class="ic">◎</span>
     <span>There are no scripts to ask about.</span>
     <a href="/">Import one</a></div>
-{% else %}
-<div class="askwrap">
-  <div class="askmain">
-  {% if lock %}
+{% elif lock %}
   <div class="ask-empty" id="ask-idle">
     <div class="ask-empty-ic" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -66,8 +68,8 @@
       </svg>
     </div>
     <h2>Nothing to ask yet</h2>
-    <p>Questions are answered from accepted assertions. {{ script.title }} has
-      no graph, so there is nothing to answer from.</p>
+    <p>Ripple works from accepted assertions. {{ script.title }} has no graph,
+      so there is nothing to work from.</p>
     {% if model %}
     <button class="btn pri" id="ask-build" data-script="{{ script.id }}">
       ⁙ Build graph</button>
@@ -77,7 +79,6 @@
       live in Settings</p>
     {% endif %}
   </div>
-
   <div class="ask-empty hide" id="ask-building" role="status" aria-live="polite">
     <div class="spinner" aria-hidden="true"></div>
     <h2>Building graph&hellip;</h2>
@@ -92,53 +93,38 @@
     </div>
     <button class="btn" id="bp-cancel">Cancel</button>
   </div>
-  {% else %}
-  <div class="ask-col">
-    <div id="askform"
-         data-script="{{ script.id }}" data-title="{{ script.title }}"
-         data-ready="yes">
-      <div class="askbox">
-        <span class="ic" aria-hidden="true">⌕</span>
-        <input id="q" placeholder="Which scenes include the blue sedan?"
-               autocomplete="off" maxlength="1024">
-        <button class="btn pri" id="ask" disabled
-                data-tip="Type a question to ask">Ask</button>
+{% else %}
+<div class="chatwrap" id="chatwrap"
+     data-script="{{ script.id }}" data-title="{{ script.title }}"
+     data-plan="{{ 'on' if agent.show_plan else 'off' }}">
+  <div class="chat" id="chat" aria-live="polite">
+    <div class="chat-intro" id="chat-intro">
+      <h2>Ask Ripple</h2>
+      <p>Ask what the graph holds, or say what changed on the production.
+        A question is answered from accepted assertions. A change request
+        opens a conversation: Ripple reads the graph, states a plan, drafts
+        the scenes, and shows what it breaks before anything applies.</p>
+      <div class="chat-examples">
+        <button class="btn" data-example="Which scenes include the blue sedan?">
+          Which scenes include the blue sedan?</button>
+        <button class="btn" data-example="We lost the harbour location. Tell me what breaks and fix it.">
+          We lost the harbour location&hellip;</button>
       </div>
     </div>
-
-    <div id="out" aria-live="polite"><div class="ask-hint">
-      Answers from accepted graph assertions, not screenplay text. Browse
-      history in the right pane.</div></div>
-  </div>
-  {% endif %}
   </div>
 
-  <aside class="pane askpane">
-    <i class="pane-grip" role="separator" aria-orientation="vertical"
-       aria-label="Resize the history pane" tabindex="0"
-       data-resize="askhistory" data-resize-var="--askpane-w" data-edge="left"
-       data-min="220" data-max="560"></i>
-    <div class="pane-hd"><h2>History</h2>
-      <span class="meta num" id="history-count">{{ history|length }}</span></div>
-    <div class="side-search">
-      <span class="ic" aria-hidden="true">⌕</span>
-      <input id="history-search" placeholder="Search questions"
-             autocomplete="off" aria-label="Search past questions">
+  <div class="composer">
+    <div class="askbox">
+      <span class="ic" aria-hidden="true">▭</span>
+      <input id="q" placeholder="Reply to Ripple" autocomplete="off"
+             maxlength="2000" aria-label="Message Ripple">
+      <span class="sendhint tiny muted"><kbd>Enter</kbd> to send</span>
+      <button class="btn pri" id="ask" disabled
+              data-tip="Type a message to send">Send</button>
     </div>
-    <div class="qlist" id="ask-history">
-      {% for item in history %}
-      <button class="qrow" data-query="{{ item.id }}"
-              title="{{ item.question }} · {{ item.asked_at }}">
-        <span class="qq">{{ item.question }}</span>
-        <span class="qt num">{{ item.asked_at }}</span>
-      </button>
-      {% endfor %}
-    </div>
-    <div class="side-nomatch hide" id="history-nomatch">
-      No question matches.</div>
-    <div class="side-nomatch{{ ' hide' if history }}" id="history-empty">
-      Questions you ask appear here, and replay at no cost.</div>
-  </aside>
+    <p class="tiny muted composer-note">Ripple proposes; nothing is applied
+      until you confirm. Accepting is only ever a button on this page.</p>
+  </div>
 </div>
 {% endif %}
 {% endblock %}

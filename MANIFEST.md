@@ -109,6 +109,9 @@ Every file in the repository and what it does. Directories the application write
 | `services/scenes.py` | Scene insertion, omission (OMITTED, reversible), and restoration. |
 | `services/spend.py` | Token ledger and the hard budget gate every call site checks. |
 | `services/settings.py` | Credential entry and validation, main and fallback model selection. |
+| `services/retrieval.py` | The evidence packet one question is answered from: keyword retrieval with alias and diacritic folding, the entity roster, and the ordered scene list. |
+| `services/agent.py` | Ask Ripple's agent loop: read-only tools plus a quarantined drafter, sentinel fencing, the minimal-edit guard, the confidence floor, and per-turn ceilings. Accept and undo are not tools. |
+| `services/conversations.py` | Ask Ripple threads: stored turns replayed at no cost, thread history for the next turn, the applied summary, and rejection of abandoned proposals. |
 | `services/synthesizer.py` | Plain-language ripple explanation and the grounded query answer (script facts + assertions packet, out-of-scope parts declined, answer checked for ungrounded entity names), each with a deterministic no-model fallback. |
 
 ### Web (`ripple/web/`)
@@ -167,6 +170,7 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_pricing.py` | Cost lookup, reasoning at the output rate, and honest unknowns. |
 | `tests/test_prepass.py` | The deterministic pre-pass and the validator's provided-id and span-bound rules. |
 | `tests/test_preview.py` | The judgement engine end to end against the fixture provider. |
+| `tests/test_agent.py` | The agent loop: the tool surface, ceilings, fencing, the plan stage, the draft guard, and the confidence floor. |
 | `tests/test_settings.py` | Credential validation and model selection. |
 | `tests/test_spend.py` | Budget gate and refusal auditing. |
 | `tests/test_tracing.py` | TraceAct configuration and redaction. |

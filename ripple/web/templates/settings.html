@@ -228,6 +228,23 @@
                   aria-checked="{{ 'true' if agent.keep_conversations else 'false' }}"
                   aria-label="Keep conversations per script"><i></i></button>
         </div>
+        <div class="setopt">
+          <div class="grow">
+            <strong>Confidence floor for proposed facts</strong>
+            <p class="tiny muted">A fact the judge scores below the floor is
+              held back from the proposal and named on the card, so a doubtful
+              change is reported rather than offered. Off proposes everything
+              the judge accepts.</p>
+          </div>
+          <select class="field" id="agent-floor"
+                  aria-label="Confidence floor for proposed facts">
+            {% for choice in confidence_floors %}
+            <option value="{{ '%g'|format(choice) }}"
+                    {% if choice == agent.confidence_floor %}selected{% endif %}>
+              {{ 'Off' if choice == 0 else '%g'|format(choice) }}</option>
+            {% endfor %}
+          </select>
+        </div>
         <div class="result tiny" aria-live="polite" id="agent-result"></div>
       </div>
 
