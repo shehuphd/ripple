@@ -362,7 +362,9 @@ if (chatwrap) {
       row.dataset[key] = value;
     });
     row.title = label;
-    row.innerHTML = '<span class="ic">≋</span>';
+    row.innerHTML = dataset.thread
+      ? '<span class="ic">≋</span>'
+      : '<span class="ic">◷</span>';
     const text = document.createElement('span');
     text.className = 'lb';
     text.textContent = label;
@@ -383,6 +385,32 @@ if (chatwrap) {
     sidebarRow('thread-list', { thread: id }, title);
   }
 
+  /* Instant search over a pane's rows: the rows are already on the page, so
+     filtering is a display toggle, no request and no reload. */
+  function filterPane(inputId, listId, emptyId) {
+    const input = document.getElementById(inputId);
+    const list = document.getElementById(listId);
+    if (!input || !list) return;
+    const noMatch = emptyId ? document.getElementById(emptyId) : null;
+    const apply = () => {
+      const needle = input.value.trim().toLowerCase();
+      const rows = list.querySelectorAll('.qrow');
+      let shown = 0;
+      rows.forEach((row) => {
+        const hit = !needle || row.textContent.toLowerCase().includes(needle);
+        row.style.display = hit ? '' : 'none';
+        if (hit) shown += 1;
+      });
+      // An empty pane is not a failed search: its own empty line covers that.
+      if (noMatch) noMatch.classList.toggle('hide', shown > 0 || !rows.length);
+    };
+    input.addEventListener('input', apply);
+    apply();
+  }
+
+  filterPane('thread-search', 'thread-list', 'thread-nomatch');
+  filterPane('history-search', 'ask-history', 'history-nomatch');
+
   function prependQuestion(id, question) {
     sidebarRow('ask-history', { query: id }, question);
   }
@@ -392,22 +420,23 @@ if (chatwrap) {
     thread = id;
     try {
       const body = await api(`/api/conversations/${id}`);
-      // A proposal that was decided keeps its card but not its buttons: an
-      // applied turn later in the thread means Confirm already happened.
-      const decided = new Set(
-        body.turns
-          .filter((entry) => entry.role === 'applied' && entry.change_set_id)
-          .map((entry) => entry.change_set_id),
-      );
-      body.turns.forEach((entry) => {
-        if (entry.role === 'user') addUser(entry.text);
-        else if (entry.role === 'applied') addApplied(entry.payload);
-        else {
-          const wrap = addRipple(entry.payload);
-          if (entry.change_set_id && decided.has(entry.change_set_id)) {
-            retire(wrap);
-          }
+      // A replayed turn keeps its cards but not its buttons unless it is
+      // still the live one: the thread moved past everything before it, and
+      // a proposal already accepted or rejected has nothing left to decide.
+      const last = body.turns.length - 1;
+      body.turns.forEach((entry, index) => {
+        if (entry.role === 'user') {
+          addUser(entry.text);
+          return;
         }
+        if (entry.role === 'applied') {
+          addApplied(entry.payload);
+          return;
+        }
+        const wrap = addRipple(entry.payload);
+        const decided = entry.change_set_id
+          && entry.change_set_status !== 'pending';
+        if (index !== last || decided) retire(wrap);
       });
     } catch (error) { toast(error.message, true); }
   }

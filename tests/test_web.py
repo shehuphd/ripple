@@ -783,19 +783,24 @@ class TestAskTheGraph:
         assert body["ungrounded_entities"] == []
         assert "query_id" in body
 
-    def test_conversations_sit_above_questions_in_the_sidebar(self, client):
-        """Two histories, one sidebar: threads Ripple worked on above the
-        single questions it answered, both scoped to the open script."""
+    def test_conversations_and_questions_get_their_own_panes(self, client):
+        """Two histories, two panes: conversations in the sidebar, questions
+        on the right, each searchable and each scoped to the open script."""
         script_id = _first_script(client)
         client.post(
             f"/api/scripts/{script_id}/ask", data={"question": "Qx pane check?"}
         )
         body = client.get(f"/ask?script={script_id}").text
         assert 'id="thread-list"' in body
+        assert 'id="thread-search"' in body
+        assert 'class="pane askpane"' in body
         assert 'id="ask-history"' in body
-        assert body.index('id="thread-list"') < body.index('id="ask-history"')
+        assert 'id="history-search"' in body
         assert "Qx pane check?" in body
+        # Both panes collapse, and both carry a resize grip.
+        assert 'data-pane="askhistory"' in body
         assert 'data-resize="side"' in body
+        assert 'data-resize="askhistory"' in body
 
     def test_history_lists_the_question_and_replays_it_stored(self, client):
         script_id = _first_script(client)

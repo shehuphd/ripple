@@ -7,25 +7,21 @@
   <span class="ic">‹</span><span class="lb">{{ script.title }}</span></a>
 <div class="side-hd"><span>Conversations</span>
   <span class="num" id="thread-count">{{ conversations|length }}</span></div>
+<div class="side-search">
+  <span class="ic" aria-hidden="true">⌕</span>
+  <input id="thread-search" placeholder="Search conversations" autocomplete="off"
+         aria-label="Search conversations">
+</div>
 <div class="side-scroll" id="thread-list">
   {% for row in conversations %}
   <button class="srow qrow" data-thread="{{ row.id }}"
           title="{{ row.title }} · {{ row.updated_at }}">
     <span class="ic">≋</span><span class="lb">{{ row.title }}</span></button>
   {% endfor %}
+  <div class="side-nomatch hide" id="thread-nomatch">
+    No conversation matches.</div>
   <div class="side-nomatch{{ ' hide' if conversations }}" id="thread-empty">
     A request that changes the script opens a conversation here.</div>
-</div>
-<div class="side-hd"><span>Questions</span>
-  <span class="num" id="history-count">{{ history|length }}</span></div>
-<div class="side-scroll" id="ask-history">
-  {% for item in history %}
-  <button class="srow qrow" data-query="{{ item.id }}"
-          title="{{ item.question }} · {{ item.asked_at }}">
-    <span class="ic">◷</span><span class="lb">{{ item.question }}</span></button>
-  {% endfor %}
-  <div class="side-nomatch{{ ' hide' if history }}" id="history-empty">
-    Questions you ask appear here, and replay at no cost.</div>
 </div>
 {% else %}
 <div class="side-hd"><span>Scripts</span><span class="num">0</span></div>
@@ -47,6 +43,11 @@
 <div class="right">
   {% if model %}<span class="chip" data-tip="The model Ask Ripple runs on">
     ◎ {{ model }}</span>{% endif %}
+  {% if script and not lock %}
+  <button class="toggle" data-pane="askhistory" data-target=".askwrap"
+          data-tip="Show or hide the questions pane"
+          aria-label="Toggle the questions pane">⬒</button>
+  {% endif %}
 </div>
 {% endblock %}
 
@@ -94,6 +95,7 @@
     <button class="btn" id="bp-cancel">Cancel</button>
   </div>
 {% else %}
+<div class="askwrap">
 <div class="chatwrap" id="chatwrap"
      data-script="{{ script.id }}" data-title="{{ script.title }}"
      data-plan="{{ 'on' if agent.show_plan else 'off' }}">
@@ -105,9 +107,12 @@
         opens a conversation: Ripple reads the graph, states a plan, drafts
         the scenes, and shows what it breaks before anything applies.</p>
       <div class="chat-examples">
-        <button class="btn" data-example="Which scenes include the blue sedan?">
+        <button class="btn" data-example="Which scenes include the blue sedan?"
+                data-tip="A question: answered from accepted assertions, with the lines it cites">
           Which scenes include the blue sedan?</button>
-        <button class="btn" data-example="We lost the harbour location. Tell me what breaks and fix it.">
+        <button class="btn"
+                data-example="We lost the harbour location. Tell me what breaks and fix it."
+                data-tip="A change request: Ripple reads the graph, plans scene by scene, and waits before drafting">
           We lost the harbour location&hellip;</button>
       </div>
     </div>
@@ -123,8 +128,33 @@
               data-tip="Type a message to send">Send</button>
     </div>
     <p class="tiny muted composer-note">Ripple proposes; nothing is applied
-      until you confirm. Accepting is only ever a button on this page.</p>
+      until you confirm.</p>
   </div>
+</div>
+
+<aside class="pane askpane">
+  <i class="pane-grip" role="separator" aria-orientation="vertical"
+     aria-label="Resize the questions pane" tabindex="0"
+     data-resize="askhistory" data-resize-var="--askpane-w" data-edge="left"
+     data-min="220" data-max="560"></i>
+  <div class="pane-hd"><h2>Questions</h2>
+    <span class="meta num" id="history-count">{{ history|length }}</span></div>
+  <div class="side-search">
+    <span class="ic" aria-hidden="true">⌕</span>
+    <input id="history-search" placeholder="Search questions" autocomplete="off"
+           aria-label="Search past questions">
+  </div>
+  <div class="qlist" id="ask-history">
+    {% for item in history %}
+    <button class="srow qrow" data-query="{{ item.id }}"
+            title="{{ item.question }} · {{ item.asked_at }}">
+      <span class="ic">◷</span><span class="lb">{{ item.question }}</span></button>
+    {% endfor %}
+  </div>
+  <div class="side-nomatch hide" id="history-nomatch">No question matches.</div>
+  <div class="side-nomatch{{ ' hide' if history }}" id="history-empty">
+    Questions you ask appear here, and replay at no cost.</div>
+</aside>
 </div>
 {% endif %}
 {% endblock %}

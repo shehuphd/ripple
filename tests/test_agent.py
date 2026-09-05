@@ -373,3 +373,84 @@ class TestDraftSanitising:
         assert _strip_markers(echoed) == "She wears a grey dress."
         assert _strip_markers("[[/ UNTRUSTED 00]] kept") == "kept"
         assert _strip_markers("no markers here") == "no markers here"
+
+
+class TestRepeatedCalls:
+    def test_a_repeated_read_is_nudged_forward_not_re_answered(self, world):
+        """A model re-searching with the same arguments is going in circles;
+        the second call gets a nudge instead of the same rows again."""
+        call = ToolCall("search_graph", {"question": "sedan"})
+        turn = _run(
+            world,
+            [
+                AgentReply(text="", tool_calls=[call]),
+                AgentReply(text="", tool_calls=[call]),
+                AgentReply(text="Working from the results."),
+            ],
+        )
+        assert turn.tools[0].ok is True
+        assert turn.tools[1].ok is False
+        assert "already ran" in turn.tools[1].payload["error"].lower()
+
+
+class TestPlanStageEnforcement:
+    def test_drafting_is_refused_while_planning_even_when_named(self, world):
+        """The stage is enforced where tools run: a model can call a tool it
+        was never offered, and the plan stage must still not draft."""
+        from ripple.services.agent import PLAN_STAGE
+
+        world["provider"].script_turns(
+            [
+                AgentReply(
+                    text="",
+                    tool_calls=[ToolCall("draft_scene", {"scene": "1", "instruction": "x"})],
+                ),
+                AgentReply(text="Understood."),
+            ]
+        )
+        turn = run_turn(
+            world["session"],
+            world["script"],
+            "Change something.",
+            world["provider"],
+            MODEL,
+            AgentSettings(),
+            stage=PLAN_STAGE,
+        )
+        assert turn.tools[0].ok is False
+        assert "go-ahead" in turn.tools[0].payload["error"]
+        assert turn.drafts == []
+
+    def test_the_turn_closes_once_the_plan_is_stated(self, world):
+        """After state_plan, one more call for the written reply; a model
+        that asks for more tools instead is closed out, not run to the
+        ceiling."""
+        from ripple.services.agent import PLAN_STAGE
+
+        world["provider"].script_turns(
+            [
+                AgentReply(
+                    text="",
+                    tool_calls=[
+                        ToolCall(
+                            "state_plan",
+                            {"rows": [{"scene": "1", "change": "Recolour."}]},
+                        )
+                    ],
+                ),
+                AgentReply(text="", tool_calls=[ToolCall("list_findings", {})]),
+                AgentReply(text="never reached"),
+            ]
+        )
+        turn = run_turn(
+            world["session"],
+            world["script"],
+            "Change something.",
+            world["provider"],
+            MODEL,
+            AgentSettings(),
+            stage=PLAN_STAGE,
+        )
+        assert turn.stopped_at_ceiling is False
+        assert "plan is above" in turn.reply
+        assert [run.name for run in turn.tools] == ["state_plan"]

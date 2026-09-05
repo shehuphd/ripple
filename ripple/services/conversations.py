@@ -126,17 +126,27 @@ def replay(session: Session, conversation: Conversation) -> list[dict[str, Any]]
         .where(ConversationTurn.conversation_id == conversation.id)
         .order_by(ConversationTurn.created_at)
     )
-    return [
-        {
-            "role": row.role,
-            "text": row.text,
-            "payload": row.payload_json or {},
-            "change_set_id": (
-                str(row.change_set_id) if row.change_set_id else None
-            ),
-        }
-        for row in rows
-    ]
+    replayed = []
+    for row in rows:
+        # A replayed proposal must not offer a decision that was already
+        # taken: the page reads the status to know whether Confirm still
+        # means anything.
+        status = None
+        if row.change_set_id:
+            change_set = session.get(ChangeSet, row.change_set_id)
+            status = change_set.status if change_set else "gone"
+        replayed.append(
+            {
+                "role": row.role,
+                "text": row.text,
+                "payload": row.payload_json or {},
+                "change_set_id": (
+                    str(row.change_set_id) if row.change_set_id else None
+                ),
+                "change_set_status": status,
+            }
+        )
+    return replayed
 
 
 def abandon_pending(session: Session, conversation: Conversation) -> int:

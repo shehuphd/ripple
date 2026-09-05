@@ -397,12 +397,25 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 /* The sidebar toggle is the leftmost control; a centred tooltip would
    extend past the bar's left edge and under the sidebar. Grow rightward. */
 .toggle[data-tip]::after{left:0;transform:none}
+/* A toggle at the other end of the bar takes the right anchor back: with
+   both edges pinned the tooltip is squeezed to the button's own width and
+   its text runs off the window. */
+.right .toggle[data-tip]::after{left:auto;right:0}
 /* A control at the right edge of a scrolling column: the column sets
    overflow-y, which makes the other axis scroll too, so a centred tooltip is
    cut off at the edge rather than overhanging it. Grow leftward instead. */
 .sctl [data-tip]::after,
 .pane .card .hd [data-tip]::after{left:auto;right:0;transform:none}
 [data-tip]:hover::after,[data-tip]:focus-visible::after{opacity:1}
+/* A chip whose own label already reads as the action: the tooltip adds what
+   the action does, so it waits for a hover that means it. The chat column
+   scrolls, so a centred tooltip is clipped at the column's edge; each chip
+   grows its tooltip towards the middle of the row instead. */
+.chat-examples [data-tip]:hover::after,
+.chat-examples [data-tip]:focus-visible::after{transition-delay:.5s}
+.chat-examples [data-tip]::after{left:0;transform:none;max-width:300px;
+  text-align:left}
+.chat-examples [data-tip]:last-child::after{left:auto;right:0}
 @media (prefers-reduced-motion:reduce){[data-tip]::after{transition:none}}
 
 /* Touch targets grow to 44px where the pointer is coarse; the dense
@@ -636,8 +649,20 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
    under it. A turn is an avatar, a label, and whatever the turn produced:
    tool chips, prose, a coverage list, a ripple card, and the buttons that
    decide it. The buttons are the only path to acceptance on this page. */
-.chatwrap{display:grid;grid-template-rows:minmax(0,1fr) auto;flex:1;
-  min-height:0}
+/* Chat in the middle, question history on the right. The pane collapses from
+   the toolbar and drags wider by its inner edge; each side scrolls on its own,
+   so a long thread and a long history never compete for one scrollbar. */
+.askwrap{display:grid;grid-template-columns:minmax(0,1fr) var(--askpane-w,320px);
+  gap:16px;flex:1;min-height:0}
+.askwrap.pane-off{grid-template-columns:minmax(0,1fr)}
+.askwrap.pane-off .askpane{display:none}
+@media(max-width:1080px){
+  .askwrap{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}
+}
+.askpane{position:relative;display:flex;flex-direction:column;gap:0;
+  padding:8px 2px 0 14px;overflow-y:auto;min-height:0}
+.qlist{display:flex;flex-direction:column}
+.chatwrap{display:grid;grid-template-rows:minmax(0,1fr) auto;min-height:0}
 .chat{overflow-y:auto;min-height:0;padding:18px 8px 8px}
 .chat > *{max-width:900px;margin:0 auto}
 .chat-intro{padding:40px 4px 10px;color:var(--t2)}
