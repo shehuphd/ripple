@@ -60,7 +60,7 @@ A run reports its spend as it goes: the progress counter and the finished label 
 
 **Cancel** stops a run. It asks for a second press, then stops after the scene being read, so that scene's spend buys a scene in the graph rather than being thrown away. Scenes already extracted keep their facts, and pressing Build graph later picks up the scenes still to do and bills only those.
 
-The button is gated on billable work. Once the graph is built and every scene's content matches its cached extraction, it disables, with the reason in its tooltip. When scenes have changed since the last build (an added or restored scene, a linked draft, or a switched model), it reads **Update graph** and its tooltip counts the changed scenes; only those are billed, since the rest replay from cache. An accepted ripple does not count: its judgement already applied the graph changes, so acceptance marks the scene's new content as extracted, provided the pre-edit content had been extracted under the same prompt and model.
+The button is gated on billable work. Once the graph is built and every scene's content matches its cached extraction, it reads **Rebuild graph**: pressing it asks for confirmation, then reads every scene again with the model instead of replaying the cache, for when the parser or the pre-pass has improved since the last build. Facts already in the graph stay; a rebuild adds and refreshes. When scenes have changed since the last build (an added or restored scene, a linked draft, or a switched model), it reads **Update graph** and its tooltip counts the changed scenes; only those are billed, since the rest replay from cache. An accepted ripple does not count: its judgement already applied the graph changes, so acceptance marks the scene's new content as extracted, provided the pre-edit content had been extracted under the same prompt and model.
 
 A run ends in one of three states:
 
@@ -78,6 +78,7 @@ Opening a script shows its production graph: every scene on a two-row spine in s
 
 - **Select** a node by clicking it or through the search box; everything unrelated dims, the node's edges draw, and the detail pane fills. Clicking the selected node again, or pressing Escape, deselects.
 - **Zoom and pan** with the mouse wheel, dragging, the on-canvas controls, or the keyboard (arrows pan, `+` and `-` zoom, `0` resets) when the canvas has focus.
+- **Drag** a node to a spot of your own; its edges follow, and Shift with the arrow keys nudges the selected node. Positions hold until the page reloads.
 - **Search** filters live over every node label; picking a result selects it and centres the view on it.
 
 An entity's detail card shows its type, description, aliases, attributes with their evidence lines, every assertion it participates in, and the scenes it spans. The **expanded view** (`Open` from the detail pane) adds depth control, a removed-edge overlay, and per-department filters for one node's neighbourhood.
@@ -86,7 +87,7 @@ Edges are drawn by predicate family, so the line style says the same thing the l
 
 ## Editing and the ripple preview
 
-In the reader, every line is editable in place. Typing marks the line "edited, not applied" in amber; the toolbar counts unapplied edits; Escape reverts a line and **Revert edits** discards them all. Drafts live only in the page. The accepted script does not change until you accept a ripple.
+The reader's sidebar lists every scene with an instant-search box above it, filtering as you type; on a long play that box is how you reach a scene without scrolling. In the reader, every line is editable in place. Typing marks the line "edited, not applied" in amber; the toolbar counts unapplied edits; Escape reverts a line and **Revert edits** discards them all. Drafts live only in the page. The accepted script does not change until you accept a ripple.
 
 **See ripple** sends every drafted line as one proposal. The engine judges each affected scene in one model call, plus one continuity call per preview: the model is shown the stored assertions and attributes those lines support, each with its evidence, and returns a verdict per item: `holds`, `changed`, or `removed`, plus any new items with cited evidence. Every verdict is verified in code before anything persists; a reply that skips a listed item fails the preview rather than guessing.
 

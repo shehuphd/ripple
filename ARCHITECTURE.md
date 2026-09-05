@@ -61,9 +61,9 @@ The model is called for extraction, the preview's judgement and continuity passe
 
 ## STRuFO
 
-A one-page tour: Shape, Technical stack, Run details, Failure modes, Observability.
+[S]hape, [T]echnical stack, [Ru]n details, [F]ailure modes, [O]bservability.
 
-### Shape (10 seconds)
+### Shape
 
 Ripple treats a screenplay as a production database, not a static document. It imports a script, extracts a graph of production entities and evidence-backed assertions, and shows the downstream production and continuity impact of a proposed edit before anything is applied. The loop is: select a line, inspect its graph, edit it, see the ripple, decide.
 
@@ -79,13 +79,15 @@ Ripple treats a screenplay as a production database, not a static document. It i
 - **`pdf-inspector` / `defusedxml`:** PDF and Final Draft XML parsing; optional `tesseract` + `pdftoppm` for OCR of scanned PDFs
 - **Deterministic core (no model):** format detection, parsing, the diff engine, continuity retrieval, 2D layout, and severity are all plain application code, so the diff and the orphaned-reference finding hold with no provider configured
 
-### Run details — cocktail-party version
+### Run details
+
+#### Plain-English version
 
 You upload a screenplay and Ripple reads it into a web of who and what each scene depends on: characters, props, wardrobe, vehicles, locations, every fact backed by the line that stated it. Then you change a line. Before anything is saved, Ripple shows you what that change knocks over downstream: the prop that's now in two places at once, the character named in a scene that no longer introduces them. You look at the ripple, then decide whether to accept it.
 
-### Run details — technical version
+#### Technical version
 
-**Setup (build the graph).** An upload is format-detected from its bytes, parsed into `ParsedScene`/`ParsedUnit`, and written as scripts/scenes/units. `extraction/service.py` then runs one scene at a time through the model: a deterministic pre-pass writes what code can derive (cast from dialogue cues, location from the heading) with `provenance="system"`, the model reads the rest, `validate.py` checks the JSON against the schema and predicate rules before any row is written, and entities/assertions/attributes are written to the graph. Extraction resumes per scene rather than restarting a whole run, and unchanged scenes replay from cache at no cost.
+**Setup (build the graph).** An upload is format-detected from its bytes, parsed into `ParsedScene`/`ParsedUnit`, and written as scripts/scenes/units. `extraction/service.py` then runs one scene at a time through the model: a deterministic pre-pass writes what code can derive (cast from dialogue cues, location from the heading) with `provenance="system"`, the model reads the rest, `validate.py` checks the JSON against the schema and predicate rules before any row is written, and entities/assertions/attributes are written to the graph. Extraction resumes per scene rather than restarting a whole run, and unchanged scenes replay from cache at no cost. The run panel's Cancel stops a build after the scene in flight, and a rebuild forces the run past the cache when the parser or pre-pass has improved since the last build.
 
 **The unit of work (one edit → ripple → accept).** You edit a line and press See ripple. `preview_changes` opens a `ripple.preview` traceact span and, for each affected scene, sends the model the stored assertions and attributes those edited lines support. `judge.py` verifies the returned verdicts in code: unlisted ids are dropped, a `holds` on deleted evidence is downgraded, a missing verdict is a coverage miss. An advisory continuity pass runs over a bounded evidence packet, every claimed conflict required to cite evidence ids from that packet. The deterministic `diff.py` compares assertion sets by edge identity (both endpoints plus predicate), so a proposed-but-unsaved assertion still compares correctly, and the synthesizer writes the plain-language explanation. Nothing is applied yet. On accept, `changeset.py` turns the diff and its findings into one atomic change set, applied in a single transaction, with latest-only undo. Every model call, refusals included, is written to the `model_calls` audit table.
 
@@ -101,6 +103,7 @@ You upload a screenplay and Ripple reads it into a web of who and what each scen
 | Continuity call fails | The advisory continuity judgement errors | Preview stands on the deterministic findings and says the continuity pass didn't run |
 | No model configured | No provider key / model selected | Import, reader, diff, and deterministic continuity findings all still work; only graph building is disabled |
 | Crash mid-build | Server stops during extraction | Per-scene resume on restart, never a restart from zero |
+| Cancelled build | Cancel then Confirm on the run panel | The loop stops after the scene in flight; the run closes as cancelled and its pending cache rows are deleted, so the next build resumes from the completed scenes and bills only the rest |
 
 ### Observability
 
