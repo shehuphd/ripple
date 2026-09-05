@@ -233,3 +233,25 @@ document.querySelectorAll('input[name="landing"]').forEach((radio) => {
     }
   });
 });
+
+/* Instant search over the billable-actions table. The rows are already in the
+   page, so filtering is local: no request, no reload. */
+const spendSearch = document.getElementById('spend-search');
+if (spendSearch) {
+  const spendRows = [...document.querySelectorAll('#spend-rows tr')];
+  const noMatch = document.getElementById('spend-nomatch');
+  const count = document.getElementById('spend-count');
+  spendSearch.addEventListener('input', () => {
+    const needle = spendSearch.value.trim().toLowerCase();
+    let shown = 0;
+    spendRows.forEach((row) => {
+      const hit = !needle || row.textContent.toLowerCase().includes(needle);
+      row.style.display = hit ? '' : 'none';
+      if (hit) shown += 1;
+    });
+    noMatch.classList.toggle('hide', shown > 0);
+    count.textContent = needle
+      ? `${shown} of ${spendRows.length} action(s)`
+      : `${spendRows.length} action(s)`;
+  });
+}

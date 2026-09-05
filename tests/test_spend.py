@@ -15,6 +15,7 @@ from ripple.db.models import ModelCall
 from ripple.db.session import create_all, create_db_engine, session_factory
 from ripple.services.spend import (
     BudgetExceeded,
+    actions,
     check_budget,
     get_budget,
     set_budget,
@@ -66,6 +67,76 @@ class TestLedger:
         ledger = summary(session)
         assert ledger.calls == 1
         assert ledger.total_tokens == 0
+
+
+class TestBillableActions:
+    """The Spend table groups the ledger the way the user made the calls."""
+
+    def stamp(self, session, purpose, when, script_id=None, tokens=100, **kw):
+        call = ModelCall(
+            script_id=script_id,
+            purpose=purpose,
+            prompt_version="v1",
+            model_id="fake",
+            request_text="prompt",
+            outcome="ok",
+            input_tokens=tokens,
+            output_tokens=0,
+            created_at=when,
+            **kw,
+        )
+        session.add(call)
+        session.flush()
+        return call
+
+    def test_one_build_is_one_row_however_many_scenes_it_read(self, session):
+        from datetime import datetime, timedelta
+
+        start = datetime(2026, 9, 1, 10, 0)
+        for step in range(5):
+            self.stamp(
+                session, "extract", start + timedelta(seconds=30 * step), tokens=200
+            )
+        rows = actions(session)
+        assert len(rows) == 1
+        assert rows[0]["action"] == "Graph build"
+        assert rows[0]["call_count"] == 5
+        assert rows[0]["tokens"] == 1000
+
+    def test_two_builds_hours_apart_are_two_rows(self, session):
+        from datetime import datetime, timedelta
+
+        start = datetime(2026, 9, 1, 10, 0)
+        self.stamp(session, "extract", start)
+        self.stamp(session, "extract", start + timedelta(hours=3))
+        rows = actions(session)
+        assert [row["action"] for row in rows] == ["Graph build", "Graph build"]
+        # Newest first, so the later build leads.
+        assert rows[0]["when"] > rows[1]["when"]
+
+    def test_a_preview_gathers_its_judge_and_continuity_calls(self, session):
+        from datetime import datetime, timedelta
+
+        start = datetime(2026, 9, 1, 10, 0)
+        self.stamp(session, "judge", start, tokens=300)
+        self.stamp(session, "continuity", start + timedelta(seconds=8), tokens=500)
+        self.stamp(session, "synthesize", start + timedelta(seconds=12), tokens=200)
+        rows = actions(session)
+        assert len(rows) == 1
+        assert rows[0]["action"] == "Ripple preview"
+        assert rows[0]["tokens"] == 1000
+
+    def test_each_question_is_its_own_row(self, session):
+        from datetime import datetime, timedelta
+
+        start = datetime(2026, 9, 1, 10, 0)
+        self.stamp(session, "query", start)
+        self.stamp(session, "query", start + timedelta(seconds=20))
+        rows = actions(session)
+        assert [row["action"] for row in rows] == ["Ask the graph", "Ask the graph"]
+
+    def test_an_empty_ledger_has_no_actions(self, session):
+        assert actions(session) == []
 
 
 class TestBudget:

@@ -200,6 +200,16 @@ table.scripts tr:last-child td{border-bottom:0}
 table.scripts tbody tr{cursor:pointer}
 table.scripts tbody tr:hover{background:var(--raised)}
 table.scripts tbody tr.on{background:#15242b;font-weight:600}
+/* The billable-actions ledger: a long table inside a settings card, so it
+   scrolls in its own box with the header staying put. */
+.tscroll{max-height:420px;overflow:auto;border:.5px solid var(--bd);
+  border-radius:9px;margin-top:11px}
+.tscroll table.scripts{border:0;border-radius:0}
+table.spend-table th{position:sticky;top:0;background:var(--card);z-index:1}
+table.spend-table td{padding:10px 14px;vertical-align:top}
+table.spend-table tbody tr{cursor:default}
+table.spend-table th.num, table.spend-table td.num{text-align:right}
+#spend-search{width:100%;margin-top:11px}
 table.scripts .title{font-family:var(--serif);font-size:17px;display:flex;
   align-items:center;gap:11px}
 table.scripts .title .ic{color:var(--t4);font-size:13px}

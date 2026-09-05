@@ -1378,6 +1378,7 @@ def settings_page(request: Request, session: Session = Depends(get_session)):
             "fallback_model": fallback,
             "counts": sidebar_counts(session),
             "ledger": spend.summary(session),
+            "spend_actions": spend.actions(session),
             "budget": spend.get_budget(session),
             "landing_view": get_landing_view(session),
         },

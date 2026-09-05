@@ -98,6 +98,44 @@
           {% else %}No cap set. Calls run whenever a model is selected.{% endif %}
         </div>
       </div>
+
+      <div class="card" id="spend-actions-card">
+        <div class="hd"><h2>Billable actions</h2>
+          <span class="meta tiny muted" id="spend-count">
+            {{ spend_actions|length }} action(s)</span></div>
+        {% if spend_actions %}
+        <input type="search" class="field" id="spend-search"
+               placeholder="Search actions, scripts, models"
+               autocomplete="off" spellcheck="false">
+        <div class="tscroll">
+        <table class="scripts spend-table">
+          <thead><tr>
+            <th>When</th><th>Action</th><th>Script</th><th>Model</th>
+            <th class="num">Calls</th><th class="num">Tokens</th>
+            <th class="num">Cost</th>
+          </tr></thead>
+          <tbody id="spend-rows">
+            {% for row in spend_actions %}
+            <tr>
+              <td class="tiny muted num">{{ row.when[:16].replace('T', ' ') if row.when }}</td>
+              <td>{{ row.action }}
+                {% if row.detail %}<div class="tiny muted">{{ row.detail }}</div>{% endif %}</td>
+              <td class="tiny">{{ row.script }}</td>
+              <td class="tiny muted">{{ row.model }}</td>
+              <td class="num">{{ row.call_count }}</td>
+              <td class="num">{{ "{:,}".format(row.tokens) }}</td>
+              <td class="num">{{ row.cost or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        <div class="tiny muted hide" id="spend-nomatch">
+          No action matches that search.</div>
+        {% else %}
+        <div class="tiny muted">No model call has been recorded yet.</div>
+        {% endif %}
+      </div>
     </section>
 
     <section class="cards hide" data-pane="interface" role="tabpanel" id="pane-interface" aria-labelledby="tab-interface" tabindex="0">

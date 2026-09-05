@@ -2385,3 +2385,22 @@ class TestCancellingARun:
 
         response = client.post(f"/api/extract/{uuid.uuid4()}/cancel")
         assert response.status_code == 404
+
+
+class TestSpendTable:
+    def test_an_unbilled_install_says_so_instead_of_showing_a_table(
+        self, client
+    ):
+        body = client.get("/settings").text
+        assert "Billable actions" in body
+        assert "No model call has been recorded yet." in body
+        assert 'id="spend-search"' not in body
+
+    def test_a_recorded_call_reaches_the_table(self, client, judged):
+        script_id = _first_script(client)
+        client.post(
+            f"/api/scripts/{script_id}/ask", data={"question": "Who drives?"}
+        )
+        body = client.get("/settings").text
+        assert "Ask the graph" in body
+        assert 'id="spend-search"' in body
