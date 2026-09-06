@@ -595,17 +595,66 @@ function reviewUnits(unitIds, behavior = 'smooth') {
   });
 }
 
-/* The Continuity card: the open findings citing the selected line, and the
-   two ways to close one. Resolve says the script now answers the warning;
-   Dismiss says it was never one. Neither touches the graph, so a conflict a
-   rewrite settles is closed here and re-extracted by that rewrite's ripple. */
-function renderContinuity(findings) {
-  contMeta.textContent = findings.length ? `${findings.length} open` : '';
-  if (!findings.length) {
-    continuity.innerHTML =
-      '<div class="empty">No open finding cites this line.</div>';
+/* The Continuity card reads two ways. With a line selected that an open
+   finding cites, it is that line's findings and the two ways to close one:
+   Resolve says the script now answers the warning, Dismiss says it was never
+   one. Neither touches the graph, so a conflict a rewrite settles is closed
+   here and re-extracted by that rewrite's ripple. With no such line, it is
+   the script's own contents list, one row per open finding in script order,
+   each a way to the line it is about. */
+let scriptFindings = [];
+
+async function loadScriptFindings() {
+  const scriptId = window.location.pathname.split('/').pop();
+  try {
+    const body = await api(`/api/scripts/${scriptId}/findings`);
+    scriptFindings = body.findings;
+  } catch (error) {
+    ripple.trace('findings.load_failed', { error: error.message });
+  }
+}
+
+/* The contents list: every open finding on the script, in script order. */
+function renderFindingContents() {
+  contMeta.textContent = scriptFindings.length
+    ? `${scriptFindings.length} on this script` : '';
+  if (!scriptFindings.length) {
+    continuity.innerHTML = '<div class="empty">No open findings. '
+      + 'Edit a line and see its ripple to check a change against the graph.'
+      + '</div>';
     return;
   }
+  continuity.innerHTML = scriptFindings.map((finding, index) => `
+    <button class="tocrow" data-goto="${index}"
+            ${finding.units.length ? '' : 'disabled data-tip="This finding cites no line"'}>
+      <div class="ttl"><i class="dot ${esc(finding.severity)}"></i>
+        ${esc(finding.message)}</div>
+      ${finding.line
+    ? `<div class="where">Scene ${esc(finding.scene || '—')} · ${esc(finding.line)}</div>`
+    : ''}
+    </button>`).join('');
+  continuity.querySelectorAll('[data-goto]').forEach((row) => {
+    row.addEventListener('click', () => {
+      const finding = scriptFindings[Number(row.dataset.goto)];
+      const node = document.querySelector(
+        `.u[data-unit="${finding.units[0]}"]`);
+      if (!node) {
+        toast('The cited line is not on this page.');
+        return;
+      }
+      scrollPaneTo(node);
+      selectUnit(node);
+      ripple.trace('finding.opened', { finding: finding.id });
+    });
+  });
+}
+
+function renderContinuity(findings) {
+  if (!findings.length) {
+    renderFindingContents();
+    return;
+  }
+  contMeta.textContent = `${findings.length} on this line`;
   continuity.innerHTML = findings.map((finding, index) => `
     <div class="finding" data-finding="${esc(finding.id)}">
       <div class="ttl"><i class="dot ${esc(finding.severity)}"></i>
@@ -659,6 +708,7 @@ async function closeFinding(button, findings) {
   }
   ripple.trace('finding.closed', { finding: id, how, open: state.open });
   applyFindingState(state);
+  await loadScriptFindings();
   renderContinuity(findings.filter((finding) => finding.id !== id));
   toast(how === 'resolve'
     ? 'Marked resolved.'
@@ -698,6 +748,12 @@ if (findingJump) {
     ripple.trace('finding.jumped', { at: jumpIndex + 1, of: nodes.length });
   });
 }
+
+loadScriptFindings().then(() => {
+  // Only while nothing is selected: a deep link that selects a line has
+  // already filled the card with that line's findings.
+  if (!state.unit) renderFindingContents();
+});
 
 /* The findings page's Review deep-links here with ?finding=<id>: fetch the
    finding's cited lines, scroll to them, and mark them for a moment. */

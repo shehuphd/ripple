@@ -167,7 +167,11 @@ Findings are evidence-backed warnings about a proposal's effect on other scenes,
 
 Findings appear in three places. In the preview overlay, Review units jumps to the cited lines and Dismiss records a dismissal. On the **Continuity findings** page, filtered per script, Review opens the script on the cited line with the finding beside it; evidence citing a scene heading opens on that scene.
 
-In the reader, every line an open finding cites carries an amber edge and a warning glyph in the margin, and the toolbar chip counting the findings walks those lines in script order, one per press, selecting each so the pane fills with it. The requirement pane's **Continuity** card lists the open findings citing the selected line, each with the other lines it cites and two ways to close it: **Mark resolved** says the script now answers the warning, **Dismiss** says it never was one and asks to confirm. Neither edits the script or the graph, so a conflict a rewrite settles is closed here and the rewrite is a ripple of its own. Closing one repaints the marks and the count from the database rather than counting down in the page, and the findings page keeps the record either way.
+In the reader, every line an open finding cites carries a warning glyph in the margin, and the toolbar chip counting the findings walks those lines in script order, one per press, selecting each so the pane fills with it.
+
+The requirement pane's **Continuity** card reads two ways. With no line selected, or on a line no finding cites, it is the script's contents list: one row per open finding in script order, each naming its scene and the line it is about, and each a click away from that line. Selecting a line a finding cites narrows the card to that line's findings, each with the other lines it cites and two ways to close it: **Mark resolved** says the script now answers the warning, **Dismiss** says it never was one and asks to confirm. Selecting any other line returns the card to the contents list. **All findings** opens the findings page filtered to this script, where the dismissed and resolved ones are listed too.
+
+Closing a finding edits neither the script nor the graph, so a conflict a rewrite settles is closed here and the rewrite is a ripple of its own. The marks and the count repaint from the database rather than counting down in the page.
 
 ## Ask Ripple
 

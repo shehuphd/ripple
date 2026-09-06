@@ -2901,6 +2901,65 @@ def _findings_citing(session: Session, unit: ScriptUnit) -> list[dict[str, Any]]
     return payload
 
 
+@app.get("/api/scripts/{script_id}/findings")
+def script_findings(script_id: str, session: Session = Depends(get_session)):
+    """Every open finding on a script, in script order.
+
+    The reader's Continuity card reads this with no line selected: the
+    warnings on the script as a contents list, each one a way to the line it
+    is about.
+    """
+    script = session.get(Script, _uuid(script_id))
+    if script is None:
+        raise HTTPException(404, "No such script")
+    rows = session.execute(
+        select(ContinuityFinding, FindingEvidence, ScriptUnit, Scene)
+        .join(ChangeSet, ChangeSet.id == ContinuityFinding.change_set_id)
+        .outerjoin(
+            FindingEvidence, FindingEvidence.finding_id == ContinuityFinding.id
+        )
+        .outerjoin(ScriptUnit, ScriptUnit.id == FindingEvidence.script_unit_id)
+        .outerjoin(Scene, Scene.id == ScriptUnit.scene_id)
+        .where(
+            ChangeSet.script_id == script.id, ContinuityFinding.status == "open"
+        )
+        .order_by(ContinuityFinding.created_at.desc(), FindingEvidence.rank)
+    ).all()
+
+    findings: dict[str, dict[str, Any]] = {}
+    for finding, _evidence, unit, scene in rows:
+        entry = findings.setdefault(
+            str(finding.id),
+            {
+                "id": str(finding.id),
+                "finding_type": finding.finding_type,
+                "severity": finding.severity,
+                "message": finding.message,
+                "units": [],
+                "scene": None,
+                "line": None,
+                # Where the finding falls in the script, so the list reads in
+                # the order a person walks the pages. A finding citing no line
+                # has no place in that order and goes last.
+                "at": (10**9, 10**9),
+            },
+        )
+        if unit is None or scene is None:
+            continue
+        if str(unit.id) not in entry["units"]:
+            entry["units"].append(str(unit.id))
+        place = (scene.sequence_index, unit.sequence_index)
+        if place < entry["at"]:
+            entry["at"] = place
+            entry["scene"] = scene.display_scene_number or ""
+            entry["line"] = unit.current_text[:90]
+
+    ordered = sorted(findings.values(), key=lambda item: item["at"])
+    for entry in ordered:
+        entry.pop("at")
+    return {"findings": ordered}
+
+
 @app.post("/api/findings/{finding_id}/resolve")
 def resolve_finding(finding_id: str, session: Session = Depends(get_session)):
     """Close a finding as handled in the script.

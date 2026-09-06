@@ -3300,6 +3300,89 @@ class TestContinuityInTheReader:
         assert body["open"] == 0
         assert body["flagged_units"] == []
 
+    def _flag_unit(self, client, unit_id, message, evidence=1):
+        """One open finding citing a named line, evidence rows and all."""
+        import uuid
+
+        from ripple.db.models import ChangeSet, ContinuityFinding, FindingEvidence
+
+        script_id = _first_script(client)
+        with web._sessions() as session:
+            change_set = ChangeSet(
+                script_id=uuid.UUID(script_id),
+                kind="edit",
+                status="pending",
+                base_script_version=1,
+            )
+            session.add(change_set)
+            session.flush()
+            finding = ContinuityFinding(
+                change_set_id=change_set.id,
+                finding_type="continuity_conflict",
+                severity="high",
+                message=message,
+                status="open",
+            )
+            session.add(finding)
+            session.flush()
+            for rank in range(evidence):
+                session.add(
+                    FindingEvidence(
+                        finding_id=finding.id,
+                        script_unit_id=uuid.UUID(unit_id),
+                        rank=rank,
+                        match_reason="test",
+                    )
+                )
+            session.commit()
+            return script_id, str(finding.id)
+
+    def test_the_script_list_reads_in_script_order(self, client):
+        """With no line selected the card is a contents list, so the order is
+        the order a person walks the pages, not the order the findings were
+        raised."""
+        script_id = _first_script(client)
+        units = _units(client, script_id)
+        self._flag_unit(client, units[6], "Raised first, cites a later line.")
+        self._flag_unit(client, units[1], "Raised second, cites an earlier line.")
+        listed = client.get(f"/api/scripts/{script_id}/findings").json()["findings"]
+        assert [f["message"] for f in listed] == [
+            "Raised second, cites an earlier line.",
+            "Raised first, cites a later line.",
+        ]
+        first = listed[0]
+        assert first["units"] == [units[1]]
+        assert first["severity"] == "high"
+        # Each row names where it goes, so the list reads as a contents list.
+        assert first["scene"]
+        assert first["line"]
+
+    def test_the_script_list_names_a_line_once(self, client):
+        """A finding with several evidence rows on one line is one row with
+        one destination, not the same line repeated."""
+        script_id = _first_script(client)
+        units = _units(client, script_id)
+        self._flag_unit(client, units[0], "Cited three times over.", evidence=3)
+        listed = client.get(f"/api/scripts/{script_id}/findings").json()["findings"]
+        assert [f["units"] for f in listed] == [[units[0]]]
+
+    def test_a_closed_finding_leaves_the_script_list(self, client):
+        script_id, units, finding_id = self._flag(client)
+        listed = client.get(f"/api/scripts/{script_id}/findings").json()["findings"]
+        assert [f["id"] for f in listed] == [finding_id]
+        client.post(f"/api/findings/{finding_id}/resolve")
+        assert client.get(f"/api/scripts/{script_id}/findings").json()["findings"] == []
+        # The line it cited is no longer marked either.
+        assert self._marked(client.get(f"/scripts/{script_id}").text) == set()
+        assert units
+
+    def test_the_script_list_of_an_unknown_script_is_a_404(self, client):
+        import uuid
+
+        response = client.get(f"/api/scripts/{uuid.uuid4()}/findings")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "No such script"
+
     def test_resolving_an_unknown_finding_is_a_404(self, client):
         import uuid
 

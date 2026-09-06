@@ -154,9 +154,13 @@ button{font:inherit}
   color:var(--t1);white-space:nowrap}
 a.chip:hover{border-color:var(--ac);color:var(--t1)}
 .chip .dot{width:6px;height:6px;border-radius:50%;background:var(--t4);flex:0 0 auto}
-.chip .dot.high{background:var(--red)}
-.chip .dot.medium{background:var(--amber)}
-.chip .dot.low{background:var(--green)}
+/* Severity colours the dot wherever one is drawn: the toolbar chip, a
+   finding in the preview overlay, a row in the reader's continuity list.
+   Scoped to .chip these three said nothing anywhere else, so every finding
+   dot outside a chip drew empty. */
+.dot.high{background:var(--red)}
+.dot.medium{background:var(--amber)}
+.dot.low{background:var(--green)}
 
 .tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 9px;
   border-radius:6px;background:var(--raised);color:var(--t2);border:.5px solid var(--bd)}
@@ -317,15 +321,14 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .u.edited{background:rgba(201,138,46,.07)}
 .u.edited::after{content:" ·  edited, not applied";font-family:var(--sf);
   font-size:11px;color:var(--amber);white-space:nowrap}
-/* A line an open continuity finding cites carries a standing mark: an amber
-   edge and a glyph in the margin, so the warning is visible in the script
-   itself and reads without relying on colour. The temporary .cited outline
-   is a different treatment on purpose; that one answers "here is the line I
-   just took you to" and fades. */
-.u.flagged{position:relative;box-shadow:inset 2px 0 0 var(--amber)}
-.u.flagged::before{content:"\26A0";position:absolute;left:-17px;top:3px;
-  font-family:var(--sf);font-size:10px;color:var(--amber);pointer-events:none}
-.u.flagged:focus{box-shadow:inset 0 0 0 1px var(--ac-d),inset 2px 0 0 var(--amber)}
+/* A line an open continuity finding cites carries a standing mark in the
+   margin, so the warning is visible in the script itself. The glyph is the
+   whole mark: shape rather than colour alone, and no tinted stripe down the
+   edge. The temporary .cited outline is a different treatment on purpose;
+   that one answers "here is the line I just took you to" and fades. */
+.u.flagged{position:relative}
+.u.flagged::before{content:"\26A0";position:absolute;left:-19px;top:2px;
+  font-family:var(--sf);font-size:11px;color:var(--amber);pointer-events:none}
 .u.character{margin-left:32%;margin-bottom:0;text-transform:uppercase}
 .u.parenthetical{margin-left:24%;margin-bottom:0;color:var(--t2)}
 .u.dialogue{margin-left:16%;margin-right:20%}
@@ -387,6 +390,18 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
    under its message rather than squeezing the text. */
 .pane .finding:first-child{padding-top:0}
 .pane .finding .acts{flex-wrap:wrap}
+/* With no line selected the card is a table of contents: one row per open
+   finding in script order, each a way to the line it cites. */
+.tocrow{display:block;width:100%;text-align:left;background:none;border:0;
+  border-bottom:.5px solid var(--bd);padding:10px 6px;cursor:pointer;
+  font:inherit;color:inherit}
+.tocrow:last-child{border-bottom:0}
+.tocrow:hover{background:var(--raised)}
+.tocrow .ttl{display:flex;align-items:flex-start;gap:9px;font-size:13px;
+  line-height:1.45}
+.tocrow .ttl .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;
+  margin-top:4px}
+.tocrow .where{margin:5px 0 0 16px;color:var(--t3);font-size:12px}
 .finding.dismissed{opacity:.55}
 .finding.dismissed .ttl::after{content:"dismissed";font-family:var(--sf);
   font-size:11px;color:var(--t3);margin-left:6px}
