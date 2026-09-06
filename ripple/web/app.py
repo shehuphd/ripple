@@ -107,6 +107,7 @@ from ripple.services.synthesizer import (
 from ripple.text import when_label
 from ripple.tracing import configure_tracing
 from ripple.tracing import ensure_configured as ensure_tracing
+from ripple.web.paging import paginate
 from ripple.web.stats import eighths, page_of, pages_by_script, runtime, script_pages
 
 logger = logging.getLogger(__name__)
@@ -809,9 +810,23 @@ def ask_page(
 
 
 def _list_page(request, session, **kwargs):
-    """Render the shared list template with the sidebar counts filled in."""
+    """Render the shared list template with the sidebar counts filled in.
+
+    The query string chooses the sort, the search, and the page; only that
+    page's rows are rendered. `fixed` names parameters every link on the
+    page keeps, such as the findings page's script filter.
+    """
+    page = paginate(
+        request.query_params,
+        request.url.path,
+        kwargs["items"],
+        kwargs["columns"],
+        fixed=kwargs.pop("fixed", None),
+    )
     return templates.TemplateResponse(
-        request, "list.html", {"counts": sidebar_counts(session), **kwargs}
+        request,
+        "list.html",
+        {"counts": sidebar_counts(session), "page": page, **kwargs},
     )
 
 
@@ -1044,6 +1059,7 @@ def findings_page(
             else "No findings yet."
         ),
         lock=None,
+        fixed={"script": str(chosen.id)} if chosen is not None else None,
     )
 
 
@@ -1061,9 +1077,9 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
         select(ModelCall, Script)
         .outerjoin(Script, ModelCall.script_id == Script.id)
         .order_by(ModelCall.created_at.desc())
-        # The page sorts and pages in the browser, so the window has to be
-        # wide enough that a sort by cost means something. Older calls than
-        # this stay in the database and in the trace files.
+        # The page sorts over this window, so it has to be wide enough that
+        # a sort by cost means something. Older calls than this stay in the
+        # database and in the trace files.
         .limit(1000)
     ).all()
 
@@ -1356,6 +1372,9 @@ def entities_page(request: Request, session: Session = Depends(get_session)):
                 {
                     "id": f"{pair.keep.id}:{pair.absorb.id}",
                     "batch_kinds": ["merge", "keep_separate"],
+                    # Suspected duplicates lead the list however it is
+                    # sorted, since they need a decision.
+                    "lead": True,
                     "cells": {
                         "type": {
                             "text": "duplicate?",
@@ -1382,8 +1401,6 @@ def entities_page(request: Request, session: Session = Depends(get_session)):
                         "name": pair.keep.canonical_name,
                         "script": script.title,
                         "aliases": "",
-                        # Suspected duplicates lead the list however it is
-                        # sorted by use count, since they need a decision.
                         "uses": -1,
                     },
                     "actions": [

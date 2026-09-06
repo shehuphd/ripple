@@ -1229,10 +1229,64 @@ class TestDuplicateReview:
 
 
 class TestListSearch:
+    """A list's search, sort, and page live in its URL, and the page renders
+    only the rows it shows."""
+
     def test_a_populated_list_offers_search_and_pagination(self, client):
         body = client.get("/entities").text
         assert 'id="list-search"' in body
         assert 'id="pager"' in body
+        assert 'id="pager-size"' in body
+
+    def test_the_search_is_a_form_on_the_list_itself(self, client):
+        body = client.get("/entities").text
+        assert 'action="/entities"' in body
+        assert 'name="q"' in body
+
+    def test_the_query_narrows_the_rows_and_fills_the_box(self, client):
+        page = client.get("/entities", params={"q": "sedan"}).text
+        assert 'value="sedan"' in page
+        assert page.count('class="row-check"') >= 1
+        everything = client.get("/entities").text
+        assert page.count("<tr") < everything.count("<tr")
+        assert "of 1 matching" in page or "matching" in page
+
+    def test_a_search_with_no_hit_says_so(self, client):
+        body = client.get("/entities", params={"q": "zzzz-no-such-entity"}).text
+        assert "Nothing matches the search." in body
+        assert "0\u20130 of 0" in body
+
+    def _rows(self, body: str) -> list[str]:
+        import re
+
+        return re.findall(r'<tr class="[^"]*"\s+data-id="([^"]+)"', body)
+
+    def test_a_page_holds_its_size_and_the_pager_links_onward(self, client):
+        body = client.get("/assertions", params={"size": "25"}).text
+        assert len(self._rows(body)) == 25
+        assert "1\u201325 of" in body
+        assert 'href="/assertions?page=2&amp;size=25"' in body
+        second = client.get("/assertions", params={"size": "25", "page": "2"}).text
+        assert "26\u201350 of" in second
+        assert 'href="/assertions?size=25"' in second
+        assert set(self._rows(second)).isdisjoint(self._rows(body))
+
+    def test_the_default_page_size_is_fifty(self, client):
+        body = client.get("/assertions").text
+        assert len(self._rows(body)) == 50
+        assert '<option value="50" selected>' in body
+
+    def test_an_unknown_size_or_page_falls_back(self, client):
+        body = client.get("/assertions", params={"size": "7", "page": "999"}).text
+        assert '<option value="50" selected>' in body
+        # The last page, rather than an empty one past the end.
+        assert len(self._rows(body)) >= 1
+        assert 'id="pager-next" aria-disabled="true"' in body
+
+    def test_a_search_link_from_elsewhere_lands_on_the_row(self, client):
+        """The Ask page links an ungrounded name to /entities?q=name."""
+        body = client.get("/entities", params={"q": "Harbour"}).text
+        assert 'value="Harbour"' in body
 
 
 class TestBatchActions:
@@ -2493,22 +2547,76 @@ class TestSpendTable:
 
 
 class TestSortableTables:
-    def test_traces_columns_carry_what_they_sort_on(self, client, judged):
+    def _rows(self, body: str) -> list[str]:
+        import re
+
+        return re.findall(r'<tr class="[^"]*"\s+data-id="([^"]+)"', body)
+
+    def _column(self, body: str, index: int) -> list[str]:
+        """The text of one column, row by row, as the page renders it. A
+        suspected-duplicate pair sorts by its survivor's name while its cell
+        names both, so pair rows are left out."""
+        import re
+
+        cells = []
+        for row_id, row in re.findall(
+            r'<tr[^>]*data-id="([^"]*)"[^>]*>(.*?)</tr>', body, re.S
+        ):
+            if ":" in row_id:
+                continue
+            tds = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
+            text = re.sub(r"<[^>]+>", "", tds[index]).strip()
+            cells.append(text.split("\n")[0].strip())
+        return cells
+
+    def test_traces_columns_link_to_their_sorted_urls(self, client, judged):
         script_id = _first_script(client)
         client.post(f"/api/scripts/{script_id}/ask", data={"question": "Who?"})
         body = client.get("/traces").text
         assert 'class="scripts listtable"' in body
         assert 'data-sort="cost"' in body
-        assert "data-sort-cost=" in body
-        assert "data-sort-tokens=" in body
-        # A numeric column has to say so, or the browser sorts "9943" above
-        # "10020" as text.
-        assert 'data-numeric="1"' in body
+        # A numeric column opens on its biggest value, a text column on its
+        # first word; the sorted column offers its reverse.
+        assert 'href="/traces?sort=cost"' in body
+        assert 'href="/traces?sort=purpose"' in body
+        assert 'href="/traces?dir=asc"' in body
+        assert 'aria-sort="descending"' in body
         assert 'id="pager-size"' in body
 
-    def test_a_report_reaches_the_table_with_its_sort_values(
-        self, client, judged
-    ):
+    def test_a_numeric_sort_orders_by_value_not_text(self, client):
+        body = client.get(
+            "/assertions", params={"sort": "confidence", "dir": "desc", "size": "100"}
+        ).text
+        values = [float(v) for v in self._column(body, 6)]
+        assert values == sorted(values, reverse=True)
+        body = client.get(
+            "/assertions", params={"sort": "confidence", "dir": "asc", "size": "100"}
+        ).text
+        values = [float(v) for v in self._column(body, 6)]
+        assert values == sorted(values)
+
+    def test_a_text_sort_orders_alphabetically(self, client):
+        body = client.get("/entities", params={"sort": "name", "dir": "asc"}).text
+        names = [n.lower() for n in self._column(body, 2)]
+        assert names == sorted(names)
+
+    def test_the_sort_survives_paging_and_searching(self, client):
+        body = client.get(
+            "/assertions", params={"sort": "confidence", "dir": "asc", "size": "25"}
+        ).text
+        assert (
+            'href="/assertions?sort=confidence&amp;dir=asc&amp;page=2&amp;size=25"'
+            in body
+        )
+        assert '<input type="hidden" name="sort" value="confidence">' in body
+        assert '<input type="hidden" name="dir" value="asc">' in body
+        assert '<input type="hidden" name="size" value="25">' in body
+
+    def test_an_unknown_sort_key_falls_back_to_the_first_column(self, client):
+        body = client.get("/entities", params={"sort": "nonsense"}).text
+        assert 'data-sort="type"\n       aria-sort="descending"' in body
+
+    def test_a_report_sorts_by_severity_weight(self, client, judged):
         script_id = _first_script(client)
         unit_id = _units(client, script_id)[0]
         client.post(
@@ -2517,9 +2625,7 @@ class TestSortableTables:
         )
         body = client.get("/reports").text
         assert 'class="scripts listtable"' in body
-        # Severity sorts by weight, so high leads whatever the alphabet says.
-        assert 'data-sort="severity"' in body
-        assert "data-sort-severity=" in body
+        assert 'href="/reports?sort=severity"' in body
 
     def test_entities_keep_their_batch_checkboxes_in_the_table(self, client):
         body = client.get("/entities").text
@@ -2527,11 +2633,26 @@ class TestSortableTables:
         assert 'class="row-check"' in body
         assert 'id="batch-bar"' in body
         assert 'data-batch-kind="merge"' in body
+        assert "Select all on this page" in body
 
     def test_assertions_sort_state_before_the_alphabet(self, client):
-        body = client.get("/assertions").text
-        assert 'data-sort="state"' in body
-        assert "data-sort-confidence=" in body
+        body = client.get("/assertions", params={"sort": "state", "dir": "desc"}).text
+        states = self._column(body, 1)
+        assert states[0] == "active"
+        assert states == sorted(states, reverse=True)
+
+    def test_the_findings_filter_holds_across_every_link(self, client, judged):
+        script_id = _first_script(client)
+        unit_id = _units(client, script_id)[0]
+        client.post(
+            f"/api/units/{unit_id}/preview",
+            data={"proposed_text": "A bicycle leans against the gate."},
+        )
+        body = client.get("/findings", params={"script": script_id}).text
+        if 'class="scripts listtable"' not in body:
+            pytest.skip("this preview raised no finding to list")
+        assert f"script={script_id}" in body
+        assert f'<input type="hidden" name="script" value="{script_id}">' in body
 
     def test_a_column_carries_its_own_width(self, client, judged):
         """Fixed widths hold the layout when a sort brings a long value into

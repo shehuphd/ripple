@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-06 09:52:58 UTC
+Last updated: 2026-09-06 10:06:12 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `.venv`) are gitignored and not listed.
 
@@ -120,6 +120,7 @@ Every file in the repository and what it does. Directories the application write
 | File | Purpose |
 |---|---|
 | `web/app.py` | All FastAPI routes: pages, JSON API, error handling. |
+| `web/paging.py` | The list pages' query-string contract: sort, search, page, and size over the built rows. |
 | `web/stats.py` | Sidebar counts and page/runtime estimates. |
 | `web/templates/base.html` | Shared page shell: sidebar, toolbar, version mark. |
 | `web/templates/_nav.html` | Sidebar navigation with live counts. |
@@ -128,7 +129,7 @@ Every file in the repository and what it does. Directories the application write
 | `web/templates/script_graph.html` | The script-level production graph, the opening view. |
 | `web/templates/graph.html` | The expanded per-node graph view. |
 | `web/templates/ask.html` | Grounded query page, with its own pane of scripts and question history. |
-| `web/templates/list.html` | Shared listing page: entities, assertions, reports, findings, traces. |
+| `web/templates/list.html` | Shared listing page: entities, assertions, reports, findings, traces. Renders one page of rows; headers, pager, and search link into the query string. |
 | `web/templates/settings.html` | Tabbed settings: API keys, spend, interface. |
 | `web/templates/error.html` | In-app error page for page routes. |
 | `web/static/css/ripple-tokens.css` | Design tokens. |
@@ -176,6 +177,7 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_settings.py` | Credential validation and model selection. |
 | `tests/test_spend.py` | Budget gate and refusal auditing. |
 | `tests/test_tracing.py` | TraceAct configuration and redaction. |
+| `tests/test_paging.py` | The list pages' query-string contract: defaults left out of links, sort direction per column, page bounds, search over cell text. |
 | `tests/test_web.py` | Routes, pages, and API behaviour. |
 
 ## Developer tools (`tools/`)

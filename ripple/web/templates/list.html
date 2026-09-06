@@ -7,9 +7,16 @@
 <h1>{{ heading }}</h1>
 <span class="sub">{{ subtitle }}</span>
 {% if items %}
-<div class="search"><span class="ic">⌕</span>
-  <input id="list-search" placeholder="Search" autocomplete="off"
-         aria-label="Search this list"></div>
+<form class="search" id="list-search-form" method="get" action="{{ page.path }}" role="search">
+  <span class="ic">⌕</span>
+  <input id="list-search" name="q" value="{{ page.q }}" placeholder="Search"
+         autocomplete="off" aria-label="Search this list">
+  {% if not page.sort_is_default %}<input type="hidden" name="sort" value="{{ page.sort }}">{% endif %}
+  {% if not page.dir_is_default %}<input type="hidden" name="dir" value="{{ 'asc' if page.ascending else 'desc' }}">{% endif %}
+  {% if page.size != 50 %}<input type="hidden" name="size" value="{{ page.size }}">{% endif %}
+  {% for key, value in page.fixed.items() %}
+  <input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+</form>
 {% endif %}
 
 {% if header_action %}
@@ -30,7 +37,7 @@
 {% if batch_actions %}
 <div class="batch-head">
   <label class="batch-all"><input type="checkbox" id="batch-all">
-    Select all matching</label>
+    Select all on this page</label>
 </div>
 {% endif %}
 <div class="tscroll listtable-wrap">
@@ -44,22 +51,22 @@
   <thead><tr>
     {% if batch_actions %}<th class="checkcol"></th>{% endif %}
     {% for column in columns %}
-    <th{% if column.numeric %} class="num"{% endif %}
+    {% set sorted = column.key == page.sort %}
+    <th class="{{ 'num ' if column.numeric }}{{ 'sorted' if sorted }}{{ ' asc' if sorted and page.ascending }}"
        {% if column.key != 'actions' %}data-sort="{{ column.key }}"
-       {% if column.numeric %}data-numeric="1"{% endif %}
-       {% if loop.first %}aria-sort="descending"{% endif %}{% endif %}>
+       aria-sort="{{ page.direction(column) }}"{% endif %}>
       {% if column.key == 'actions' %}{{ column.label }}
-      {% else %}<button type="button" class="sortbtn">{{ column.label }}</button>
+      {% else %}<a class="sortbtn" href="{{ page.sort_url(column) }}"
+           data-tip="{{ 'Reverse the order' if sorted else 'Sort by ' ~ column.label|lower }}">{{ column.label }}</a>
       {% endif %}</th>
     {% endfor %}
   </tr></thead>
   <tbody id="list-rows">
-    {% for item in items %}
+    {% for item in page.items %}
     <tr class="{{ 'selectable' if item.id and item.batch_kinds }}"
         {% if item.id %}data-id="{{ item.id }}"{% endif %}
         {% if item.batch_kinds %}data-kinds="{{ item.batch_kinds|join(',') }}"{% endif %}
-        {% if item.assertions is defined %}data-assertions="{{ item.assertions }}"{% endif %}
-        {% for key, value in (item.sort or {}).items() %}data-sort-{{ key }}="{{ value }}" {% endfor %}>
+        {% if item.assertions is defined %}data-assertions="{{ item.assertions }}"{% endif %}>
       {% if batch_actions %}
       <td class="checkcol">
         {% if item.id and item.batch_kinds %}
@@ -88,18 +95,26 @@
   </tbody>
 </table>
 </div>
-<div class="empty hide" id="list-no-match">Nothing matches the search.</div>
-<div class="pager hide" id="pager">
+{% if not page.items %}
+<div class="empty" id="list-no-match">Nothing matches the search.</div>
+{% endif %}
+<nav class="pager" id="pager" aria-label="Pages">
   <label class="tiny muted">Per page
-    <select class="field" id="pager-size">
-      <option value="25">25</option>
-      <option value="50">50</option>
-      <option value="100">100</option>
+    <select class="field" id="pager-size" aria-label="Rows per page">
+      {% for size in (25, 50, 100) %}
+      <option value="{{ size }}"{% if size == page.size %} selected{% endif %}>{{ size }}</option>
+      {% endfor %}
     </select></label>
-  <button class="btn sm" id="pager-prev">‹ Previous</button>
-  <span class="pager-status" id="pager-status" aria-live="polite"></span>
-  <button class="btn sm" id="pager-next">Next ›</button>
-</div>
+  {% if page.page > 1 %}
+  <a class="btn sm" id="pager-prev" href="{{ page.url(page=page.page - 1) }}" rel="prev">‹ Previous</a>
+  {% else %}<span class="btn sm" id="pager-prev" aria-disabled="true"
+    data-tip="This is the first page">‹ Previous</span>{% endif %}
+  <span class="pager-status" id="pager-status">{{ page.first }}–{{ page.last }} of {{ page.matching }}{% if page.q %} matching{% endif %}</span>
+  {% if page.page < page.pages %}
+  <a class="btn sm" id="pager-next" href="{{ page.url(page=page.page + 1) }}" rel="next">Next ›</a>
+  {% else %}<span class="btn sm" id="pager-next" aria-disabled="true"
+    data-tip="This is the last page">Next ›</span>{% endif %}
+</nav>
 {% if batch_actions %}
 <div class="batch-bar hide" id="batch-bar" role="region" aria-label="Batch actions">
   <span class="batch-count" id="batch-count">0 selected</span>
@@ -166,136 +181,73 @@ document.querySelectorAll('#list-rows [data-post]').forEach((button) => {
   });
 });
 
-/* Instant search and pagination over the rendered rows. The rows are all on
-   the page already, so both are display toggles: no request, no reload. */
+/* The list's state lives in its URL: sort, search, page, and size are query
+   parameters, and the headers and pager are links. The search box submits
+   its form after a pause in typing, and the page size chooser navigates,
+   remembering the choice per list so the next visit opens on it. */
 (() => {
-  const table = document.getElementById('list-rows');
-  if (!table) return;
-  const rows = [...table.querySelectorAll('tr')];
-  if (!rows.length) return;
   const search = document.getElementById('list-search');
-  const pager = document.getElementById('pager');
-  const status = document.getElementById('pager-status');
-  const prev = document.getElementById('pager-prev');
-  const next = document.getElementById('pager-next');
+  const searchForm = document.getElementById('list-search-form');
   const sizeField = document.getElementById('pager-size');
-  const headers = [...document.querySelectorAll('.listtable th[data-sort]')];
-  const noMatch = document.getElementById('list-no-match');
-  let sortKey = headers.length ? headers[0].dataset.sort : null;
-  let ascending = false;
-  let page = 0;
+  if (!search || !sizeField) return;
+  const params = new URLSearchParams(window.location.search);
 
   // The page size is per list, so a long Traces page and a short Findings
-  // page each keep the size the user chose for them.
+  // page each keep the size the user chose for them. A remembered size
+  // that the URL does not carry is applied by reloading onto it.
   const sizeKey = `list-size:${document.body.dataset.list || 'default'}`;
-  let size = 50;
   try {
     const saved = parseInt(localStorage.getItem(sizeKey), 10);
-    if ([25, 50, 100].includes(saved)) size = saved;
+    if (!params.has('size') && [25, 100].includes(saved)) {
+      params.set('size', String(saved));
+      window.location.replace(`${window.location.pathname}?${params}`);
+      return;
+    }
   } catch (e) { /* private mode */ }
-  sizeField.value = String(size);
 
-  // A ?q= in the URL prefills the search, so a link from elsewhere (an
-  // ungrounded-entity name on the Ask page) opens on that exact row.
-  const preset = new URLSearchParams(window.location.search).get('q');
-  if (preset) search.value = preset;
-
-  function matches(row, needle) {
-    return !needle || row.textContent.toLowerCase().includes(needle);
-  }
-
-  function ordered(hits) {
-    if (!sortKey) return hits;
-    const header = headers.find((one) => one.dataset.sort === sortKey);
-    const numeric = header && header.dataset.numeric === '1';
-    const value = (row) => {
-      const raw = row.dataset[`sort${sortKey.charAt(0).toUpperCase()}${sortKey.slice(1)}`];
-      return numeric ? Number(raw || 0) : (raw || '').toLowerCase();
-    };
-    // Sorted out of place, so the rows keep the order the server sent until
-    // a header is clicked.
-    return [...hits].sort((a, b) => {
-      const left = value(a);
-      const right = value(b);
-      if (left === right) return 0;
-      return (left < right ? -1 : 1) * (ascending ? 1 : -1);
-    });
-  }
-
-  function render() {
-    const needle = search.value.trim().toLowerCase();
-    const hits = ordered(rows.filter((row) => matches(row, needle)));
-    rows.forEach((row) => { row.style.display = 'none'; });
-    const pages = Math.max(1, Math.ceil(hits.length / size));
-    if (page >= pages) page = pages - 1;
-    hits.slice(page * size, (page + 1) * size).forEach((row) => {
-      row.style.display = '';
-      if (sortKey) table.appendChild(row);
-    });
-    noMatch.classList.toggle('hide', hits.length > 0);
-    pager.classList.toggle('hide', false);
-    headers.forEach((header) => {
-      const on = header.dataset.sort === sortKey;
-      header.setAttribute(
-        'aria-sort', on ? (ascending ? 'ascending' : 'descending') : 'none'
-      );
-      header.classList.toggle('sorted', on);
-      header.classList.toggle('asc', on && ascending);
-    });
-    const from = hits.length ? page * size + 1 : 0;
-    const to = Math.min(hits.length, (page + 1) * size);
-    status.textContent = `${from}–${to} of ${hits.length}`;
-    prev.disabled = page === 0;
-    next.disabled = page >= pages - 1;
-  }
-
-  search.addEventListener('input', () => { page = 0; render(); });
-  prev.addEventListener('click', () => { page -= 1; render(); });
-  next.addEventListener('click', () => { page += 1; render(); });
   sizeField.addEventListener('change', () => {
-    size = parseInt(sizeField.value, 10) || 50;
-    page = 0;
+    const size = parseInt(sizeField.value, 10) || 50;
     try { localStorage.setItem(sizeKey, String(size)); }
     catch (e) { /* private mode */ }
-    render();
+    const next = new URLSearchParams(window.location.search);
+    next.delete('page');
+    if (size === 50) next.delete('size'); else next.set('size', String(size));
+    const query = next.toString();
+    window.location.assign(query ? `${window.location.pathname}?${query}` : window.location.pathname);
   });
-  headers.forEach((header) => {
-    header.querySelector('.sortbtn').addEventListener('click', () => {
-      const key = header.dataset.sort;
-      // A column opens on the reading people ask for first: the biggest
-      // number, the newest date, the first word.
-      if (key === sortKey) ascending = !ascending;
-      else {
-        sortKey = key;
-        ascending = header.dataset.numeric !== '1' && key !== 'when';
-      }
-      page = 0;
-      render();
-    });
+
+  // A search opened from a link (?q=) puts the cursor at the end of the
+  // needle, so typing carries on where the link left off.
+  if (search.value) {
+    search.focus();
+    search.setSelectionRange(search.value.length, search.value.length);
+  }
+  let pending = null;
+  search.addEventListener('input', () => {
+    clearTimeout(pending);
+    pending = setTimeout(() => searchForm.requestSubmit(), 350);
   });
-  render();
+  searchForm.addEventListener('submit', () => {
+    clearTimeout(pending);
+    // An empty search is the plain list, so the parameter goes rather than
+    // trailing an empty q.
+    if (!search.value.trim()) search.disabled = true;
+  });
 })();
 
 /* Batch selection. Checkboxes on selectable rows drive a floating action bar;
    each action runs over the selected rows that support it in one request.
-   Selection tracks the search filter: "select all matching" and clearing a
-   filtered-out selection both honour the current search needle, so a batch is
-   scoped to what the list is showing, not the page you happen to be on. */
+   The page is the scope: "select all on this page" ticks the rows the server
+   rendered, and a search narrows the page before anything is selected. */
 (() => {
   const bar = document.getElementById('batch-bar');
   if (!bar) return;
   const rows = [...document.querySelectorAll('.selectable')];
   if (!rows.length) return;
-  const search = document.getElementById('list-search');
   const all = document.getElementById('batch-all');
   const count = document.getElementById('batch-count');
   const clear = document.getElementById('batch-clear');
 
-  const needle = () => (search ? search.value.trim().toLowerCase() : '');
-  const matches = (row) => {
-    const n = needle();
-    return !n || row.textContent.toLowerCase().includes(n);
-  };
   const checkOf = (row) => row.querySelector('.row-check');
   const kindsOf = (row) => (row.dataset.kinds || '').split(',');
   const selected = () => rows.filter((r) => checkOf(r) && checkOf(r).checked);
@@ -314,8 +266,7 @@ document.querySelectorAll('#list-rows [data-post]').forEach((button) => {
     const sel = selected();
     count.textContent = `${sel.length} selected`;
     bar.classList.toggle('hide', sel.length === 0);
-    const matching = rows.filter(matches);
-    all.checked = matching.length > 0 && matching.every((r) => checkOf(r).checked);
+    all.checked = rows.every((r) => checkOf(r).checked);
     all.indeterminate = sel.length > 0 && !all.checked;
     bar.querySelectorAll('[data-batch-kind]').forEach((btn) => {
       const supported = sel.some((r) => kindsOf(r).includes(btn.dataset.batchKind));
@@ -333,7 +284,7 @@ document.querySelectorAll('#list-rows [data-post]').forEach((button) => {
 
   all.addEventListener('change', () => {
     const on = all.checked;
-    rows.filter(matches).forEach((r) => { checkOf(r).checked = on; });
+    rows.forEach((r) => { checkOf(r).checked = on; });
     refresh();
   });
 
@@ -341,16 +292,6 @@ document.querySelectorAll('#list-rows [data-post]').forEach((button) => {
     rows.forEach((r) => { if (checkOf(r)) checkOf(r).checked = false; });
     refresh();
   });
-
-  if (search) {
-    search.addEventListener('input', () => {
-      rows.forEach((r) => {
-        const c = checkOf(r);
-        if (c && c.checked && !matches(r)) c.checked = false;
-      });
-      refresh();
-    });
-  }
 
   bar.querySelectorAll('[data-batch-kind]').forEach((btn) => {
     btn.addEventListener('click', async () => {
