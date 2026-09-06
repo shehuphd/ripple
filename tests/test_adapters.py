@@ -426,6 +426,47 @@ class TestStagePlay:
         assert types.count("dialogue") == 5
         assert types.count("action") == 0
 
+    def test_a_contents_listing_is_skipped_as_a_block(self):
+        """A printed play lists its acts and scenes before it prints them,
+        and every line of that listing reads as a heading. The listing opens
+        on the word Contents and runs while its lines are headings or the
+        short all-caps names printed beside them, so an entry never opens a
+        scene and never absorbs the play that follows it."""
+        play = (
+            "Title: Listed\n\n"
+            "Contents\n\n"
+            "THE PROLOGUE.\n\n"
+            "ACT I\n"
+            "Scene I. A public place.\n"
+            "Scene II. A Street.\n\n"
+            "ACT II\n"
+            "CHORUS.\n"
+            "Scene I. A garden.\n\n"
+            "  Dramatis Personae\n\n"
+            "ROMEO, son to Montague.\n"
+            "JULIET, daughter to Capulet.\n\n"
+            "ACT I\n\nSCENE I. A public place.\n\n"
+            "ROMEO.\n\nA plague on both your houses.\n\n"
+            "ACT II\n\nSCENE I. A garden.\n\n"
+            "JULIET.\n\nWherefore art thou.\n\n"
+        )
+        result = import_screenplay(play.encode(), "listed.txt")
+        assert result.accepted, result.rejection_message
+        assert [scene.heading for scene in result.scenes] == [
+            "A public place",
+            "A garden",
+        ]
+        # The listing's own ACT II never opened a scene holding the CHORUS
+        # line under it, and no cast-list name became a speaker.
+        speakers = {
+            u.speaker_name
+            for scene in result.scenes
+            for u in scene.units
+            if u.unit_type.value == "character"
+        }
+        assert speakers == {"ROMEO", "JULIET"}
+        assert not [w for w in result.warnings if w.code == "contents_entries_dropped"]
+
     def test_a_wrapped_paragraph_is_one_unit(self):
         """A printed play hard-wraps at about seventy characters, so a speech
         or a direction arrives as several physical lines with no blank

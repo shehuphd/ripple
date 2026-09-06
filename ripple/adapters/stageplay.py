@@ -79,6 +79,11 @@ MAX_LOCATION_CHARS = 120
 # not a scene: read as script they become action units, and the roster they
 # describe ("Lords, Ladies, Officers, ... and Attendants") is then extracted
 # as though the play had staged it. The block runs to the next act or scene.
+# A printed play lists its acts and scenes before it prints them. Every line
+# of that listing is a heading, so the listing is recognised as a block: it
+# opens on the word Contents and runs while the lines under it are headings.
+_CONTENTS_HEADING = re.compile(r"^\s*contents\.?\s*$", re.IGNORECASE)
+
 _CAST_LIST_HEADING = re.compile(
     r"^\s*(?:the\s+)?(?:dramatis\s+person(?:ae|æ|e)?"
     r"|persons?\s+represented"
@@ -174,6 +179,7 @@ class StagePlayAdapter:
         current_act: int | None = None
         need_setting = False
         in_front_matter = False
+        in_contents = False
         setting_parts: list[str] = []
         previous: UnitType | None = None
         speaker: str | None = None
@@ -201,6 +207,29 @@ class StagePlayAdapter:
                 open_direction = False
                 offset += advance
                 continue
+
+            if _CONTENTS_HEADING.match(stripped):
+                in_contents = True
+                offset += advance
+                continue
+            if in_contents:
+                # A listing entry is an act or scene heading, or the short
+                # all-caps name of a piece printed alongside them ("THE
+                # PROLOGUE.", "CHORUS."). The listing ends at the first line
+                # that is neither, which is the cast list or the play itself.
+                listed = (
+                    stage_act_match(stripped)
+                    or stage_scene_match(stripped)
+                    or (
+                        len(stripped) <= MAX_CUE_CHARS
+                        and stripped == stripped.upper()
+                        and parse_character_cue(stripped) is not None
+                    )
+                )
+                if listed:
+                    offset += advance
+                    continue
+                in_contents = False
 
             act_match = stage_act_match(stripped)
             if act_match:
