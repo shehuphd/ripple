@@ -2048,3 +2048,46 @@ if (titleNode) {
     if (titleNode.isContentEditable) settleTitle(true);
   });
 }
+
+/* The writing shortcuts, behind a button rather than printed down the
+   sidebar. The modifier key is named for the machine it is read on. */
+const keysVeil = document.getElementById('shortcuts-veil');
+if (keysVeil) {
+  const apple = /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent);
+  if (!apple) {
+    keysVeil.querySelectorAll('.mod').forEach((key) => {
+      key.textContent = 'Ctrl';
+    });
+  }
+  let cameFrom = null;
+  const openKeys = () => {
+    cameFrom = document.activeElement;
+    keysVeil.classList.remove('hide');
+    document.getElementById('shortcuts-close').focus();
+  };
+  const closeKeys = () => {
+    keysVeil.classList.add('hide');
+    if (cameFrom && cameFrom.focus) cameFrom.focus();
+  };
+  document.getElementById('shortcuts-open').addEventListener('click', openKeys);
+  document.getElementById('shortcuts-close').addEventListener('click', closeKeys);
+  keysVeil.addEventListener('click', (event) => {
+    if (event.target === keysVeil) closeKeys();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !keysVeil.classList.contains('hide')) {
+      event.preventDefault();
+      closeKeys();
+      return;
+    }
+    // "?" reaches the list from anywhere the writer is not typing into.
+    if (event.key !== '?' || event.metaKey || event.ctrlKey) return;
+    const typing = document.activeElement
+      && (document.activeElement.isContentEditable
+        || document.activeElement.tagName === 'INPUT'
+        || document.activeElement.tagName === 'TEXTAREA');
+    if (typing) return;
+    event.preventDefault();
+    openKeys();
+  });
+}

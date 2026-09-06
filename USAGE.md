@@ -125,7 +125,7 @@ A failed preview's warning banner also carries **Open trace**: it starts (or reu
 
 ## Writing and exporting
 
-Ripple writes scripts as well as reading them, and the page itself is the editor. A new script opens on a write-here line: type a scene heading (INT. OFFICE - DAY) and Enter starts the scene. Every scene ends in the same write-here line, so a script is written top to bottom the way it reads: the heading, the action, a short all-caps name for a character cue, the dialogue under it, and another heading whenever the next scene starts. Each line states its own element, and the marker is consumed rather than stored. Explicit beats implicit, which is the point of typing a script rather than describing one.
+Ripple writes scripts as well as reading them, and the page itself is the editor. A new script opens on a write-here line: type a scene heading (INT. OFFICE - DAY) and Enter starts the scene. The scene control between scenes stays for inserting a whole scene mid-script and appears when the pointer or the keyboard reaches for it. Every scene ends in the same write-here line, so a script is written top to bottom the way it reads: the heading, the action, a short all-caps name for a character cue, the dialogue under it, and another heading whenever the next scene starts. Each line states its own element, and the marker is consumed rather than stored. Explicit beats implicit, which is the point of typing a script rather than describing one.
 
 | Element | Marker | Without a marker |
 |---|---|---|
@@ -142,7 +142,7 @@ Six of those markers are Fountain's own, so an export stays readable by any othe
 
 An all-caps line is the one ambiguous shape on the page: a sound, a shout, or a line of emphasis looks the same as a speaker. Punctuation settles some of it, since no one is called BAM! or WHAT?, so those are action from the moment they are typed. For the rest, the decision waits for the evidence rather than guessing: a character cue exists to introduce a speech, so a cue that never receives one was never a cue. Write BAM and it reads as a speaker; write an action line under it, or leave the scene, and it settles into action on its own. A cue the graph already cites is never retyped, because its type is part of what the facts were judged against.
 
-**Tab** retypes a line when the guess is wrong, cycling the eight elements; **Shift with Tab** opens the list instead, each row showing the marker that types it directly. A line corrected to dialogue finds its speaker in the nearest cue above, across an action line that interrupted the speech.
+**Shortcuts**, at the foot of the reader's sidebar, lists every marker and key, and **?** opens it from anywhere you are not typing. **Tab** retypes a line when the guess is wrong, cycling the eight elements; **Shift with Tab** opens the list instead, each row showing the marker that types it directly. A line corrected to dialogue finds its speaker in the nearest cue above, across an action line that interrupted the speech.
 
 The arrows move around the script. **Up** and **Down** move the caret, leaving a wrapped block only at its edge. **Shift** with them steps whole lines, so a ten-line action block is one press. **Command or Control and Shift** with them go to the first or last line. **Command or Control with Z** undoes the writing, and adding **Shift** redoes it: the stack covers written lines, deletions, retyping, edits, and scenes.
 

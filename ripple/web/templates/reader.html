@@ -24,12 +24,10 @@
   </div>
   {% endfor %}
   <div class="side-nomatch hide" id="scene-nomatch">No scene matches.</div>
-  <div class="kbdmap">⌨ <b>@</b> character · <b>"</b> dialogue ·
-    <b>(</b> parenthetical · <b>&gt;</b> transition · <b>&gt;&gt;</b> shot ·
-    <b>!</b> action · plain text follows the line above<br>
-    Tab retypes a line, Shift+Tab lists the types · ↑↓ move ·
-    Shift+↑↓ by line · ⌘⇧↑↓ to the ends · ⌘Z undo</div>
 </div>
+<button class="side-shortcuts" id="shortcuts-open"
+        data-tip="The markers and keys for writing. Press ? to open it">
+  <span class="ic" aria-hidden="true">⌨</span><span>Shortcuts</span></button>
 {% endblock %}
 
 {% block toolbar %}
@@ -126,6 +124,60 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
     <span class="tiny muted num" id="run-count" style="margin-left:auto"></span>
     <button class="btn" id="run-cancel" style="display:none">Cancel</button></div>
   <div class="track"><i id="run-bar" style="width:0"></i></div>
+</div>
+
+<div class="confirm-veil hide" id="shortcuts-veil">
+  <div class="keys-box" role="dialog" aria-modal="true"
+       aria-labelledby="shortcuts-title">
+    <div class="keys-hd">
+      <h2 id="shortcuts-title">Writing a script</h2>
+      <button class="btn sm" id="shortcuts-close">Close</button>
+    </div>
+    <p class="keys-lead">A marker states what a line is and is dropped when
+      the line saves. Without one, the line follows what came before it:
+      under a cue or a parenthetical is dialogue, everywhere else is
+      action.</p>
+    <div class="keys-cols">
+      <section>
+        <h3>Elements</h3>
+        <dl>
+          <dt>@</dt><dd>Character cue</dd>
+          <dt>"</dt><dd>Dialogue</dd>
+          <dt>(</dt><dd>Parenthetical</dd>
+          <dt>&gt;</dt><dd>Transition</dd>
+          <dt>&gt;&gt;</dt><dd>Shot</dd>
+          <dt>!</dt><dd>Action</dd>
+          <dt>.</dt><dd>Scene heading</dd>
+          <dt>[[&nbsp;]]</dt><dd>Note</dd>
+        </dl>
+        <p class="keys-note">A heading typed on the write-here line starts
+          the next scene. An all-caps line reads as a cue; write a line
+          under it that is not a speech and it settles into action.</p>
+      </section>
+      <section>
+        <h3>Correcting a line</h3>
+        <dl>
+          <dt>Tab</dt><dd>Retype the line, cycling the elements</dd>
+          <dt>⇧Tab</dt><dd>Open the element list</dd>
+        </dl>
+        <h3>Writing</h3>
+        <dl>
+          <dt>↵</dt><dd>Write the next line</dd>
+          <dt>Esc</dt><dd>Discard the line, or revert an edit</dd>
+          <dt>⌫</dt><dd>On an empty line, delete it</dd>
+          <dt><span class="mod">⌘</span>Z</dt><dd>Undo</dd>
+          <dt><span class="mod">⌘</span>⇧Z</dt><dd>Redo</dd>
+        </dl>
+        <h3>Moving</h3>
+        <dl>
+          <dt>↑ ↓</dt><dd>Move the caret</dd>
+          <dt>⇧↑ ⇧↓</dt><dd>By whole line</dd>
+          <dt><span class="mod">⌘</span>⇧↑ ↓</dt><dd>First or last line</dd>
+          <dt><span class="mod">⌘</span>F</dt><dd>Search the script</dd>
+        </dl>
+      </section>
+    </div>
+  </div>
 </div>
 
 <div class="reader">

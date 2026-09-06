@@ -525,7 +525,32 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 /* The keyboard map, printed where the keys work. */
 .kbdmap{position:absolute;left:14px;bottom:38px;color:var(--t4);
   font-family:var(--sf);font-size:11px;pointer-events:none;z-index:5}
-.side-scroll .kbdmap{position:static;padding:10px 14px;pointer-events:auto}
+/* The reader's keys live behind a button at the foot of the sidebar
+   rather than printed down it: the list grew past the point where anyone
+   reads it in place, and a writer wants the page, not a legend. */
+.side-shortcuts{flex:0 0 auto;display:flex;align-items:center;gap:9px;
+  margin:0 8px 10px;padding:8px 10px;background:none;border:0;border-radius:7px;
+  color:var(--t3);font:inherit;font-size:12.5px;cursor:pointer;text-align:left}
+.side-shortcuts:hover{background:var(--raised);color:var(--t1)}
+.side-shortcuts .ic{color:var(--t4);font-size:13px}
+.keys-box{background:var(--panel);border:.5px solid var(--bd2);border-radius:11px;
+  padding:20px 22px;width:min(620px,92vw);max-height:86vh;overflow-y:auto;
+  box-shadow:0 20px 50px rgba(0,0,0,.55)}
+.keys-hd{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.keys-hd h2{font-size:15px;margin:0}
+.keys-hd .btn{margin-left:auto}
+.keys-lead{font-size:12.5px;color:var(--t3);margin:0 0 18px;max-width:56ch}
+.keys-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+  gap:22px 30px}
+.keys-cols h3{font-family:var(--sf);font-size:11px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--t4);margin:0 0 8px}
+.keys-cols section > h3 ~ h3{margin-top:18px}
+.keys-cols dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0}
+.keys-cols dt{font-family:var(--mono);font-size:12px;color:var(--t1);
+  background:var(--inset);border:.5px solid var(--bd2);border-radius:5px;
+  padding:1px 7px;justify-self:start;white-space:nowrap}
+.keys-cols dd{margin:0;font-size:12.5px;color:var(--t2);align-self:center}
+.keys-note{font-size:12px;color:var(--t4);margin:12px 0 0;max-width:34ch}
 .scripts .title{color:inherit;text-decoration:none}
 .scripts .title:hover{text-decoration:underline}
 
@@ -898,7 +923,12 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 /* Scene structure controls: insertion, omission, restoration. */
 .sh .sctl{margin-left:auto;display:flex;gap:6px;opacity:0;transition:opacity .12s}
 .sh:hover .sctl,.sh:focus-within .sctl{opacity:1}
-.scene-insert{display:flex;justify-content:center;margin:2px 0;opacity:.55;
+/* The insert control is the second way to open a scene, not the first:
+   writing a heading on the write-here line is. So it stays out of the page
+   until the pointer or the keyboard reaches for it, the way the omission
+   control beside a heading does. A touch screen has no hover, and the
+   coarse-pointer rule below keeps both visible there. */
+.scene-insert{display:flex;justify-content:center;margin:2px 0;opacity:0;
   transition:opacity .12s}
 .scene-insert:hover,.scene-insert:focus-within{opacity:1}
 @media (prefers-reduced-motion:reduce){
