@@ -218,6 +218,8 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **An exported script keeps every speech.** The Fountain export held a speech until it was complete so the cue and its lines stay one block, but the cue that opens the next speech overwrote the one in hand instead of flushing it. Two speeches in a row lost the first: a character, their parenthetical, and their dialogue vanished from the file with nothing to say they had. The cue now flushes what it replaces, and a round-trip test pins two speeches in a row.
+
 - **The element label no longer promises what the save will not deliver.** The reader guessed a line's element from capitals and length alone while the server asked whether the text could be a name, so "BAM!" showed as a character and saved as action. The reader now applies the importer's own cue test, and the two agree on every case checked, accented names and cue extensions included.
 
 - **The script never scrolls sideways, and an unapplied edit stops narrating itself.** The search bar's tooltips extended past the column, which gave the script a horizontal scrollbar and cut the page off; they are anchored to the right the way the toolbar's are, and a long line now wraps inside its own column. The words "edited, not applied" printed inside the line, pushing the text about while it was being typed; an unapplied edit is a small amber dot in the margin instead, with the count and the wording where a reader looks for them, in the toolbar. While a script has no graph the requirement pane is no longer consulted on every line you touch, so typing waits on nothing.

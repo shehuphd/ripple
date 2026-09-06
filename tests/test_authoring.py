@@ -414,6 +414,36 @@ class TestExport:
             ("note", "check the timing"),
         ]
 
+    def test_two_speeches_in_a_row_both_survive(self, session, draft):
+        """A speech is held until it is complete, so the cue that opens the
+        next one has to flush it: the second cue used to overwrite the first
+        and the whole speech went missing from the file."""
+        units = units_of(session, draft)
+        scene = session.get(Scene, units[0].scene_id)
+        after = units[-1].id
+        for text in ('@Marisol', '(checking the mirror)', '"Is the bag safe?',
+                     '@Delacroix', '"Where else would it be.'):
+            after = insert_unit(session, scene.id, after, text).unit_id
+
+        text = export_fountain(session, draft.id)
+        assert "MARISOL" in text
+        assert "Is the bag safe?" in text
+        assert "(checking the mirror)" in text
+
+        result = import_screenplay(text.encode(), "two-speeches.fountain")
+        assert result.accepted, result.rejection_message
+        assert [
+            (u.unit_type.value, u.text)
+            for u in result.scenes[0].units
+            if u.unit_type.value in ("character", "dialogue", "parenthetical")
+        ] == [
+            ("character", "MARISOL"),
+            ("parenthetical", "(checking the mirror)"),
+            ("dialogue", "Is the bag safe?"),
+            ("character", "DELACROIX"),
+            ("dialogue", "Where else would it be."),
+        ]
+
     def test_an_imported_script_exports_every_scene(self, session, seeded):
         text = export_fountain(session, seeded.id)
         scenes = session.scalars(

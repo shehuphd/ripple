@@ -432,6 +432,11 @@ def export_fountain(session, script_id) -> str:
                 blocks.append(_heading_line(scene.heading or "SCENE"))
                 opened = True
             if unit.unit_type == "character":
+                # A speech is held until it is complete, so flush the one in
+                # hand before opening the next: two speeches in a row used to
+                # overwrite the first and drop it from the file.
+                if pending_cue:
+                    blocks.append("\n".join(pending_cue))
                 pending_cue = [text.upper()]
             elif unit.unit_type in ("dialogue", "parenthetical"):
                 line = (
