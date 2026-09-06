@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import replace
 
 from ripple.adapters.base import (
     STAGE_DIRECTION,
@@ -88,6 +89,11 @@ _CAST_LIST_HEADING = re.compile(
 
 
 _END_MARKER = re.compile(r"^_?\[?(?:THE END|FINIS|CURTAIN)\.?\]?_?$", re.IGNORECASE)
+
+# The unit types a printed play's hard wrap breaks apart: a speech and a
+# stage direction both run as a paragraph across several physical lines. A
+# cue, a heading, and a parenthetical are each one line by construction.
+_WRAPPING = (UnitType.DIALOGUE, UnitType.ACTION)
 
 
 def _ordinal(token: str | None) -> int | None:
@@ -245,9 +251,19 @@ class StagePlayAdapter:
                 setting_parts = []
 
             if open_direction:
-                self._append(scene, UnitType.ACTION, stripped, offset, raw)
-                previous = UnitType.ACTION
-                speaker = None
+                # The line continues a bracket the line above opened, so it
+                # is never a cue however it is capitalised. It carries on the
+                # unit in progress rather than starting a direction of its
+                # own: a bracket opened inside a speech leaves the speech
+                # whole instead of cutting it where the bracket fell.
+                carry = previous if previous in _WRAPPING else UnitType.ACTION
+                if carry is not UnitType.DIALOGUE:
+                    speaker = None
+                self._append(
+                    scene, carry, stripped, offset, raw, speaker,
+                    previous=previous,
+                )
+                previous = carry
                 open_direction = "]" not in stripped
                 offset += advance
                 continue
@@ -283,7 +299,7 @@ class StagePlayAdapter:
                     if len(setting_parts) == 1
                     else UnitType.ACTION
                 )
-                self._append(scene, emit, stripped, offset, raw)
+                self._append(scene, emit, stripped, offset, raw, previous=previous)
                 previous = emit
                 if re.search(r"[.!?]", joined) or len(setting_parts) >= 5:
                     need_setting = False
@@ -309,6 +325,7 @@ class StagePlayAdapter:
                     in (UnitType.CHARACTER, UnitType.DIALOGUE, UnitType.PARENTHETICAL)
                     else None
                 ),
+                previous=previous,
             )
             previous = unit_type
             offset += advance
@@ -426,7 +443,32 @@ class StagePlayAdapter:
         offset: int,
         raw_line: str,
         speaker: str | None = None,
+        previous: UnitType | None = None,
     ) -> None:
+        """Write one line into the scene, or extend the line before it.
+
+        A printed play is hard-wrapped at about seventy characters, so a
+        speech or a stage direction arrives as several physical lines with no
+        blank between them. Those are one paragraph, not several: a unit is
+        what extraction reads, what an assertion cites as its evidence, and
+        what a person edits, so a unit ending mid-sentence makes all three
+        worse. `previous` is the type the line above produced, which a blank
+        line clears, so an unbroken run of the same wrapping type joins into
+        one unit carrying an anchor over the whole paragraph.
+        """
+        joins = (
+            unit_type in _WRAPPING
+            and previous is unit_type
+            and bool(scene.units)
+            and scene.units[-1].unit_type is unit_type
+            and scene.units[-1].speaker_name == speaker
+        )
+        if joins:
+            last = scene.units[-1]
+            last.text = f"{last.text} {text}"
+            if last.anchor is not None:
+                last.anchor = replace(last.anchor, end_offset=offset + len(raw_line))
+            return
         scene.units.append(
             ParsedUnit(
                 unit_type=unit_type,

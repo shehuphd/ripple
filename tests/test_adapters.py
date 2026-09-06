@@ -413,14 +413,65 @@ class TestStagePlay:
         assert units[1:] == [
             ("character", "HEDDA"),
             ("dialogue", "HEDDA"),
-            ("dialogue", "HEDDA"),
             ("character", "MISS TESMAN"),
             ("dialogue", "MISS TESMAN"),
         ]
+        # Hedda's speech wraps over two printed lines and is one speech.
+        assert result.scenes[0].units[2].text == (
+            "[Holds out her hand.] Good morning, dear Miss Tesman! "
+            "That is kind of you."
+        )
         # The whole play reads as speech, not stage direction.
         types = [u.unit_type.value for scene in result.scenes for u in scene.units]
-        assert types.count("dialogue") == 6
+        assert types.count("dialogue") == 5
         assert types.count("action") == 0
+
+    def test_a_wrapped_paragraph_is_one_unit(self):
+        """A printed play hard-wraps at about seventy characters, so a speech
+        or a direction arrives as several physical lines with no blank
+        between them. Those are one paragraph: a unit is what extraction
+        reads, what an assertion cites, and what a person edits, so a unit
+        ending mid-sentence makes all three worse. The blank line before the
+        next cue still ends the paragraph."""
+        play = (
+            "Title: Wrapped\n\nACT I\n\n"
+            "  A drawing room.\n\n"
+            "MISS TESMAN.\n\n"
+            "Yes, indeed it is. Only think, Berta--some foreign university\n"
+            "has made him a doctor--while he has been abroad, you\n"
+            "understand. I hadn't heard a word about it.\n\n"
+            "[She goes to the glass door, throws it open, and stands\n"
+            "looking out at the autumn foliage.]\n\n"
+            "BERTA.\n\n"
+            "Well well, he's clever enough for anything.\n\n"
+            "ACT II\n\n  A garden.\n\nHEDDA.\n\nAnd then?\n\n"
+            "ACT III\n\n  A road.\n\nBRACK.\n\nNothing.\n\n"
+        )
+        result = import_screenplay(play.encode(), "wrapped.txt")
+        assert result.accepted, result.rejection_message
+        first = result.scenes[0].units
+        assert [(u.unit_type.value, u.speaker_name) for u in first] == [
+            ("scene_heading", None),
+            ("character", "MISS TESMAN"),
+            ("dialogue", "MISS TESMAN"),
+            ("action", None),
+            ("character", "BERTA"),
+            ("dialogue", "BERTA"),
+        ]
+        # Three printed lines, one speech, ending on its own full stop.
+        assert first[2].text == (
+            "Yes, indeed it is. Only think, Berta--some foreign university "
+            "has made him a doctor--while he has been abroad, you "
+            "understand. I hadn't heard a word about it."
+        )
+        # A direction wraps the same way and joins the same way.
+        assert first[3].text == (
+            "[She goes to the glass door, throws it open, and stands "
+            "looking out at the autumn foliage.]"
+        )
+        # The anchor covers the whole paragraph, not its first line alone.
+        anchor = first[2].anchor
+        assert play[anchor.start_offset : anchor.end_offset].count("\n") == 3
 
     def test_a_wrapped_sentence_ending_in_scene_is_not_a_heading(self):
         """A speech that wraps so the word "scene." opens a line is speech.
@@ -450,7 +501,7 @@ class TestStagePlay:
             for u in result.scenes[0].units
             if u.unit_type.value == "dialogue"
         ]
-        assert "scene." in first
+        assert "Fortunately the police at last appeared on the scene." in first
 
     def test_a_title_abbreviation_does_not_end_the_cue(self):
         """"MRS. ELVSTED." is one cue; the Shaw form "MRS. PEARCE. Certainly."
@@ -526,7 +577,12 @@ class TestStagePlay:
         assert speakers == {"TESMAN", "BRACK", "HEDDA", "BERTA"}
         first = result.scenes[0].units
         directions = [u.text for u in first if u.unit_type.value == "action"]
-        assert any(text.startswith("ELVSTED.  HEDDA lies") for text in directions)
+        # The three printed lines are one direction, so the capitalised name
+        # opening a continuation line never stands as a unit of its own.
+        assert len(directions) == 1
+        assert directions[0].startswith("[He throws back the curtains")
+        assert "ELVSTED.  HEDDA lies stretched on the sofa" in directions[0]
+        assert directions[0].endswith("BERTA enters in alarm from the right.]")
         # The speech after the direction still belongs to its cue.
         brack = [u for u in first if u.speaker_name == "BRACK"]
         assert [u.unit_type.value for u in brack] == ["character", "dialogue"]
