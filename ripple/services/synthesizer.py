@@ -117,6 +117,9 @@ def _call_model(
     )
     return result
 
+# Hidden reasoning bills against the same ceiling as the prose: a 400-token
+# cap cut a two-sentence explanation off after 381 reasoning tokens.
+SYNTHESIS_MAX_OUTPUT_TOKENS = 2048
 SYNTHESIS_PROMPT_VERSION = "synthesize.v1"
 QUERY_PROMPT_VERSION = "query.v6"
 
@@ -309,7 +312,7 @@ def synthesize(
                 model_id,
                 json.dumps(payload, indent=2),
                 SYNTHESIS_SYSTEM,
-                400,
+                SYNTHESIS_MAX_OUTPUT_TOKENS,
                 "synthesize",
                 SYNTHESIS_PROMPT_VERSION,
                 session,

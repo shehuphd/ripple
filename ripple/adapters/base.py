@@ -290,15 +290,18 @@ SHOT_PREFIX = re.compile(
 # Stage-play structure, as public-domain plays (Shakespeare, Wilde, Ibsen and
 # the like) are distributed by Project Gutenberg: acts and scenes named in
 # words or numerals rather than INT./EXT. sluglines. An act is "ACT I", "ACT 1",
-# "ACT ONE", or the word-ordinal "FIRST ACT"; a scene is "SCENE", "SCENE II", or
-# "SCENE I. <setting>". A scene match counts only when a number, a separator, or
-# end-of-line follows the word, so a sentence opening "Scene of ..." is not one.
+# "ACT ONE", the word-ordinal "FIRST ACT", or Archer's Ibsen "ACT FIRST."; a
+# scene is "SCENE", "SCENE II", or "SCENE I. <setting>". A scene match counts
+# only when a number, a separator, or end-of-line follows the word, so a
+# sentence opening "Scene of ..." is not one.
 _ROMAN = r"[IVXLCDM]+"
+_ORDINAL_WORDS = (
+    r"FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH"
+)
 STAGE_ACT = re.compile(
     r"^(?:ACT\s+(?P<num>" + _ROMAN + r"|\d+|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|"
-    r"EIGHT|NINE|TEN)"
-    r"|(?P<word>FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|"
-    r"TENTH)\s+ACT)"
+    r"EIGHT|NINE|TEN|" + _ORDINAL_WORDS + r")"
+    r"|(?P<word>" + _ORDINAL_WORDS + r")\s+ACT)"
     r"\b\s*(?P<rest>.*)$",
     re.IGNORECASE,
 )
@@ -310,7 +313,7 @@ STAGE_SCENE = re.compile(
 # Lines that open or close a stage direction rather than a speech.
 STAGE_DIRECTION = re.compile(
     r"^_?(?:Enter|Exit|Exeunt|Re-enter|Re-enters|Manet|Manent|Curtain|"
-    r"The\s+Curtain|End\s+of)\b",
+    r"The\s+Curtain|End\s+of|The\s+End|Finis)\b",
     re.IGNORECASE,
 )
 
@@ -324,8 +327,13 @@ def stage_act_match(line: str) -> re.Match | None:
 def stage_scene_match(line: str) -> re.Match | None:
     """Match a scene heading, or None. A bare STAGE_SCENE match is not enough,
     since it captures any line opening with "Scene"; a real heading carries a
-    number, a separator, or nothing after the word."""
-    match = STAGE_SCENE.match(line.strip())
+    number, a separator, or nothing after the word, and is set "SCENE" or
+    "Scene", never the lower-case word a wrapped sentence can leave alone on
+    a line ("... the police at last appeared on the / scene.")."""
+    stripped = line.strip()
+    if stripped[:5] == "scene":
+        return None
+    match = STAGE_SCENE.match(stripped)
     if match and (
         match.group("num") or match.group("sep") or not match.group("rest").strip()
     ):
@@ -345,16 +353,34 @@ INLINE_CUE = re.compile(
 )
 
 
+# A title abbreviation ends in a period without ending the name: "MRS. ELVSTED."
+# is one cue, and "MRS. PEARCE. Certainly." is a cue and a speech.
+TITLE_ABBREVIATIONS = frozenset(
+    {"MR", "MRS", "MS", "DR", "ST", "PROF", "REV", "CAPT", "LT", "SGT", "GEN",
+     "COL", "MAJ", "HON", "MME", "MLLE", "SR", "JR", "FR"}
+)
+
+
 def inline_cue_split(line: str) -> tuple[str, str] | None:
     """Split "SPEAKER. words" or "SPEAKER [dir] words" into (name, speech), or
     None when the line is not an inline cue."""
-    match = INLINE_CUE.match(line.strip())
+    stripped = line.strip()
+    match = INLINE_CUE.match(stripped)
     if not match:
         return None
     # Project Gutenberg italicises a cue with underscores ("HAMLET._"), and
     # left on the name they fork one character into two entities.
     name = match.group("name").strip().strip("_").rstrip(".").strip("_").strip()
     speech = match.group("rest").strip()
+    if name.upper() in TITLE_ABBREVIATIONS:
+        # The period closed the title, not the name. Split the remainder on
+        # its own: a speech after the full name is an inline cue, and no
+        # speech means the line is a plain cue for parse_character_cue.
+        inner = inline_cue_split(stripped[match.end("name") :].lstrip(". "))
+        if inner is None:
+            return None
+        name = f"{name}. {inner[0]}"
+        speech = inner[1]
     words = name.split()
     if not (2 <= len(name) <= 35 and 1 <= len(words) <= 5):
         return None

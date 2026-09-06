@@ -153,6 +153,39 @@ class TestTheLoop:
         assert len(turn.tools) == 6
         assert "stopped after 6" in turn.reply
 
+    def test_a_plan_stated_on_the_last_allowed_call_is_not_a_stop(self, world):
+        """The ceiling fell on the call that stated the plan: the card renders
+        and Go ahead waits, so the reply must not say the turn stopped."""
+        from ripple.services.agent import PLAN_STAGE
+
+        turns = [
+            AgentReply(text="", tool_calls=[ToolCall("list_findings", {})])
+            for _ in range(5)
+        ] + [
+            AgentReply(
+                text="",
+                tool_calls=[
+                    ToolCall(
+                        "state_plan", {"rows": [{"scene": "1", "change": "Cut it."}]}
+                    )
+                ],
+            )
+        ]
+        world["provider"].script_turns(turns)
+        turn = run_turn(
+            world["session"],
+            world["script"],
+            "We lost the sedan.",
+            world["provider"],
+            MODEL,
+            AgentSettings(tool_ceiling=6),
+            stage=PLAN_STAGE,
+        )
+        assert turn.stopped_at_ceiling is False
+        assert "stopped after" not in turn.reply
+        assert "The plan is above" in turn.reply
+        assert turn.tools[-1].name == "state_plan"
+
     def test_an_unknown_tool_answers_the_model_instead_of_acting(self, world):
         turn = _run(
             world,

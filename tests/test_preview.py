@@ -495,6 +495,37 @@ class TestDeadModelMarking:
         synthesize(GraphDiff(), [], PlainSpeaker(), "fake-judge", session=session)
         assert "fake-judge" not in unavailable_models(session, "google")
 
+    def test_the_explanation_has_room_for_reasoning_and_prose(self, session):
+        """Hidden reasoning bills against the output ceiling: at 400 tokens a
+        two-sentence explanation was cut off after 381 reasoning tokens."""
+        from ripple.graph.diff import GraphDiff
+        from ripple.services.synthesizer import synthesize
+
+        seen = {}
+
+        class Recorder:
+            name = "google"
+            credential_variable = "GOOGLE_API_KEY"
+
+            def is_configured(self):
+                return True
+
+            def list_models(self):
+                return []
+
+            def generate(self, model_id, prompt, **kwargs):
+                seen.update(kwargs)
+                return GenerationResult(
+                    text="A summary.",
+                    model_id=model_id,
+                    provider=self.name,
+                    input_tokens=10,
+                    output_tokens=5,
+                )
+
+        synthesize(GraphDiff(), [], Recorder(), "fake-judge", session=session)
+        assert seen["max_output_tokens"] >= 1024
+
 
 class OneDeadModel:
     """A provider where one named model is down and every other one answers."""

@@ -87,6 +87,9 @@ _CAST_LIST_HEADING = re.compile(
 )
 
 
+_END_MARKER = re.compile(r"^_?\[?(?:THE END|FINIS|CURTAIN)\.?\]?_?$", re.IGNORECASE)
+
+
 def _ordinal(token: str | None) -> int | None:
     """Read a roman numeral, an arabic numeral, or a number word as an int."""
     if not token:
@@ -169,6 +172,10 @@ class StagePlayAdapter:
         previous: UnitType | None = None
         speaker: str | None = None
         started = False
+        # A bracketed stage direction that wraps over several lines stays a
+        # direction until its bracket closes, so a capitalised name opening a
+        # continuation line ("ELVSTED.  HEDDA lies stretched...") is not a cue.
+        open_direction = False
         offset = 0
 
         for index, raw in enumerate(lines):
@@ -178,7 +185,14 @@ class StagePlayAdapter:
                 continue
             stripped = raw.rstrip("\r\n").strip()
             if not stripped:
-                previous = speaker = None
+                # A blank line closes a speech, unless the last line was the
+                # cue itself: Archer's Ibsen sets a blank between a cue and
+                # its speech, and the cue is still waiting for that speech.
+                # It also closes a bracketed direction whose bracket the
+                # edition never closes ("[She goes out by the hall door.").
+                if previous is not UnitType.CHARACTER:
+                    previous = speaker = None
+                open_direction = False
                 offset += advance
                 continue
 
@@ -229,6 +243,19 @@ class StagePlayAdapter:
                 scene = self._open(scenes, current_act, None)
                 need_setting = True
                 setting_parts = []
+
+            if open_direction:
+                self._append(scene, UnitType.ACTION, stripped, offset, raw)
+                previous = UnitType.ACTION
+                speaker = None
+                open_direction = "]" not in stripped
+                offset += advance
+                continue
+            if _END_MARKER.match(stripped):
+                # "THE END" closes the play; footnotes and transcriber's notes
+                # after it are not lines of the play.
+                break
+            open_direction = stripped.count("[") > stripped.count("]")
 
             # A cue and its speech on one line (Shaw, Chekhov) split into two
             # units. A setting, being Title case, never matches, so this cannot

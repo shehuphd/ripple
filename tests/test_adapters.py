@@ -363,6 +363,221 @@ class TestStagePlay:
             "A room furnished comfortably and tastefully, but not extravagantly"
         )
 
+    def test_archer_style_act_headings_parse(self):
+        """Archer's Ibsen translations head each act "ACT FIRST." with the
+        ordinal after the word and a full stop after that; Hedda Gabler on
+        Project Gutenberg was refused as having no scenes."""
+        play = (
+            "Title: Hedda Test\n\n"
+            "ACT FIRST.\n\n"
+            "  A spacious, handsome, and tastefully furnished drawing room.\n\n"
+            "MISS TESMAN.\n[Stops inside the door.] Why, I don't believe they "
+            "are stirring yet!\n\n"
+            "BERTA.\nThat's what I said, Miss.\n\n"
+            "ACT SECOND.\n\n"
+            "  The room at the Tesmans' as in the first Act.\n\n"
+            "HEDDA.\nGood afternoon, Judge Brack.\n\n"
+            "BRACK.\nMy dear Hedda.\n\n"
+            "ACT THIRD.\n\n"
+            "  The room at the Tesmans'. The curtains are drawn.\n\n"
+            "MRS. ELVSTED.\nNot yet!\n\n"
+            "HEDDA.\nGo to sleep.\n\n"
+        )
+        result = import_screenplay(play.encode(), "hedda.txt")
+        assert result.accepted, result.rejection_reason
+        assert [s.display_scene_number for s in result.scenes] == ["1", "2", "3"]
+        assert result.scenes[0].heading.startswith("A spacious, handsome")
+        assert result.scenes[1].heading.startswith("The room at the Tesmans'")
+
+    def test_a_blank_line_between_cue_and_speech_keeps_the_speech(self):
+        """Archer's Ibsen sets a blank line between every cue and its speech.
+        The speech is dialogue by that speaker, and the blank after the
+        speech still closes it so the next cue is read as a cue."""
+        play = (
+            "Title: Spaced\n\nACT FIRST.\n\n"
+            "  A drawing room.\n\n"
+            "HEDDA.\n\n"
+            "[Holds out her hand.] Good morning, dear Miss Tesman!\n"
+            "That is kind of you.\n\n\n"
+            "MISS TESMAN.\n\n"
+            "Well--has the bride slept well?\n\n"
+            "ACT SECOND.\n\n  The same room.\n\n"
+            "HEDDA.\n\nOh yes, thanks.\n\n"
+            "TESMAN.\n\nWhat a lot of flowers.\n\n"
+            "ACT THIRD.\n\n  The same room, curtains drawn.\n\n"
+            "BRACK.\n\nMy dear Hedda.\n\n"
+        )
+        result = import_screenplay(play.encode(), "spaced.txt")
+        assert result.accepted, result.rejection_message
+        units = [(u.unit_type.value, u.speaker_name) for u in result.scenes[0].units]
+        assert units[1:] == [
+            ("character", "HEDDA"),
+            ("dialogue", "HEDDA"),
+            ("dialogue", "HEDDA"),
+            ("character", "MISS TESMAN"),
+            ("dialogue", "MISS TESMAN"),
+        ]
+        # The whole play reads as speech, not stage direction.
+        types = [u.unit_type.value for scene in result.scenes for u in scene.units]
+        assert types.count("dialogue") == 6
+        assert types.count("action") == 0
+
+    def test_a_wrapped_sentence_ending_in_scene_is_not_a_heading(self):
+        """A speech that wraps so the word "scene." opens a line is speech.
+        Hedda Gabler's third act split in two on such a line."""
+        play = (
+            "Title: Wrapped\n\nACT I\n\n"
+            "  A drawing room.\n\n"
+            "BRACK.\nFortunately the police at last appeared on the\n"
+            "scene.\n\n"
+            "HEDDA.\nAnd then?\n\n"
+            "SCENE II.\n\n"
+            "  A garden.\n\n"
+            "BRACK.\nThen they went home.\n\n"
+            "HEDDA.\nAll of them?\n\n"
+            "ACT II\n\n  The garden again.\n\n"
+            "BRACK.\nEvery one.\n\n"
+        )
+        result = import_screenplay(play.encode(), "wrapped.txt")
+        assert result.accepted, result.rejection_message
+        assert [scene.heading for scene in result.scenes] == [
+            "A drawing room",
+            "A garden",
+            "The garden again",
+        ]
+        first = [
+            u.text
+            for u in result.scenes[0].units
+            if u.unit_type.value == "dialogue"
+        ]
+        assert "scene." in first
+
+    def test_a_title_abbreviation_does_not_end_the_cue(self):
+        """"MRS. ELVSTED." is one cue; the Shaw form "MRS. PEARCE. Certainly."
+        is that cue and its speech. Hedda Gabler came in with 209 speeches
+        by a character called MRS."""
+        from ripple.adapters.base import inline_cue_split
+
+        assert inline_cue_split("MRS. ELVSTED.") is None
+        assert inline_cue_split("DR. RANK.") is None
+        assert inline_cue_split("MRS. PEARCE. Certainly, sir.") == (
+            "MRS. PEARCE",
+            "Certainly, sir.",
+        )
+        assert inline_cue_split("HIGGINS. Nonsense!") == ("HIGGINS", "Nonsense!")
+        play = (
+            "Title: Titles\n\nACT I\n\n  A room.\n\n"
+            "MRS. ELVSTED.\n\nNot yet!\n\n"
+            "HEDDA.\n\nGo to sleep.\n\n"
+            "ACT II\n\n  The same room.\n\n"
+            "MRS. PEARCE. Certainly, sir.\n\n"
+            "HIGGINS. Nonsense!\n\n"
+            "ACT III\n\n  A garden.\n\n"
+            "DR. RANK.\n\nGood evening.\n\n"
+        )
+        result = import_screenplay(play.encode(), "titles.txt")
+        assert result.accepted, result.rejection_message
+        speakers = [
+            u.speaker_name
+            for scene in result.scenes
+            for u in scene.units
+            if u.unit_type.value == "character"
+        ]
+        assert speakers == ["MRS. ELVSTED", "HEDDA", "MRS. PEARCE", "HIGGINS", "DR. RANK"]
+        speeches = [
+            u.text
+            for scene in result.scenes
+            for u in scene.units
+            if u.unit_type.value == "dialogue"
+        ]
+        assert speeches == [
+            "Not yet!",
+            "Go to sleep.",
+            "Certainly, sir.",
+            "Nonsense!",
+            "Good evening.",
+        ]
+
+    def test_a_wrapped_bracketed_direction_stays_a_direction(self):
+        """A stage direction that wraps past its opening bracket is still a
+        direction on its continuation lines, so a capitalised name opening
+        one ("ELVSTED.  HEDDA lies...") is not read as a cue."""
+        play = (
+            "Title: Wrapped\n\nACT I\n\n  A room.\n\n"
+            "TESMAN.\n\nShot herself!\n\n"
+            "   [He throws back the curtains and runs in, followed by MRS.\n"
+            "       ELVSTED.  HEDDA lies stretched on the sofa, lifeless.\n"
+            "       Confusion and cries.  BERTA enters in alarm from the right.]\n\n"
+            "BRACK.\n\nGood God!--people don't do such things.\n\n"
+            "ACT II\n\n  A garden.\n\n"
+            "HEDDA.\n\nAnd then?\n\n"
+            "ACT III\n\n  A road.\n\n"
+            "BERTA.\n\nNothing.\n\n"
+            "THE END\n\n"
+        )
+        result = import_screenplay(play.encode(), "wrapped.txt")
+        assert result.accepted, result.rejection_message
+        speakers = {
+            u.speaker_name
+            for scene in result.scenes
+            for u in scene.units
+            if u.unit_type.value == "character"
+        }
+        assert speakers == {"TESMAN", "BRACK", "HEDDA", "BERTA"}
+        first = result.scenes[0].units
+        directions = [u.text for u in first if u.unit_type.value == "action"]
+        assert any(text.startswith("ELVSTED.  HEDDA lies") for text in directions)
+        # The speech after the direction still belongs to its cue.
+        brack = [u for u in first if u.speaker_name == "BRACK"]
+        assert [u.unit_type.value for u in brack] == ["character", "dialogue"]
+
+    def test_the_end_closes_the_play(self):
+        """Footnotes and a transcriber's note after THE END are not lines of
+        the play: "FOOTNOTES." had become a speaker."""
+        play = (
+            "Title: Ended\n\nACT I\n\n  A room.\n\n"
+            "TESMAN.\n\nShot herself!\n\n"
+            "ACT II\n\n  A garden.\n\n"
+            "HEDDA.\n\nAnd then?\n\n"
+            "ACT III\n\n  A road.\n\n"
+            "BERTA.\n\nNothing.\n\n"
+            "BRACK.\n\nGood God!--people don't do such things.\n\n"
+            "THE END\n\n"
+            "FOOTNOTES.\n\n(1) Pronounce Reena.\n\n"
+            "TRANSCRIBER'S NOTE.\n\nThe text is as printed.\n"
+        )
+        result = import_screenplay(play.encode(), "ended.txt")
+        assert result.accepted, result.rejection_message
+        every_text = " ".join(u.text for sc in result.scenes for u in sc.units)
+        assert "FOOTNOTES" not in every_text
+        assert "Pronounce Reena" not in every_text
+        assert "TRANSCRIBER" not in every_text
+        assert result.scenes[-1].units[-1].text.startswith("Good God!")
+
+    def test_an_unclosed_bracket_direction_ends_at_the_blank_line(self):
+        """Archer's edition never closes a standalone direction's bracket.
+        The next paragraph's cue is still a cue."""
+        play = (
+            "Title: Unclosed\n\nACT I\n\n  A room.\n\n"
+            "BERTA.\n\nYes, Miss.\n\n"
+            "[She goes to the glass door and throws it open.\n\n"
+            "HEDDA.\n\nGood morning.\n\n"
+            "ACT II\n\n  A garden.\n\n"
+            "HEDDA.\n\nAnd then?\n\n"
+            "ACT III\n\n  A road.\n\n"
+            "BERTA.\n\nNothing.\n\n"
+        )
+        result = import_screenplay(play.encode(), "unclosed.txt")
+        assert result.accepted, result.rejection_message
+        first = result.scenes[0].units
+        assert [(u.unit_type.value, u.speaker_name) for u in first[1:]] == [
+            ("character", "BERTA"),
+            ("dialogue", "BERTA"),
+            ("action", None),
+            ("character", "HEDDA"),
+            ("dialogue", "HEDDA"),
+        ]
+
     def test_inline_cues_split_into_a_speaker_and_a_speech(self):
         """Shaw and Chekhov put the cue and its speech on one line
         ("HIGGINS. Nonsense!", "THE DAUGHTER [chilled] I'm cold."). Each line

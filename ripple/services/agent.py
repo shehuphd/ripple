@@ -585,12 +585,20 @@ def run_turn(
                 if stage == PLAN_STAGE and state.plan:
                     planned = True
             else:
-                stopped = True
-                reply_text = (
-                    f"I stopped after {settings.tool_ceiling} tool calls without "
-                    "finishing. Raise the ceiling in Settings, or narrow the "
-                    "request and ask again."
-                )
+                if planned:
+                    # The ceiling fell on the call that stated the plan. The
+                    # turn did its work: the card renders and Go ahead waits.
+                    reply_text = (
+                        "The plan is above, scene by scene. Go ahead starts "
+                        "the rewrite; Adjust the plan changes it first."
+                    )
+                else:
+                    stopped = True
+                    reply_text = (
+                        f"I stopped after {settings.tool_ceiling} tool calls "
+                        "without finishing. Raise the ceiling in Settings, or "
+                        "narrow the request and ask again."
+                    )
         except BudgetExceeded as error:
             _persist(session, state)
             raise AgentRefused(error.message) from None
