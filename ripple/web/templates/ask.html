@@ -3,7 +3,7 @@
 
 {% block sidebar %}
 {% if script %}
-<a class="srow side-fixed" href="/reader?script={{ script.id }}">
+<a class="srow side-fixed" href="/scripts/{{ script.id }}">
   <span class="ic">‹</span><span class="lb">{{ script.title }}</span></a>
 <div class="side-hd"><span>Conversations</span>
   <span class="num" id="thread-count">{{ conversations|length }}</span></div>

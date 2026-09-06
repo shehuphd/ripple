@@ -2781,6 +2781,14 @@ class TestAskRipple:
         assert f'href="/ask?script={script_id}"' in body
         assert "Ask Ripple" in body
 
+    def test_the_chats_back_link_reaches_the_reader(self, client):
+        """The sidebar's script link must name a route that exists."""
+        script_id = _first_script(client)
+        body = client.get(f"/ask?script={script_id}").text
+        assert f'href="/scripts/{script_id}"' in body
+        assert "/reader?script" not in body
+        assert client.get(f"/scripts/{script_id}").status_code == 200
+
     def test_an_oversized_message_is_refused_before_any_call(
         self, client, ripple_model
     ):

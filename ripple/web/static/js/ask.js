@@ -171,14 +171,14 @@ if (chatwrap) {
            <div class="hd"><h2>Still open</h2>
              <span class="meta">${summary.findings.length} continuity
                finding(s)</span>
-             <a class="btn" href="/reader?script=${encodeURIComponent(scriptId)}">
+             <a class="btn" href="/scripts/${encodeURIComponent(scriptId)}">
                Review in the reader</a></div>
            ${findingRows(summary.findings)}</div>`
       : '';
     turn('ripple', 'Ripple', `
       <div class="banner ok">✓ Change set accepted, base
         v${summary.version_from} → v${summary.version_to}
-        <a class="btn" href="/reader?script=${encodeURIComponent(scriptId)}">
+        <a class="btn" href="/scripts/${encodeURIComponent(scriptId)}">
           ↺ Undo in the reader</a></div>
       <div class="answer">${esc(summary.text || '')}</div>
       <div class="card chatcard">
