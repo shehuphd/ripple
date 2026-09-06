@@ -336,7 +336,18 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .u.shot{color:var(--t2);text-transform:uppercase}
 .u.note{color:var(--amber);font-style:italic}
 .u.action{margin-left:36px}
-.ucap{font-family:var(--sf);font-size:11.5px;color:var(--t4);margin:-8px 0 14px 43px}
+/* The caption under a selected line belongs to that line: it takes the
+   line's own indent and closes the space beneath it, rather than pulling
+   itself up by a negative margin from a fixed offset. On a character cue,
+   which is indented a third of the page and sits tight against its speech,
+   the old rule laid the caption over the dialogue in the left margin. */
+.u:has(+ .ucap){margin-bottom:0}
+.ucap{font-family:var(--sf);font-size:11.5px;color:var(--t4);
+  margin:3px 0 12px 7px}
+.u.action + .ucap{margin-left:43px}
+.u.character + .ucap{margin-left:calc(32% + 7px)}
+.u.parenthetical + .ucap{margin-left:calc(24% + 7px)}
+.u.dialogue + .ucap{margin-left:calc(16% + 7px)}
 
 /* Requirement pane */
 .pane{display:flex;flex-direction:column;gap:14px;padding-right:2px}

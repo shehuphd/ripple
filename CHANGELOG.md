@@ -206,6 +206,8 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **A selected line's caption stays under its own line.** The caption naming the unit, its type, and its assertion count was placed with a negative top margin at a fixed left offset, which suited an action line and nothing else. On a character cue, indented a third of the page and set tight against its speech, the caption rode up onto the cue and lay in the left margin across the dialogue below. It now takes its line's own indent and closes the space beneath it, so it reads as belonging to the line it describes whatever the line's type.
+
 - **Shiplock 0.3 runs two more checks here.** The gate takes `deps-declared-once`, which refuses a package declared in both `pyproject.toml` and a requirements file, and `test-assertions`, which refuses a test carrying no expectation. Both pass over the repository as it stands. The pin is `shiplock>=0.3,<1`.
 
 - **Row actions keep their distance.** Review and Dismiss were spaced by a left margin alone, so a narrow actions column that stacked them left a destructive action a few pixels under a safe one. The actions in a row space themselves in both directions.
