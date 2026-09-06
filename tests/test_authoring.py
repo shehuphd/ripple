@@ -26,6 +26,7 @@ from ripple.services.authoring import (
     insert_unit,
     rename_script,
     save_unit_text,
+    settle_cues,
 )
 from ripple.services.changeset import InvalidOperation, undo_latest
 from ripple.services.scenes import insert_scene
@@ -263,6 +264,75 @@ class TestCorrection:
         assert cue.speaker_name == "MRS. ELVSTED"
         assert shout.unit_type == "action" and "!" not in "STAY BACK."
         assert cut.unit_type == "transition"
+
+
+class TestSoundLines:
+    """An all-caps line reads like a speaker on the page, so the decision
+    waits for the evidence: a cue with nothing speaking under it was a
+    sound, a shout, or a line of emphasis, and belongs in action."""
+
+    def _scene(self, session, draft) -> Scene:
+        return session.get(Scene, units_of(session, draft)[0].scene_id)
+
+    def test_a_terminated_sound_is_action_at_once(self, session, draft):
+        """A name never ends in terminal punctuation, so the shape alone
+        settles "BAM!" and "WHAT?" without waiting."""
+        scene = self._scene(session, draft)
+        after = units_of(session, draft)[-1].id
+        for text in ("BAM!", "CRASH!", "WHAT?"):
+            composed = insert_unit(session, scene.id, after, text)
+            assert composed.unit_type == "action", text
+            after = composed.unit_id
+
+    def test_a_bare_sound_word_settles_when_nothing_speaks(self, session, draft):
+        """BAM reads as a cue on its own; the action line under it proves
+        otherwise, and both end up as action."""
+        scene = self._scene(session, draft)
+        bam = insert_unit(session, scene.id, units_of(session, draft)[-1].id, "BAM")
+        assert bam.unit_type == "character"
+        written = insert_unit(
+            session, scene.id, bam.unit_id, "!The door flies open."
+        )
+        assert written.demoted == [bam.unit_id]
+        settled = session.get(ScriptUnit, uuid.UUID(bam.unit_id))
+        assert (settled.unit_type, settled.speaker_name) == ("action", None)
+        assert settled.current_text == "BAM"
+
+    def test_a_cue_with_a_speech_is_left_alone(self, session, draft):
+        scene = self._scene(session, draft)
+        cue = insert_unit(session, scene.id, units_of(session, draft)[-1].id, "MARY")
+        spoke = insert_unit(session, scene.id, cue.unit_id, "Who's there?")
+        assert spoke.demoted == []
+        assert session.get(ScriptUnit, uuid.UUID(cue.unit_id)).unit_type == "character"
+
+    def test_the_last_cue_waits_until_the_scene_is_left(self, session, draft):
+        """The writer is still under it, so a trailing cue stands until the
+        scene closes behind them."""
+        scene = self._scene(session, draft)
+        cue = insert_unit(session, scene.id, units_of(session, draft)[-1].id, "THUNDER")
+        assert session.get(ScriptUnit, uuid.UUID(cue.unit_id)).unit_type == "character"
+        assert settle_cues(session, scene) == []
+        assert settle_cues(session, scene, include_last=True) == [cue.unit_id]
+        assert session.get(ScriptUnit, uuid.UUID(cue.unit_id)).unit_type == "action"
+
+    def test_a_cue_the_graph_cites_is_never_retyped(self, session, seeded):
+        scene = session.scalar(
+            select(Scene).where(Scene.script_id == seeded.id)
+        )
+        before = [
+            u.unit_type
+            for u in session.scalars(
+                select(ScriptUnit).where(ScriptUnit.scene_id == scene.id)
+            )
+        ]
+        settle_cues(session, scene, include_last=True)
+        after = [
+            u.unit_type
+            for u in session.scalars(
+                select(ScriptUnit).where(ScriptUnit.scene_id == scene.id)
+            )
+        ]
+        assert before == after
 
 
 class TestSceneRemoval:

@@ -2238,6 +2238,13 @@ def add_scene(
     scene and, when extraction started, the run for the browser loop to
     drive; without a model the scene still inserts and its graph waits.
     """
+    # A cue left dangling at the end of the scene being left was never a
+    # cue: nothing spoke under it. Settled before the new scene opens.
+    demoted: list[str] = []
+    if payload.get("after_scene_id"):
+        leaving = session.get(Scene, _uuid(payload["after_scene_id"]))
+        if leaving is not None:
+            demoted = authoring.settle_cues(session, leaving, include_last=True)
     try:
         inserted = scenes_service.insert_scene(
             session,
@@ -2268,7 +2275,7 @@ def add_scene(
             scene_ids=[_uuid(inserted.scene_id)],
         )
         run_progress = progress(session, run.id).__dict__
-    return {"scene": inserted.__dict__, "run": run_progress}
+    return {"scene": inserted.__dict__, "run": run_progress, "demoted": demoted}
 
 
 @app.post("/api/scripts/new")

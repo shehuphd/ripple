@@ -316,6 +316,21 @@ function forcedBy(text) {
   return null;
 }
 
+/* The same test the importer applies, so the label and the saved line
+   never disagree. A name runs on letters, digits, and the handful of marks
+   a name carries, which is what keeps "BAM!" and "WHAT?" out: no one is
+   called those, and a sound is not a speaker. */
+const CUE_SHAPE = /^\p{L}[\p{L}\p{N} .'\-#&_]*?(?:\s*\([^)]*\))*\s*\^?\s*$/u;
+
+function looksLikeCue(text) {
+  if (!text || text !== text.toUpperCase()) return false;
+  if (readsAsHeading(text) || /^[A-Z0-9 .'-]+TO:$/.test(text)) return false;
+  if (!CUE_SHAPE.test(text)) return false;
+  const name = text.replace(/\s*\([^)]*\)/g, '').replace(/[_^]/g, '')
+    .replace(/\.+$/, '').trim();
+  return /\p{L}/u.test(name);
+}
+
 function guessType(text, previousType) {
   const forced = forcedBy(text);
   if (forced) return forced;
@@ -324,9 +339,20 @@ function guessType(text, previousType) {
   if (/^[A-Z0-9 .'-]+TO:$/.test(text)) return 'transition';
   if (text === text.toUpperCase() && /[A-Z]/.test(text)) {
     if (SHOT_WORDS.test(text)) return 'shot';
-    if (!speaking && text.length <= 40) return 'character';
+    if (!speaking && text.length <= 40 && looksLikeCue(text)) return 'character';
   }
   return speaking ? 'dialogue' : 'action';
+}
+
+/* A cue the write proved was never a cue is retyped in place, so the page
+   shows what the database holds without a reload. */
+function repaintDemoted(ids) {
+  (ids || []).forEach((id) => {
+    const line = document.querySelector(`[data-unit="${id}"]`);
+    if (!line) return;
+    WRITE_TYPES.forEach((one) => line.classList.remove(one));
+    line.classList.add('action');
+  });
 }
 
 /* The type list, opened by Shift with Tab, so the eight elements are
@@ -460,6 +486,7 @@ async function writeLine(section, afterUnitId, text, type, place) {
   const line = buildLine(composed, composed.text || text,
     section.querySelector('.u') ? section.querySelector('.u').dataset.sceneNo : '');
   place(line);
+  repaintDemoted(composed.demoted);
   return line;
 }
 
@@ -597,6 +624,7 @@ async function createSceneInline(heading, afterSection) {
       extract: false,
     }),
   });
+  repaintDemoted(result.demoted);
   const scene = result.scene;
   const section = document.createElement('section');
   section.dataset.sceneBody = scene.scene_id;

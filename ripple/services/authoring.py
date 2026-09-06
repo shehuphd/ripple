@@ -12,7 +12,7 @@ extraction picks the new text up through the content hash.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -57,6 +57,8 @@ class ComposedUnit:
     speaker_name: str | None
     sequence_index: int
     script_version: int
+    # Cues this write proved were never cues, for the page to retype.
+    demoted: list[str] = field(default_factory=list)
 
 
 def create_script(session, title: str) -> Script:
@@ -253,7 +255,8 @@ def insert_unit(
         # computed against the old shape go stale instead of applying.
         script.current_version += 1
         session.flush()
-        trace.output({"unit_id": str(unit.id)})
+        demoted = settle_cues(session, scene)
+        trace.output({"unit_id": str(unit.id), "demoted": len(demoted)})
         return ComposedUnit(
             unit_id=str(unit.id),
             unit_type=unit_type,
@@ -261,7 +264,51 @@ def insert_unit(
             speaker_name=speaker,
             sequence_index=insert_index,
             script_version=script.current_version,
+            demoted=demoted,
         )
+
+
+def settle_cues(session, scene: Scene, include_last: bool = False) -> list[str]:
+    """Retype the cues that turned out not to be cues.
+
+    A character cue exists to introduce a speech, so a cue that never
+    receives one was never a cue: it is a sound, a shout, or a line of
+    emphasis, and it belongs in action. All-caps lines are ambiguous on the
+    page ("BAM", "THUNDER", "GUNSHOT" read exactly like a speaker), and no
+    vocabulary of sound words could ever be complete, so the decision waits
+    for the evidence instead of guessing at the shape.
+
+    The last cue in a scene is left alone while the writer is still under
+    it, and settled with `include_last` once the scene is left. A cue the
+    graph already cites is never touched: its type is part of what the
+    facts were judged against.
+    """
+    rows = list(
+        session.scalars(
+            select(ScriptUnit)
+            .where(ScriptUnit.scene_id == scene.id)
+            .order_by(ScriptUnit.sequence_index)
+        )
+    )
+    demoted: list[str] = []
+    for index, unit in enumerate(rows):
+        if unit.unit_type != "character":
+            continue
+        following = rows[index + 1] if index + 1 < len(rows) else None
+        if following is None and not include_last:
+            continue
+        speaks = following is not None and following.unit_type in (
+            "dialogue",
+            "parenthetical",
+        )
+        if speaks or _facts_citing(session, unit):
+            continue
+        unit.unit_type = "action"
+        unit.speaker_name = None
+        demoted.append(str(unit.id))
+    if demoted:
+        session.flush()
+    return demoted
 
 
 def delete_unit(session, unit_id) -> dict:
