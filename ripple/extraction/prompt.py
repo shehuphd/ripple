@@ -270,10 +270,3 @@ def prompt_fingerprint() -> str:
         digest.update(part.encode("utf-8"))
         digest.update(b"\x00")
     return digest.hexdigest()[:16]
-
-
-def schema_fingerprint() -> str:
-    """A short hash of the output schema, for diagnosing a stale cache."""
-    return hashlib.sha256(
-        json.dumps(OUTPUT_SCHEMA, sort_keys=True).encode("utf-8")
-    ).hexdigest()[:12]

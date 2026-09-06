@@ -19,7 +19,6 @@ button{font:inherit}
 [data-theme="light"] ::selection{background:rgba(27,125,151,.22);color:#0D0E10}
 .num{font-variant-numeric:tabular-nums}
 .mono{font-family:var(--mono)}
-.serif{font-family:var(--serif)}
 .muted{color:var(--t3)}
 .tiny{font-size:12px}
 .hide{display:none !important}
@@ -577,9 +576,6 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .ask-empty p{color:var(--t3);font-size:14px;line-height:1.65;margin-bottom:36px}
 .ask-empty .btn{padding:12px 26px;font-size:14.5px}
 .ask-empty .tiny{margin-top:18px;margin-bottom:0}
-.ask-empty-ic.pulse{animation:ask-pulse 1.6s ease-in-out infinite}
-@keyframes ask-pulse{0%,100%{opacity:1}50%{opacity:.45}}
-@media (prefers-reduced-motion:reduce){.ask-empty-ic.pulse{animation:none}}
 /* The build spinner: a turning arc on the same disc the idle icon uses, so
    the state change reads as motion starting rather than the panel redrawing.
    Under reduced motion it holds still as a ring, since the progress bar and
@@ -643,7 +639,6 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .srow.qrow:hover{background:var(--raised)}
 .srow.qrow .lb{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cited .bd .h{text-transform:uppercase;margin-bottom:5px}
-.cited .pg{color:var(--t4);font-size:12px}
 
 /* Ask Ripple. One column of turns over one script, with the composer pinned
    under it. A turn is an avatar, a label, and whatever the turn produced:
@@ -736,7 +731,6 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 
 /* Locked features. A control that cannot work is disabled and says what to
    do about it, rather than failing when pressed. */
-.locked{opacity:.4;pointer-events:none;filter:grayscale(.5)}
 .lock{display:flex;align-items:center;gap:10px;background:var(--raised);
   border:.5px solid var(--bd2);border-radius:8px;padding:11px 14px;font-size:13px;
   color:var(--t2);margin-bottom:14px}
@@ -760,7 +754,6 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .row-check,.batch-all input{accent-color:var(--ac);width:15px;height:15px;
   cursor:pointer}
 .item .row-check{flex:0 0 auto;position:relative;top:2px}
-.row-check-spacer{flex:0 0 15px}
 .batch-bar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
   display:flex;align-items:center;gap:9px;padding:9px 13px;background:var(--raised);
   border:.5px solid var(--bd2);border-radius:10px;

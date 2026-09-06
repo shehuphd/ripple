@@ -75,9 +75,6 @@ class Alignment:
     deleted: list[str] = field(default_factory=list)
     suggestions: list[ScenePair] = field(default_factory=list)
 
-    def pair_for_new(self, new_id: str) -> ScenePair | None:
-        return next((p for p in self.pairs if p.new_id == new_id), None)
-
 
 def _content_key(scene: SceneContent) -> tuple:
     return (scene.heading.strip().casefold(), tuple(t.strip() for t in scene.unit_texts))

@@ -209,11 +209,6 @@ class TestTheDemoEdit:
             "requires",
         }
 
-    def test_the_affected_entities_include_both_vehicles(self):
-        diff = diff_edges(self._accepted(), self._proposed())
-        affected = diff.affected_entities()
-        assert {"blue sedan", "picture bicycle", "mara"} <= affected
-
     def test_operations_remove_before_they_add(self):
         operations = to_operations(diff_edges(self._accepted(), self._proposed()))
         kinds = [op["operation_type"] for op in operations]

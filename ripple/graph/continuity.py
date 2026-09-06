@@ -58,10 +58,6 @@ class EvidenceItem:
     relation: str
     rank: float
 
-    @property
-    def is_earlier(self) -> bool:
-        return self.relation.startswith("earlier")
-
 
 @dataclass
 class EvidencePacket:

@@ -128,28 +128,6 @@ class GraphDiff:
             "unchanged": len(self.unchanged),
         }
 
-    def affected_entities(self) -> set[str]:
-        """Normalized names of every entity either side of a changed edge.
-
-        Continuity retrieval starts from this set, so an entity touched only as
-        the object of a removal still gets swept.
-        """
-        names: set[str] = set()
-        for before, after in self.changed:
-            for edge in (before, after):
-                names.update(_entity_names(edge))
-        for edge in (*self.added, *self.removed):
-            names.update(_entity_names(edge))
-        return names
-
-
-def _entity_names(edge: Edge) -> set[str]:
-    return {
-        endpoint.ref
-        for endpoint in (edge.subject, edge.obj)
-        if endpoint.kind == "entity"
-    }
-
 
 def normalise_edge(edge: Edge) -> Edge:
     """Put a symmetric edge's endpoints in canonical order.

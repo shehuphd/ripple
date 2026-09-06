@@ -18,11 +18,9 @@ function trace(kind, fields) {
 }
 
 function debugDump(prefix) {
-  const rows = prefix
+  return prefix
     ? traceRing.filter((r) => r.kind.startsWith(prefix))
     : traceRing.slice();
-  console.log(rows);
-  return rows;
 }
 debugDump.table = (prefix) => {
   console.table(prefix

@@ -42,7 +42,6 @@ DEPARTMENT_ORDER = (
 # The horizontal band reserved for the scene spine, in degrees either side of
 # horizontal. Entities never enter it, so scene labels stay legible.
 SPINE_BAND = 22.0
-FOCUS_RADIUS = 0.0
 # Ring radii are bounded by the vertical clamp: a node at 0.5 + SECOND_RING
 # must still fit inside the margin, or both rings clamp to the same edge and
 # the radial separation they exist to provide disappears.
