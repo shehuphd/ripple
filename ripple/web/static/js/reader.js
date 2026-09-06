@@ -1242,3 +1242,134 @@ if (markReviewed) {
     }
   });
 }
+
+/* Search inside the script, stepping through the matches one at a time.
+
+   The lines are contenteditable, so a match is never wrapped in an element:
+   injected markup would end up inside an edit and inside the text a ripple
+   compares. The custom highlight API paints ranges without touching the
+   DOM, which leaves the revision tints and the accepted text alone. Where a
+   browser has no highlight API, stepping still works and the line the match
+   is on is outlined instead. */
+const findBox = document.getElementById('find');
+if (findBox) {
+  const findQ = document.getElementById('find-q');
+  const findCount = document.getElementById('find-count');
+  const findPrev = document.getElementById('find-prev');
+  const findNext = document.getElementById('find-next');
+  const findClear = document.getElementById('find-clear');
+  const painting = typeof Highlight === 'function' && window.CSS && CSS.highlights;
+  let hits = [];
+  let at = -1;
+  let typing = null;
+
+  function textNodes() {
+    // Only the script's own words: a heading and a line, never the toolbar,
+    // the scene controls, or the insert buttons between scenes.
+    const nodes = [];
+    document.querySelectorAll('#page .u, #page .sh > span:not(.no)')
+      .forEach((holder) => {
+        const walker = document.createTreeWalker(holder, NodeFilter.SHOW_TEXT);
+        let node = walker.nextNode();
+        while (node) {
+          if (node.nodeValue.trim()) nodes.push(node);
+          node = walker.nextNode();
+        }
+      });
+    return nodes;
+  }
+
+  function paint() {
+    if (!painting) return;
+    CSS.highlights.delete('find-hit');
+    CSS.highlights.delete('find-here');
+    if (!hits.length) return;
+    const others = hits.filter((_, index) => index !== at);
+    if (others.length) CSS.highlights.set('find-hit', new Highlight(...others));
+    if (hits[at]) CSS.highlights.set('find-here', new Highlight(hits[at]));
+  }
+
+  function search(needle) {
+    hits = [];
+    at = -1;
+    if (needle.length >= 2) {
+      const lower = needle.toLowerCase();
+      textNodes().forEach((node) => {
+        const haystack = node.nodeValue.toLowerCase();
+        let from = haystack.indexOf(lower);
+        while (from !== -1) {
+          const range = document.createRange();
+          range.setStart(node, from);
+          range.setEnd(node, from + needle.length);
+          hits.push(range);
+          from = haystack.indexOf(lower, from + needle.length);
+        }
+      });
+    }
+    const some = hits.length > 0;
+    findPrev.disabled = findNext.disabled = !some;
+    findClear.disabled = !needle;
+    if (!needle) findCount.textContent = '';
+    else if (needle.length < 2) findCount.textContent = 'keep typing';
+    else findCount.textContent = some ? `1 of ${hits.length}` : 'no matches';
+    if (some) step(1);
+    else paint();
+  }
+
+  function step(by) {
+    if (!hits.length) return;
+    // The last match steps to the first: a search loops rather than stopping
+    // at the end of the script.
+    at = (at + by + hits.length) % hits.length;
+    findCount.textContent = `${at + 1} of ${hits.length}`;
+    paint();
+    const line = hits[at].startContainer.parentElement.closest('.u, .sh');
+    if (line) {
+      line.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (!painting) {
+        document.querySelectorAll('.u.cited').forEach(
+          (node) => node.classList.remove('cited'));
+        line.classList.add('cited');
+      }
+    }
+  }
+
+  function clear() {
+    findQ.value = '';
+    search('');
+    document.querySelectorAll('.u.cited').forEach(
+      (node) => node.classList.remove('cited'));
+  }
+
+  findQ.addEventListener('input', () => {
+    // A play runs to thousands of lines, so the sweep waits for a pause in
+    // typing rather than running on every keystroke.
+    clearTimeout(typing);
+    typing = setTimeout(() => search(findQ.value.trim()), 160);
+  });
+  findQ.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      step(event.shiftKey ? -1 : 1);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      clear();
+    }
+  });
+  findNext.addEventListener('click', () => step(1));
+  findPrev.addEventListener('click', () => step(-1));
+  findClear.addEventListener('click', () => { clear(); findQ.focus(); });
+
+  document.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'f') {
+      event.preventDefault();
+      findQ.focus();
+      findQ.select();
+    }
+  });
+  // An edit moves the text the ranges point into, so the matches are dropped
+  // rather than left pointing at words that have moved.
+  document.getElementById('page').addEventListener('input', () => {
+    if (hits.length) clear();
+  });
+}

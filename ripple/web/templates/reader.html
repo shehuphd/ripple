@@ -122,7 +122,23 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
 </div>
 
 <div class="reader">
-  <div><div class="page" id="page">
+  <div>
+  <div class="find" id="find" role="search">
+    <span class="ic" aria-hidden="true">⌕</span>
+    <input id="find-q" placeholder="Search the script" autocomplete="off"
+           aria-label="Search the script">
+    <span class="tiny muted num" id="find-count" aria-live="polite"></span>
+    <button class="btn sm" id="find-prev" disabled
+            data-tip="Previous match (Shift+Enter)"
+            aria-label="Previous match">‹</button>
+    <button class="btn sm" id="find-next" disabled
+            data-tip="Next match (Enter); the last wraps to the first"
+            aria-label="Next match">›</button>
+    <button class="btn sm" id="find-clear" disabled
+            data-tip="Clear the search (Esc)"
+            aria-label="Clear the search">✕</button>
+  </div>
+  <div class="page" id="page">
     <div class="phd"><span>{{ script.title }}</span>
       <span class="pno">{{ pages }} pages</span></div>
     <div class="scene-insert">

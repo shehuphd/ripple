@@ -349,6 +349,23 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .u.parenthetical + .ucap{margin-left:calc(24% + 7px)}
 .u.dialogue + .ucap{margin-left:calc(16% + 7px)}
 
+/* The script's own search. It rides at the top of the scrolling column, so
+   the phrase and the step controls stay reachable while the matches are
+   read. Matches are painted through the custom highlight API rather than by
+   wrapping them in elements: the lines are contenteditable, and injected
+   markup would become part of an edit. */
+.find{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:8px;
+  padding:7px 9px;margin-bottom:12px;background:var(--panel);
+  border:.5px solid var(--bd2);border-radius:9px}
+.find:focus-within{border-color:var(--ac);box-shadow:0 0 0 3px var(--ac-w)}
+.find .ic{color:var(--t4);font-size:14px;padding-left:3px;flex:0 0 auto}
+.find input{flex:1;min-width:0;background:none;border:none;color:var(--t1);
+  font:inherit;font-size:13px;outline:none}
+.find .num{white-space:nowrap;font-variant-numeric:tabular-nums}
+.find .btn{padding:3px 9px;line-height:1.2}
+::highlight(find-hit){background:rgba(201,138,46,.24)}
+::highlight(find-here){background:var(--amber);color:#0D0E10}
+
 /* Requirement pane */
 .pane{display:flex;flex-direction:column;gap:14px;padding-right:2px}
 .chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
