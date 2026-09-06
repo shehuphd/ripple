@@ -204,6 +204,8 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **Shiplock 0.3 runs two more checks here.** The gate takes `deps-declared-once`, which refuses a package declared in both `pyproject.toml` and a requirements file, and `test-assertions`, which refuses a test carrying no expectation. Both pass over the repository as it stands. The pin is `shiplock>=0.3,<1`.
+
 - **Row actions keep their distance.** Review and Dismiss were spaced by a left margin alone, so a narrow actions column that stacked them left a destructive action a few pixels under a safe one. The actions in a row space themselves in both directions.
 
 - **A plan stated on the last allowed tool call is a plan, not a stop.** When the per-turn ceiling fell on the call that stated the plan, the card rendered with Go ahead beneath a reply saying the turn had stopped without finishing. The stated plan closes the plan stage whichever call states it.

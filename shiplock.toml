@@ -27,3 +27,13 @@ sources = [
     "tests/*.py",
     "tools/*.py",
 ]
+
+# The requirements file went in the 2026-09-06 ablation pass; this keeps one
+# from coming back beside the pyproject dependency list.
+[deps]
+requirements = ["requirements*.txt", "tools/requirements*.txt"]
+
+# The audit-the-suite rule, enforced: a test that only checks a call does not
+# raise pins nothing.
+[tests]
+globs = ["tests/**/*.py"]
