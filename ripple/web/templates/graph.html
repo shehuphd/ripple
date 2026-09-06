@@ -7,6 +7,8 @@
   <a class="srow" href="/scripts/{{ script.id }}">
     <span class="ic">‹</span><span class="lb">Back to scene
       {{ scene.display_scene_number or scene.sequence_index + 1 }}</span></a>
+  <a class="srow" href="/ask?script={{ script.id }}">
+    <span class="ic">≋</span><span class="lb">Ask Ripple</span></a>
 
   <div class="sgroup">Departments
     <span style="float:right">{{ departments|length }} of {{ total_departments }}</span>

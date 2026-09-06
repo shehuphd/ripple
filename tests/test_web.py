@@ -2774,6 +2774,13 @@ class TestAskRipple:
         assert tools
         assert not any("accept" in name or "apply" in name for name in tools)
 
+    def test_the_graph_view_links_to_the_scripts_chat(self, client):
+        """Someone reading the graph is one click from asking about it."""
+        script_id = _first_script(client)
+        body = client.get(f"/scripts/{script_id}/graph").text
+        assert f'href="/ask?script={script_id}"' in body
+        assert "Ask Ripple" in body
+
     def test_an_oversized_message_is_refused_before_any_call(
         self, client, ripple_model
     ):
