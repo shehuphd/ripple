@@ -49,6 +49,7 @@ from ripple.db.models import (
     Conversation,
     Entity,
     EntityAlias,
+    FindingEvidence,
     Import,
     ModelCall,
     QueryLog,
@@ -56,6 +57,7 @@ from ripple.db.models import (
     Scene,
     Script,
     ScriptUnit,
+    now,
 )
 from ripple.db.repository import (
     AGENT_CONFIDENCE_FLOORS,
@@ -620,6 +622,10 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
             original = revised.get(key)
         return marked_segments(original, unit.current_text)
 
+    # A line an open finding cites carries a mark of its own, so the warnings
+    # are visible in the script rather than only on the findings page.
+    flagged = set(_flagged_units(session, script.id))
+
     scenes = []
     running = 0
     for scene in script.scenes:
@@ -663,6 +669,7 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
                         "type": unit.unit_type,
                         "text": unit.current_text,
                         "segments": revision_segments(unit),
+                        "flagged": str(unit.id) in flagged,
                     }
                     for unit in scene.units
                     if unit.unit_type != "scene_heading"
@@ -1862,6 +1869,9 @@ def unit_requirements(unit_id: str, session: Session = Depends(get_session)):
         },
         "entities": sorted(entities, key=lambda e: e["name"]),
         "assertions": [_assertion_payload(a, labels) for a in assertions],
+        # The open warnings against this line, so the pane that explains the
+        # line also carries what is wrong with it.
+        "findings": _findings_citing(session, unit),
     }
 
 
@@ -2807,6 +2817,111 @@ def undo_change(unit_id: str, session: Session = Depends(get_session)):
     return changeset.undo_latest(session, _uuid(unit_id)).__dict__
 
 
+def _flagged_units(session: Session, script_id) -> list[str]:
+    """Every line in a script that an open finding cites."""
+    return [
+        str(unit_id)
+        for unit_id in session.scalars(
+            select(FindingEvidence.script_unit_id)
+            .join(ContinuityFinding, ContinuityFinding.id == FindingEvidence.finding_id)
+            .join(ChangeSet, ChangeSet.id == ContinuityFinding.change_set_id)
+            .where(
+                ChangeSet.script_id == script_id,
+                ContinuityFinding.status == "open",
+                FindingEvidence.script_unit_id.is_not(None),
+            )
+            .distinct()
+        )
+    ]
+
+
+def _finding_state(session: Session, finding: ContinuityFinding) -> dict[str, Any]:
+    """What the reader repaints after a finding closes: the script's open
+    count and the lines still carrying a mark.
+
+    Read back rather than counted down in the page, so a reader open beside
+    another tab that closed something shows the same script as the database.
+    """
+    change_set = session.get(ChangeSet, finding.change_set_id)
+    if change_set is None:
+        return {"open": 0, "flagged_units": []}
+    open_count = session.scalar(
+        select(func.count())
+        .select_from(ContinuityFinding)
+        .join(ChangeSet)
+        .where(
+            ChangeSet.script_id == change_set.script_id,
+            ContinuityFinding.status == "open",
+        )
+    )
+    return {
+        "open": open_count,
+        "flagged_units": _flagged_units(session, change_set.script_id),
+    }
+
+
+def _findings_citing(session: Session, unit: ScriptUnit) -> list[dict[str, Any]]:
+    """The open continuity findings whose evidence cites this line.
+
+    Each carries every line it cites, so the pane can offer to walk the other
+    end of a conflict: a contradiction is two lines, and the one in front of
+    you is only half of it.
+    """
+    findings = list(
+        session.scalars(
+            select(ContinuityFinding)
+            .join(FindingEvidence, FindingEvidence.finding_id == ContinuityFinding.id)
+            .where(
+                FindingEvidence.script_unit_id == unit.id,
+                ContinuityFinding.status == "open",
+            )
+            .order_by(ContinuityFinding.created_at.desc())
+            .distinct()
+        )
+    )
+    payload = []
+    for finding in findings:
+        cited = [
+            str(evidence.script_unit_id)
+            for evidence in finding.evidence
+            if evidence.script_unit_id is not None
+            and str(evidence.script_unit_id) != str(unit.id)
+        ]
+        payload.append(
+            {
+                "id": str(finding.id),
+                "finding_type": finding.finding_type,
+                "severity": finding.severity,
+                "message": finding.message,
+                # dict.fromkeys keeps the citation order while dropping the
+                # repeats a multi-evidence finding leaves.
+                "elsewhere": list(dict.fromkeys(cited)),
+            }
+        )
+    return payload
+
+
+@app.post("/api/findings/{finding_id}/resolve")
+def resolve_finding(finding_id: str, session: Session = Depends(get_session)):
+    """Close a finding as handled in the script.
+
+    Dismiss says the warning was not a problem; this says the script now
+    answers it. Neither touches the graph: the edit that settles a conflict
+    is a ripple of its own.
+    """
+    finding = session.get(ContinuityFinding, _uuid(finding_id))
+    if finding is None:
+        raise HTTPException(404, "No such finding")
+    finding.status = "resolved"
+    finding.resolved_at = now()
+    session.flush()
+    return {
+        "id": str(finding.id),
+        "status": finding.status,
+        **_finding_state(session, finding),
+    }
+
+
 @app.post("/api/findings/{finding_id}/dismiss")
 def dismiss_finding(
     finding_id: str,
@@ -2820,7 +2935,11 @@ def dismiss_finding(
     finding.status = "dismissed"
     finding.dismissal_reason = reason
     session.flush()
-    return {"id": str(finding.id), "status": finding.status}
+    return {
+        "id": str(finding.id),
+        "status": finding.status,
+        **_finding_state(session, finding),
+    }
 
 
 @app.get("/api/findings/{finding_id}")

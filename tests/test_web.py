@@ -1200,9 +1200,10 @@ class TestEveryNavLinkResolves:
         assert "Continuity findings" in response.text
         assert client.get("/findings?script=not-a-uuid").status_code == 400
 
-    def test_the_reader_findings_chip_is_a_link(self, client):
+    def test_the_reader_findings_chip_leads_to_the_findings(self, client):
         """A notice that counts findings must open them; every notice is
-        actionable."""
+        actionable. The chip walks the marked lines in the script, and the
+        pane beside them links to the filtered list."""
         import uuid
 
         from ripple.db.models import ChangeSet, ContinuityFinding
@@ -1229,6 +1230,7 @@ class TestEveryNavLinkResolves:
 
         body = client.get(f"/scripts/{script_id}").text
         assert "1 continuity finding<" in body, "the count lost its singular form"
+        assert 'id="finding-jump"' in body
         assert f'href="/findings?script={script_id}"' in body
 
 
@@ -3176,6 +3178,134 @@ class TestAskRipple:
         )
         assert closed.status_code == 200
         assert closed.json() == {"rejected": 0}
+
+
+class TestContinuityInTheReader:
+    """A line an open finding cites carries a mark in the script, and the
+    requirement pane carries the finding itself with the two ways to close
+    it. Neither closing touches the script or the graph."""
+
+    def _flag(self, client, message="The parka was grey in Scene 1."):
+        """One open finding citing the script's first line."""
+        import uuid
+
+        from ripple.db.models import ChangeSet, ContinuityFinding, FindingEvidence
+
+        script_id = _first_script(client)
+        units = _units(client, script_id)
+        with web._sessions() as session:
+            change_set = ChangeSet(
+                script_id=uuid.UUID(script_id),
+                kind="edit",
+                status="pending",
+                base_script_version=1,
+            )
+            session.add(change_set)
+            session.flush()
+            finding = ContinuityFinding(
+                change_set_id=change_set.id,
+                finding_type="continuity_conflict",
+                severity="medium",
+                message=message,
+                status="open",
+            )
+            session.add(finding)
+            session.flush()
+            for rank, unit_id in enumerate(units[:2]):
+                session.add(
+                    FindingEvidence(
+                        finding_id=finding.id,
+                        script_unit_id=uuid.UUID(unit_id),
+                        rank=rank,
+                        match_reason="test",
+                    )
+                )
+            session.commit()
+            return script_id, units, str(finding.id)
+
+    @staticmethod
+    def _marked(body: str) -> set[str]:
+        """The unit ids the reader rendered with a continuity mark."""
+        import re
+
+        return set(
+            re.findall(r'class="u [^"]*flagged"\s+data-unit="([0-9a-f-]{36})"', body)
+        )
+
+    def test_the_reader_marks_the_lines_a_finding_cites(self, client):
+        script_id, units, _finding_id = self._flag(client)
+        marked = self._marked(client.get(f"/scripts/{script_id}").text)
+        assert marked == set(units[:2])
+
+    def test_the_reader_carries_the_card_and_the_jump(self, client):
+        script_id, _units, _finding_id = self._flag(client)
+        body = client.get(f"/scripts/{script_id}").text
+        assert 'id="continuity"' in body
+        assert "<h2>Continuity</h2>" in body
+        assert 'id="finding-jump"' in body
+        assert f'href="/findings?script={script_id}"' in body
+
+    def test_the_pane_carries_the_lines_open_findings(self, client):
+        _script_id, units, finding_id = self._flag(client)
+        body = client.get(f"/api/units/{units[0]}/requirements").json()
+        assert [f["id"] for f in body["findings"]] == [finding_id]
+        finding = body["findings"][0]
+        assert finding["message"] == "The parka was grey in Scene 1."
+        assert finding["severity"] == "medium"
+        # The other end of the conflict, so the pane can offer to walk to it.
+        assert finding["elsewhere"] == [units[1]]
+        # A line the finding never cites carries none of it.
+        other = client.get(f"/api/units/{units[2]}/requirements").json()
+        assert other["findings"] == []
+
+    def test_a_closed_finding_leaves_the_pane_and_the_line(self, client):
+        script_id, units, finding_id = self._flag(client)
+        assert client.post(f"/api/findings/{finding_id}/dismiss").status_code == 200
+        body = client.get(f"/api/units/{units[0]}/requirements").json()
+        assert body["findings"] == []
+        assert "flagged" not in client.get(f"/scripts/{script_id}").text
+
+    def test_resolving_closes_the_finding_and_changes_nothing_else(self, client):
+        import uuid
+
+        from ripple.db.models import ContinuityFinding, ScriptUnit
+
+        script_id, units, finding_id = self._flag(client)
+        with web._sessions() as session:
+            before = session.get(ScriptUnit, uuid.UUID(units[0])).current_text
+        response = client.post(f"/api/findings/{finding_id}/resolve")
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "resolved"
+        with web._sessions() as session:
+            finding = session.get(ContinuityFinding, uuid.UUID(finding_id))
+            assert finding.status == "resolved"
+            assert finding.resolved_at is not None
+            # Closing a warning is a decision about the warning, not an edit.
+            assert session.get(ScriptUnit, uuid.UUID(units[0])).current_text == before
+        assert "flagged" not in client.get(f"/scripts/{script_id}").text
+
+    def test_closing_reports_what_the_script_has_left(self, client):
+        """The page repaints its marks and its count from the reply, so both
+        come from one read of the database rather than the page counting
+        down on its own."""
+        script_id, units, first = self._flag(client)
+        _script_id, _units, second = self._flag(client, "A second conflict.")
+        assert self._marked(client.get(f"/scripts/{script_id}").text) == set(units[:2])
+
+        body = client.post(f"/api/findings/{first}/resolve").json()
+        assert body["open"] == 1
+        assert sorted(body["flagged_units"]) == sorted(units[:2])
+
+        body = client.post(f"/api/findings/{second}/dismiss").json()
+        assert body["open"] == 0
+        assert body["flagged_units"] == []
+
+    def test_resolving_an_unknown_finding_is_a_404(self, client):
+        import uuid
+
+        response = client.post(f"/api/findings/{uuid.uuid4()}/resolve")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "No such finding"
 
 
 class TestRenameConfirmation:

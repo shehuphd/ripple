@@ -45,11 +45,10 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
   <span class="btn" aria-disabled="true" tabindex="-1"
         data-tip="Build the graph first, then view it here">⁙ View graph</span>
   {% endif %}
-  {% if findings %}
-  <a class="chip" href="/findings?script={{ script.id }}"
-     data-tip="Open this script's continuity findings"><i class="dot medium"></i>
-    {{ findings }} continuity finding{{ '' if findings == 1 else 's' }}</a>
-  {% endif %}
+  <button class="chip{{ '' if findings else ' hide' }}" id="finding-jump"
+          data-tip="Go to the next line a continuity finding cites">
+    <i class="dot medium"></i><span id="finding-label"
+    >{{ findings }} continuity finding{{ '' if findings == 1 else 's' }}</span></button>
   {% if model %}
     {% if not has_graph %}
     <button class="btn gleam" id="extract"
@@ -152,7 +151,8 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
         </span></div>
       {% if not scene.omitted %}
       {% for unit in scene.units %}
-      <div class="u {{ unit.type }}" data-unit="{{ unit.id }}"
+      <div class="u {{ unit.type }}{{ ' flagged' if unit.flagged }}"
+           data-unit="{{ unit.id }}"
            data-scene-no="{{ scene.number }}"
            data-accepted="{{ unit.text }}"
            contenteditable="plaintext-only" spellcheck="false"
@@ -182,6 +182,15 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
         <a class="btn sm" id="expand" aria-disabled="true" tabindex="-1"
            data-tip="Select a line with graph edges to open it in the full graph">Expand</a></div>
       <div id="graph"><div class="empty">Select a line in the script.</div></div>
+    </div>
+    <div class="card">
+      <div class="hd"><h2>Continuity</h2>
+        <span class="meta" id="cont-meta"></span>
+        <a class="btn sm" href="/findings?script={{ script.id }}"
+           data-tip="Every finding on this script, including the ones already
+                     decided">All findings</a></div>
+      <div id="continuity">
+        <div class="empty">Select a line in the script.</div></div>
     </div>
   </aside>
 </div>

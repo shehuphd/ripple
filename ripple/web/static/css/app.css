@@ -317,6 +317,15 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .u.edited{background:rgba(201,138,46,.07)}
 .u.edited::after{content:" ·  edited, not applied";font-family:var(--sf);
   font-size:11px;color:var(--amber);white-space:nowrap}
+/* A line an open continuity finding cites carries a standing mark: an amber
+   edge and a glyph in the margin, so the warning is visible in the script
+   itself and reads without relying on colour. The temporary .cited outline
+   is a different treatment on purpose; that one answers "here is the line I
+   just took you to" and fades. */
+.u.flagged{position:relative;box-shadow:inset 2px 0 0 var(--amber)}
+.u.flagged::before{content:"\26A0";position:absolute;left:-17px;top:3px;
+  font-family:var(--sf);font-size:10px;color:var(--amber);pointer-events:none}
+.u.flagged:focus{box-shadow:inset 0 0 0 1px var(--ac-d),inset 2px 0 0 var(--amber)}
 .u.character{margin-left:32%;margin-bottom:0;text-transform:uppercase}
 .u.parenthetical{margin-left:24%;margin-bottom:0;color:var(--t2)}
 .u.dialogue{margin-left:16%;margin-right:20%}
@@ -374,6 +383,10 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .finding p{margin:6px 0 0 16px;color:var(--t2);font-size:13px;line-height:1.5}
 .finding .acts{display:flex;align-items:center;gap:9px;margin:10px 0 0 16px}
 .finding .acts .cited-link{color:var(--ac);font-size:12.5px;cursor:pointer;margin-right:auto}
+/* In the requirement pane the card is narrow, so a finding's actions wrap
+   under its message rather than squeezing the text. */
+.pane .finding:first-child{padding-top:0}
+.pane .finding .acts{flex-wrap:wrap}
 .finding.dismissed{opacity:.55}
 .finding.dismissed .ttl::after{content:"dismissed";font-family:var(--sf);
   font-size:11px;color:var(--t3);margin-left:6px}

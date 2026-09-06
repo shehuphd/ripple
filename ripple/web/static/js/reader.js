@@ -68,6 +68,8 @@ const reqChips = document.getElementById('req-chips');
 const reqMeta = document.getElementById('req-meta');
 const graph = document.getElementById('graph');
 const graphMeta = document.getElementById('graph-meta');
+const continuity = document.getElementById('continuity');
+const contMeta = document.getElementById('cont-meta');
 const seeRipple = document.getElementById('see-ripple');
 const crumb = document.getElementById('crumb');
 const preview = document.getElementById('preview');
@@ -207,6 +209,7 @@ async function selectUnit(node) {
       requirements.innerHTML = detail.assertions.length
         ? detail.assertions.map((a) => edgeRow(a)).join('')
         : '<div class="empty">No assertions yet. Build the graph to extract them.</div>';
+      renderContinuity(detail.findings || []);
 
       const local = await api(`/api/units/${state.unit}/graph`);
       if (ticket !== selectionTicket) return;
@@ -592,6 +595,110 @@ function reviewUnits(unitIds, behavior = 'smooth') {
   });
 }
 
+/* The Continuity card: the open findings citing the selected line, and the
+   two ways to close one. Resolve says the script now answers the warning;
+   Dismiss says it was never one. Neither touches the graph, so a conflict a
+   rewrite settles is closed here and re-extracted by that rewrite's ripple. */
+function renderContinuity(findings) {
+  contMeta.textContent = findings.length ? `${findings.length} open` : '';
+  if (!findings.length) {
+    continuity.innerHTML =
+      '<div class="empty">No open finding cites this line.</div>';
+    return;
+  }
+  continuity.innerHTML = findings.map((finding, index) => `
+    <div class="finding" data-finding="${esc(finding.id)}">
+      <div class="ttl"><i class="dot ${esc(finding.severity)}"></i>
+        ${esc(finding.message)}</div>
+      <div class="acts">
+        ${finding.elsewhere.length
+    ? `<span class="cited-link" data-elsewhere="${index}">The other line${
+      finding.elsewhere.length > 1 ? 's' : ''}</span>`
+    : '<span class="cited-link"></span>'}
+        <button class="btn sm" data-close="resolve"
+          data-tip="The script now answers this; close it as handled"
+          >Mark resolved</button>
+        <button class="btn sm danger" data-close="dismiss"
+          data-tip="This was never a problem; close it and change nothing"
+          >Dismiss</button>
+      </div>
+    </div>`).join('');
+
+  continuity.querySelectorAll('[data-elsewhere]').forEach((link) => {
+    link.addEventListener('click', () => {
+      reviewUnits(findings[Number(link.dataset.elsewhere)].elsewhere);
+    });
+  });
+  continuity.querySelectorAll('[data-close]').forEach((button) => {
+    button.addEventListener('click', () => closeFinding(button, findings));
+  });
+}
+
+/* Resolve or dismiss one finding, then repaint from what the server reports
+   is left: the marks in the script and the toolbar count both come back from
+   the same read, so neither drifts from the database. */
+async function closeFinding(button, findings) {
+  const row = button.closest('.finding');
+  const id = row.dataset.finding;
+  const how = button.dataset.close;
+  if (how === 'dismiss') {
+    const ok = await confirmDialog(
+      'Dismiss this continuity finding? It leaves the open list, and nothing '
+      + 'in the script changes.', 'Dismiss', { destructive: true });
+    if (!ok) return;
+  }
+  button.disabled = true;
+  let state;
+  try {
+    state = await api(`/api/findings/${id}/${how}`,
+      { method: 'POST', body: form({}) });
+  } catch (error) {
+    toast(error.message, true);
+    button.disabled = false;
+    return;
+  }
+  ripple.trace('finding.closed', { finding: id, how, open: state.open });
+  applyFindingState(state);
+  renderContinuity(findings.filter((finding) => finding.id !== id));
+  toast(how === 'resolve'
+    ? 'Marked resolved.'
+    : 'Dismissed. Nothing in the script changed.');
+}
+
+/* Repaint the marks and the toolbar count from the server's own reading. */
+function applyFindingState(state) {
+  const flagged = new Set(state.flagged_units || []);
+  document.querySelectorAll('.u').forEach((node) => {
+    node.classList.toggle('flagged', flagged.has(node.dataset.unit));
+  });
+  const chip = document.getElementById('finding-jump');
+  if (!chip) return;
+  chip.classList.toggle('hide', !state.open);
+  document.getElementById('finding-label').textContent =
+    `${state.open} continuity finding${state.open === 1 ? '' : 's'}`;
+}
+
+/* The toolbar chip walks the marked lines in script order, selecting each so
+   the pane fills with the finding as well as the line. Finding a continuity
+   problem is either the Findings page or this, and this one keeps the script
+   in front of you. */
+const findingJump = document.getElementById('finding-jump');
+let jumpIndex = -1;
+if (findingJump) {
+  findingJump.addEventListener('click', () => {
+    const nodes = [...document.querySelectorAll('.u.flagged')];
+    if (!nodes.length) {
+      toast('No line carries an open finding.');
+      return;
+    }
+    jumpIndex = (jumpIndex + 1) % nodes.length;
+    const node = nodes[jumpIndex];
+    scrollPaneTo(node);
+    selectUnit(node);
+    ripple.trace('finding.jumped', { at: jumpIndex + 1, of: nodes.length });
+  });
+}
+
 /* The findings page's Review deep-links here with ?finding=<id>: fetch the
    finding's cited lines, scroll to them, and mark them for a moment. */
 const pendingFinding = new URLSearchParams(window.location.search).get('finding');
@@ -609,7 +716,14 @@ if (pendingFinding) {
         else window.addEventListener('load', go, { once: true });
       };
       if (detail.cited_units.length) {
-        after(() => reviewUnits(detail.cited_units, 'auto'));
+        after(() => {
+          reviewUnits(detail.cited_units, 'auto');
+          // Review means "show me this finding", so the line is selected and
+          // the pane opens on the finding itself, not only scrolled to.
+          const node = document.querySelector(
+            `.u[data-unit="${detail.cited_units[0]}"]`);
+          if (node) selectUnit(node);
+        });
       } else if (detail.cited_scenes.length) {
         // Evidence citing only scene headings: show the scene itself.
         after(() => {
