@@ -125,9 +125,26 @@ A failed preview's warning banner also carries **Open trace**: it starts (or reu
 
 ## Writing and exporting
 
-Ripple writes scripts as well as reading them, and the page itself is the editor. A new script opens on a write-here line: type a scene heading (INT. OFFICE - DAY) and Enter starts the scene. Every scene ends in the same write-here line, so a script is written top to bottom the way it reads: the heading, the action, a short all-caps name for a character cue, the dialogue under it, and another heading whenever the next scene starts. Each line formats itself as it is typed: the guessed type sets the indentation live and its name shows at the line's edge, so what Enter will make of the line is visible before it commits. A bracketed line under a cue is a parenthetical, an all-caps line ending TO: is a transition, and anything else is action. When the guess is wrong, Tab cycles the line's type and Shift with Tab cycles it back, the way screenwriting editors correct an element; a corrected dialogue line finds its speaker in the nearest cue above, even across an action line that interrupted the speech. Fountain's force markers work as well: @NAME is a cue whatever its case, !text is action, and >text is a transition. Enter under an existing line writes a new line there too, Escape abandons a line being written, and Backspace on an emptied line deletes it. The scene control between scenes remains for inserting a whole scene mid-script; a scene typed while writing costs nothing until Build graph reads it.
+Ripple writes scripts as well as reading them, and the page itself is the editor. A new script opens on a write-here line: type a scene heading (INT. OFFICE - DAY) and Enter starts the scene. Every scene ends in the same write-here line, so a script is written top to bottom the way it reads: the heading, the action, a short all-caps name for a character cue, the dialogue under it, and another heading whenever the next scene starts. Each line states its own element, and the marker is consumed rather than stored. Explicit beats implicit, which is the point of typing a script rather than describing one.
 
-How an edit saves depends on whether a graph exists. With no graph there is no ripple to preview, so an edited line saves itself when focus leaves it, recorded as an accepted change with undo one click away. Once a graph exists, edits stay drafts for **See ripple** as before. A line that is the source of an active fact refuses the direct paths in both directions, and the refusal says why: change or removal of evidenced content goes through the ripple, where it is judged, or through omitting the scene.
+| Element | Marker | Without a marker |
+|---|---|---|
+| Scene heading | `.` | `INT.`, `EXT.`, `EST.` starts one |
+| Action | `!` | The default outside a speech |
+| Character | `@` | A short all-caps line |
+| Dialogue | `"` | Any line under a cue or a parenthetical |
+| Parenthetical | `(` | Brackets under a cue |
+| Transition | `>` | All caps ending `TO:` |
+| Shot | `>>` | Starts `CLOSE ON`, `ANGLE ON`, `INSERT`, `POV` |
+| Note | `[[ ]]` | none |
+
+Six of those markers are Fountain's own, so an export stays readable by any other tool; `"` and `>>` fill the two elements Fountain leaves to position. Where nothing is marked, position decides, and position has two modes: directly under a cue or a parenthetical is dialogue, everywhere else is action. The line formats itself as you type, with the element's name at its right edge, so what Enter will make of it is visible before it commits.
+
+**Tab** retypes a line when the guess is wrong, cycling the eight elements; **Shift with Tab** opens the list instead, each row showing the marker that types it directly. A line corrected to dialogue finds its speaker in the nearest cue above, across an action line that interrupted the speech.
+
+The arrows move around the script. **Up** and **Down** move the caret, leaving a wrapped block only at its edge. **Shift** with them steps whole lines, so a ten-line action block is one press. **Command or Control and Shift** with them go to the first or last line. **Command or Control with Z** undoes the writing, and adding **Shift** redoes it: the stack covers written lines, deletions, retyping, edits, and scenes.
+
+How an edit saves depends on whether a graph exists. With no graph there is no ripple to preview and nothing to contradict, so the script stays fluid: an edited line saves itself when focus leaves it, the requirement pane is left alone while you type, and an unapplied edit is marked by a small amber dot in the margin rather than a label that moves the words about. Once a graph exists, edits stay drafts for **See ripple** as before, and that is when continuity has something to say. A line that is the source of an active fact refuses the direct paths in both directions, and the refusal says why: change or removal of evidenced content goes through the ripple, where it is judged, or through omitting the scene.
 
 The title renames in place: click it in the reader's toolbar, type, and Enter or leaving the field saves it. The script's id, and every link to it, stays.
 

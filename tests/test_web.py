@@ -3443,7 +3443,7 @@ class TestAuthoring:
         page = client.get(f"/scripts/{script_id}")
         assert page.status_code == 200
         assert "Fresh Pages" in page.text
-        assert "Type a scene heading to begin" in page.text
+        assert "Write a scene heading to begin" in page.text
 
     def test_a_blank_title_is_refused_with_the_reason(self, client):
         response = client.post("/api/scripts/new", json={"title": "  "})
@@ -3512,7 +3512,7 @@ class TestAuthoring:
         page = client.get(f"/scripts/{script_id}").text
         assert "INT. OFFICE - DAY" in page
         # The write-here line renders at the scene's end for the next line.
-        assert 'data-hint="Type the next line' in page
+        assert 'data-hint="Write the next line' in page
 
     def test_export_downloads_fountain_that_reimports(self, client):
         script_id = _first_script(client)

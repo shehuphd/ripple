@@ -296,7 +296,11 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 /* Reader page */
 .reader{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;
   flex:1;min-height:0}
-.reader > *{overflow-y:auto;min-height:0}
+/* The script reads down the page and never across it: a long line wraps
+   inside its own column rather than pushing the page sideways. */
+.reader > *{overflow-y:auto;overflow-x:hidden;min-height:0}
+.page{max-width:100%}
+.page section{min-width:0}
 .reader.pane-off{grid-template-columns:minmax(0,1fr)}
 .reader.pane-off .pane{display:none}
 /* Below this the requirement pane would leave the script too narrow to read,
@@ -312,15 +316,19 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .sh .no{color:var(--t4);font-weight:400;min-width:20px;text-align:right}
 .sh:first-of-type{margin-top:0}
 .u{padding:2px 7px;margin:0 0 12px;border-radius:4px;cursor:text;
-  white-space:pre-wrap;outline:none}
+  white-space:pre-wrap;overflow-wrap:anywhere;outline:none}
 .u:hover{background:var(--raised)}
 .u.sel{background:var(--ac-w)}
 .u:focus{background:var(--ac-w);box-shadow:inset 0 0 0 1px var(--ac-d)}
 /* An edited line is visibly a draft. Nothing is applied until the ripple is
    accepted, so the script must not look as though the edit already landed. */
-.u.edited{background:rgba(201,138,46,.07)}
-.u.edited::after{content:" ·  edited, not applied";font-family:var(--sf);
-  font-size:11px;color:var(--amber);white-space:nowrap}
+/* An unapplied edit is marked, not narrated: a small amber dot in the
+   margin beside the line. The toolbar carries the count and the wording,
+   which is where a reader looks for it; a label inside the line pushed the
+   words about while they were being typed. */
+.u.edited{background:rgba(201,138,46,.07);position:relative}
+.u.edited::after{content:"";position:absolute;right:-14px;top:9px;width:6px;
+  height:6px;border-radius:50%;background:var(--amber)}
 /* A line an open continuity finding cites carries a standing mark in the
    margin, so the warning is visible in the script itself. The glyph is the
    whole mark: shape rather than colour alone, and no tinted stripe down the
@@ -333,8 +341,8 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .u.parenthetical{margin-left:24%;margin-bottom:0;color:var(--t2)}
 .u.dialogue{margin-left:16%;margin-right:20%}
 .u.transition{text-align:right;color:var(--t2)}
-.u.shot{color:var(--t2);text-transform:uppercase}
-.u.note{color:var(--amber);font-style:italic}
+.u.shot{margin-left:36px;color:var(--t2);text-transform:uppercase}
+.u.note{margin-left:36px;color:var(--amber);font-style:italic}
 .u.action{margin-left:36px}
 /* The caption under a selected line belongs to that line: it takes the
    line's own indent and closes the space beneath it, rather than pulling
@@ -355,6 +363,19 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .u[data-new][data-type]:not([data-type=""])::after{content:attr(data-type);
   position:absolute;right:7px;top:3px;font-family:var(--sf);font-size:11px;
   color:var(--t4);pointer-events:none;text-transform:none}
+/* The element list, opened by Shift with Tab, so the eight types are read
+   rather than remembered. Each row carries the marker that types it
+   directly, which is how the list teaches its own shortcut. */
+.typelist{position:fixed;z-index:40;background:var(--panel);
+  border:.5px solid var(--bd2);border-radius:9px;padding:5px;min-width:190px;
+  box-shadow:0 14px 34px rgba(0,0,0,.5);font-family:var(--sf)}
+.typerow{display:flex;width:100%;align-items:center;gap:12px;background:none;
+  border:0;border-radius:6px;padding:6px 9px;font:inherit;font-size:12.5px;
+  color:var(--t2);cursor:pointer;text-align:left}
+.typerow .mk{margin-left:auto;color:var(--t4);font-size:11.5px}
+.typerow.on{background:var(--ac-w);color:var(--t1)}
+.typerow.on .mk{color:var(--ac)}
+
 .ucap{font-family:var(--sf);font-size:11.5px;color:var(--t4);
   margin:3px 0 12px 7px}
 .u.action + .ucap{margin-left:43px}
@@ -476,6 +497,7 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
    overflow-y, which makes the other axis scroll too, so a centred tooltip is
    cut off at the edge rather than overhanging it. Grow leftward instead. */
 .sctl [data-tip]::after,
+.find [data-tip]::after,
 .pane .card .hd [data-tip]::after{left:auto;right:0;transform:none}
 [data-tip]:hover::after,[data-tip]:focus-visible::after{opacity:1}
 /* A chip whose own label already reads as the action: the tooltip adds what

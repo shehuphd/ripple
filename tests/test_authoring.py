@@ -20,6 +20,7 @@ from ripple.db.session import create_all, create_db_engine, session_factory
 from ripple.graph.fixtures import ground_truths, seed_graph
 from ripple.services.authoring import (
     create_script,
+    delete_scene,
     delete_unit,
     export_fountain,
     insert_unit,
@@ -208,8 +209,49 @@ class TestCorrection:
         unit = units_of(session, draft)[-1]
         with pytest.raises(InvalidOperation):
             insert_unit(
-                session, unit.scene_id, unit.id, "whatever", unit_type="note"
+                session, unit.scene_id, unit.id, "whatever", unit_type="scene_heading"
             )
+
+    def test_every_marker_states_its_element(self, session, draft):
+        """One marker per element, consumed on save, so the stored words are
+        the words alone. Six are Fountain's own; the quote and the doubled
+        arrow fill the two elements Fountain leaves to position."""
+        units = units_of(session, draft)
+        scene = session.get(Scene, units[0].scene_id)
+        after = units[-1].id
+        written = []
+        for text in ('@Mary', '"Get out.', '(quietly)', '> CUT TO:',
+                     '>>ANGLE ON THE KEY', '!THE DOOR SLAMS.', '[[check this]]'):
+            composed = insert_unit(session, scene.id, after, text)
+            written.append((composed.unit_type, composed.text))
+            after = composed.unit_id
+        assert written == [
+            ("character", "MARY"),
+            ("dialogue", "Get out."),
+            ("parenthetical", "(quietly)"),
+            ("transition", "CUT TO:"),
+            ("shot", "ANGLE ON THE KEY"),
+            ("action", "THE DOOR SLAMS."),
+            ("note", "check this"),
+        ]
+
+    def test_a_marked_speech_still_belongs_to_its_speaker(self, session, draft):
+        """A quote states dialogue; the speaker comes from the cue above,
+        across the action line that interrupted the speech."""
+        units = units_of(session, draft)
+        scene = session.get(Scene, units[0].scene_id)
+        cue = insert_unit(session, scene.id, units[-1].id, "MARLA")
+        beat = insert_unit(session, scene.id, cue.unit_id, "She turns away.")
+        reply = insert_unit(session, scene.id, beat.unit_id, '"And now?')
+        assert (reply.unit_type, reply.speaker_name) == ("dialogue", "MARLA")
+
+    def test_a_shot_is_not_read_as_a_speaker(self, session, draft):
+        """A shot arrives in capitals like a cue, so the camera words
+        separate them: CLOSE ON is a shot, MARLA is a character."""
+        units = units_of(session, draft)
+        scene = session.get(Scene, units[0].scene_id)
+        shot = insert_unit(session, scene.id, units[-1].id, "CLOSE ON THE KEY")
+        assert (shot.unit_type, shot.speaker_name) == ("shot", None)
 
     def test_force_markers_type_the_line(self, session, draft):
         units = units_of(session, draft)
@@ -221,6 +263,30 @@ class TestCorrection:
         assert cue.speaker_name == "MRS. ELVSTED"
         assert shout.unit_type == "action" and "!" not in "STAY BACK."
         assert cut.unit_type == "transition"
+
+
+class TestSceneRemoval:
+    def test_a_written_scene_is_removed_whole(self, session, draft):
+        """The inverse of writing a heading, which is what undo needs."""
+        def script_scenes():
+            return session.scalars(
+                select(Scene).where(Scene.script_id == draft.id)
+            ).all()
+        second = insert_scene(
+            session, draft.id, "EXT. STREET - NIGHT", "Rain.",
+            after_scene_id=script_scenes()[0].id,
+        )
+        assert len(script_scenes()) == 2
+        delete_scene(session, second.scene_id)
+        assert len(script_scenes()) == 1
+        assert [scene.sequence_index for scene in script_scenes()] == [0]
+
+    def test_a_scene_the_graph_cites_is_kept(self, session, seeded):
+        scene = session.scalar(
+            select(Scene).where(Scene.script_id == seeded.id)
+        )
+        with pytest.raises(InvalidOperation, match=r"[Oo]mit"):
+            delete_scene(session, scene.id)
 
 
 class TestExport:
@@ -246,6 +312,36 @@ class TestExport:
             ("character", "MARLA"),
             ("dialogue", "Places, everyone."),
             ("transition", "SMASH CUT TO:"),
+        ]
+
+    def test_every_written_element_survives_the_round_trip(self, session, draft):
+        """A shot and a note are the two elements Fountain leaves to
+        position, so the export has to hand the importer enough to read
+        them back as themselves."""
+        units = units_of(session, draft)
+        scene = session.get(Scene, units[0].scene_id)
+        after = units[-1].id
+        for text in ('@Mary', '"Get out.', '(quietly)', '>>CLOSE ON THE KEY',
+                     '> CUT TO:', '[[check the timing]]'):
+            after = insert_unit(session, scene.id, after, text).unit_id
+
+        result = import_screenplay(
+            export_fountain(session, draft.id).encode(), "again.fountain"
+        )
+        assert result.accepted, result.rejection_message
+        typed = [
+            (u.unit_type.value, u.text)
+            for u in result.scenes[0].units
+            if u.unit_type.value != "scene_heading"
+        ]
+        assert typed == [
+            ("action", "The stage is dark."),
+            ("character", "MARY"),
+            ("dialogue", "Get out."),
+            ("parenthetical", "(quietly)"),
+            ("shot", "CLOSE ON THE KEY"),
+            ("transition", "CUT TO:"),
+            ("note", "check the timing"),
         ]
 
     def test_an_imported_script_exports_every_scene(self, session, seeded):

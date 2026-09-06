@@ -18,7 +18,7 @@ from uuid import UUID
 from sqlalchemy import select, update
 from traceact import ActionTrace
 
-from ripple.adapters.base import SCENE_HEADING, parse_character_cue
+from ripple.adapters.base import SCENE_HEADING, SHOT_PREFIX, parse_character_cue
 from ripple.db.models import (
     Assertion,
     EntityAttribute,
@@ -52,6 +52,8 @@ class ComposedUnit:
 
     unit_id: str
     unit_type: str
+    # The words as stored, with any element marker consumed.
+    text: str
     speaker_name: str | None
     sequence_index: int
     script_version: int
@@ -145,7 +147,15 @@ def save_unit_text(session, unit_id, text: str) -> dict:
         }
 
 
-WRITABLE_TYPES = ("action", "character", "dialogue", "parenthetical", "transition")
+WRITABLE_TYPES = (
+    "action",
+    "character",
+    "dialogue",
+    "parenthetical",
+    "transition",
+    "shot",
+    "note",
+)
 
 
 def insert_unit(
@@ -200,12 +210,15 @@ def insert_unit(
         text, _ = _unforced(text)
         speaker = None
         if unit_type == "character":
-            parsed = parse_character_cue(text.upper())
-            speaker = parsed[0] if parsed else text.upper()
+            text = text.upper()
+            parsed = parse_character_cue(text)
+            speaker = parsed[0] if parsed else text
         elif unit_type in ("dialogue", "parenthetical"):
             speaker = _speaker_above(session, scene, after)
     else:
-        unit_type, speaker = _classify(text, after)
+        text, unit_type, speaker = _classified(session, scene, text, after)
+    if unit_type == "parenthetical":
+        text = _bracketed(text)
     with ActionTrace.start(action="unit.insert", kind="change") as trace:
         trace.input({"scene_id": str(scene_id), "type": unit_type})
         insert_index = after.sequence_index + 1 if after is not None else 0
@@ -244,6 +257,7 @@ def insert_unit(
         return ComposedUnit(
             unit_id=str(unit.id),
             unit_type=unit_type,
+            text=text,
             speaker_name=speaker,
             sequence_index=insert_index,
             script_version=script.current_version,
@@ -282,6 +296,55 @@ def delete_unit(session, unit_id) -> dict:
             .values(predecessor_unit_id=None)
         )
         session.delete(unit)
+        script.current_version += 1
+        session.flush()
+        trace.output({"script_version": script.current_version})
+        return {"script_version": script.current_version}
+
+
+def delete_scene(session, scene_id) -> dict:
+    """Remove a scene written by mistake, with its lines.
+
+    Only a scene the graph has nothing to say about: once a fact cites one
+    of its lines, the way out is Omit, which deactivates those facts as a
+    recorded change and raises the orphan findings. This is the inverse of
+    writing a heading, which is what an undo of that needs.
+    """
+    ensure_configured()
+    scene = session.get(Scene, _id(scene_id))
+    if scene is None:
+        raise ValueError(f"no scene with id {scene_id}")
+    script = session.get(Script, scene.script_id)
+    units = session.scalars(
+        select(ScriptUnit).where(ScriptUnit.scene_id == scene.id)
+    ).all()
+    cited = sum(_facts_citing(session, unit) for unit in units)
+    if cited:
+        raise InvalidOperation(
+            f"This scene's lines are the source of {cited} fact(s). "
+            "Omit the scene instead, so the facts close with it."
+        )
+    with ActionTrace.start(action="scene.delete", kind="change") as trace:
+        trace.input({"scene_id": str(scene.id), "units": len(units)})
+        for unit in units:
+            session.execute(
+                update(ScriptUnit)
+                .where(ScriptUnit.predecessor_unit_id == unit.id)
+                .values(predecessor_unit_id=None)
+            )
+        session.delete(scene)
+        session.flush()
+        # The scenes after it close the space, so numbering stays a run.
+        following = session.scalars(
+            select(Scene)
+            .where(
+                Scene.script_id == script.id,
+                Scene.sequence_index > scene.sequence_index,
+            )
+            .order_by(Scene.sequence_index)
+        ).all()
+        for step, later in enumerate(following):
+            later.sequence_index = scene.sequence_index + step
         script.current_version += 1
         session.flush()
         trace.output({"script_version": script.current_version})
@@ -402,10 +465,12 @@ def _classify(text: str, after: ScriptUnit | None) -> tuple[str, str | None]:
     # or a parenthetical, and a parenthetical can also interrupt dialogue.
     in_speech = previous in ("character", "dialogue", "parenthetical")
     opens_speech = previous in ("character", "parenthetical")
-    if text.startswith("(") and text.endswith(")") and in_speech:
+    if text.startswith("(") and in_speech:
         return "parenthetical", speaker
     if _TRANSITION.match(text):
         return "transition", None
+    if text == text.upper() and SHOT_PREFIX.match(text):
+        return "shot", None
     if (
         not opens_speech
         and text == text.upper()
@@ -421,13 +486,26 @@ def _classify(text: str, after: ScriptUnit | None) -> tuple[str, str | None]:
 
 
 def _unforced(text: str) -> tuple[str, str | None]:
-    """Strip a Fountain force marker, naming the type it forces."""
+    """Strip a leading element marker, naming the type it states.
+
+    Explicit beats implicit: the marker says what the line is, and it is
+    consumed rather than stored, so the saved text is the words alone. Six
+    of the seven are Fountain's own markers, which is what keeps an export
+    readable by any other tool; `"` for dialogue and `>>` for a shot fill
+    the two elements Fountain leaves to position.
+    """
+    if text.startswith(">>"):
+        return text[2:].strip(), "shot"
     if text.startswith("@"):
         return text[1:].strip(), "character"
     if text.startswith("!"):
         return text[1:].strip(), "action"
+    if text.startswith('"'):
+        return text[1:].strip().removesuffix('"').strip(), "dialogue"
     if text.startswith(">") and not text.endswith("<"):
         return text[1:].strip(), "transition"
+    if text.startswith("[[") and text.endswith("]]"):
+        return text[2:-2].strip(), "note"
     return text, None
 
 
@@ -447,3 +525,28 @@ def _speaker_above(session, scene: Scene, after: ScriptUnit | None) -> str | Non
             return row.speaker_name
     return None
 
+
+def _bracketed(text: str) -> str:
+    """A parenthetical prints inside its brackets, whichever the writer typed."""
+    body = text.strip().lstrip("(").rstrip(")").strip()
+    return f"({body})" if body else text
+
+
+def _classified(
+    session, scene: Scene, text: str, after: ScriptUnit | None
+) -> tuple[str, str, str | None]:
+    """The stored words, the type, and the speaker for an unmarked line.
+
+    A speech marked with its own quote still belongs to whoever is talking,
+    so a forced dialogue or parenthetical looks up the cue above it rather
+    than arriving unattributed.
+    """
+    unit_type, speaker = _classify(text, after)
+    stripped, _ = _unforced(text)
+    if unit_type == "character":
+        # A cue prints in capitals, so that is how it is stored, whichever
+        # case the marker was typed in.
+        stripped = stripped.upper()
+    elif unit_type in ("dialogue", "parenthetical") and speaker is None:
+        speaker = _speaker_above(session, scene, after)
+    return stripped, unit_type, speaker

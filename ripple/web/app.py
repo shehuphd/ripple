@@ -2345,6 +2345,15 @@ def delete_unit(unit_id: str, session: Session = Depends(get_session)):
         raise HTTPException(404, str(error)) from None
 
 
+@app.delete("/api/scenes/{scene_id}")
+def delete_scene(scene_id: str, session: Session = Depends(get_session)):
+    """Remove a scene written by mistake, when no fact cites its lines."""
+    try:
+        return authoring.delete_scene(session, _uuid(scene_id))
+    except ValueError as error:
+        raise HTTPException(404, str(error)) from None
+
+
 @app.get("/api/scripts/{script_id}/export")
 def export_script(script_id: str, session: Session = Depends(get_session)):
     """The script as Fountain plain text, downloaded as a file."""

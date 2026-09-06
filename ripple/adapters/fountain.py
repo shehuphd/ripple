@@ -247,6 +247,11 @@ class _LineParser:
             # reset in _consume approximates: a cue never follows a cue.
             if self._previous in ("character", "parenthetical", "dialogue"):
                 return False
+            # A camera direction arrives in capitals like a cue and is never
+            # a speaker, so "CLOSE ON THE KEY" is a shot rather than a
+            # character the graph would carry as cast.
+            if SHOT_PREFIX.match(candidate):
+                return False
             parsed = parse_character_cue(candidate)
             if parsed is None:
                 return False

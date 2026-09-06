@@ -24,9 +24,11 @@
   </div>
   {% endfor %}
   <div class="side-nomatch hide" id="scene-nomatch">No scene matches.</div>
-  <div class="kbdmap">⌨ Enter writes the next line · Tab on a line being
-    written cycles its type · Esc reverts · on an edited line of a built
-    graph, Enter opens the ripple</div>
+  <div class="kbdmap">⌨ <b>@</b> character · <b>"</b> dialogue ·
+    <b>(</b> parenthetical · <b>&gt;</b> transition · <b>&gt;&gt;</b> shot ·
+    <b>!</b> action · plain text follows the line above<br>
+    Tab retypes a line, Shift+Tab lists the types · ↑↓ move ·
+    Shift+↑↓ by line · ⌘⇧↑↓ to the ends · ⌘Z undo</div>
 </div>
 {% endblock %}
 
@@ -154,11 +156,13 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
     {% if not scenes %}
     <div class="u ghost" id="first-ghost" contenteditable="plaintext-only"
          spellcheck="false" role="textbox" aria-label="Write the first scene"
-         data-hint="Type a scene heading to begin: INT. OFFICE - DAY"></div>
+         data-hint="Write a scene heading to begin: INT. OFFICE - DAY"></div>
     <div class="empty" style="padding:10px 8px">
       Write the way you would on the page: the heading, Enter, then the
-      lines. A short all-caps line is a character cue with its dialogue
-      beneath, and another heading starts the next scene.
+      lines. Plain text follows whatever came before it, a short all-caps
+      line is a character cue with its dialogue beneath, and a marker
+      states an element outright: @ a cue, " dialogue, ( a parenthetical,
+      &gt; a transition. Another heading starts the next scene.
     </div>
     {% endif %}
     {% for scene in scenes %}
@@ -192,7 +196,7 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
       <div class="u ghost" contenteditable="plaintext-only" spellcheck="false"
            role="textbox" aria-label="Write the next line"
            data-scene-no="{{ scene.number }}"
-           data-hint="Type the next line, or a heading for the next scene"></div>
+           data-hint="Write the next line, or a heading for the next scene"></div>
       {% endif %}
       <div class="scene-insert">
         <button class="btn sm scene-add" data-scene="{{ scene.id }}"
