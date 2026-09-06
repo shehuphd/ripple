@@ -232,7 +232,7 @@ class TestCallSiteGates:
             extract_scene,
             start_run,
         )
-        from ripple.llm.fixture import FixtureProvider
+        from tests.support.fixture_provider import FixtureProvider
 
         script = persist_import(
             session, import_screenplay(night_freight_fountain, "n.fountain")

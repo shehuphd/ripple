@@ -27,7 +27,7 @@ from pathlib import Path
 logger = logging.getLogger("ripple.render")
 
 REPO = Path(__file__).resolve().parent.parent
-SCREENPLAIN = REPO / "tools" / ".venv" / "bin" / "screenplain"
+SCREENPLAIN = REPO / ".venv" / "bin" / "screenplain"
 DEMO_SCRIPTS = REPO / "demo-scripts"
 
 SCENE_NUMBER = re.compile(r"#([\w.\-]+)#\s*$")
@@ -167,8 +167,8 @@ def main(argv: list[str]) -> int:
     if not SCREENPLAIN.exists():
         logger.error(
             "screenplain missing. Run:\n"
-            "  python3 -m venv tools/.venv\n"
-            "  tools/.venv/bin/pip install -r tools/requirements.txt"
+            "  python3 -m venv .venv\n"
+            "  .venv/bin/python -m pip install -e '.[dev]'"
         )
         return 1
 

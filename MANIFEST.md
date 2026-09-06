@@ -1,8 +1,8 @@
 # Manifest
 
-Last updated: 2026-09-06 09:36:01 UTC
+Last updated: 2026-09-06 09:52:58 UTC
 
-Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
+Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `.venv`) are gitignored and not listed.
 
 ## Root
 
@@ -59,7 +59,7 @@ Every file in the repository and what it does. Directories the application write
 | `db/ids.py` | Identifier coercion: strings to UUIDs, shared by routes, payloads, and stored history. |
 | `db/naming.py` | Entity name normalization, shared by extraction and the change-set service. |
 | `db/repository.py` | Query helpers: persistence, deletion previews, counts, shared graph labels. |
-| `db/session.py` | Engine and session setup, SQLite foreign-key pragma, the outcome-vocabulary migration. |
+| `db/session.py` | Engine and session setup, SQLite foreign-key and write-ahead pragmas. |
 
 ### Extraction (`ripple/extraction/`)
 
@@ -94,7 +94,6 @@ Every file in the repository and what it does. Directories the application write
 | `llm/base.py` | The provider contract and shared types (`ModelInfo`, `GenerationResult`, `ProviderError`). |
 | `llm/keycall_provider.py` | The KeyCall-backed adapter extraction and judgement use. |
 | `llm/genai_provider.py` | The google-genai SDK adapter the Ask path uses, so a Google SDK generation runs at runtime. |
-| `llm/fixture.py` | Deterministic no-network test double. |
 
 ### Services (`ripple/services/`)
 
@@ -167,9 +166,11 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_layout.py` | Layout determinism. |
 | `tests/test_llm.py` | Provider contract and the KeyCall adapter. |
 | `tests/test_genai_provider.py` | The google-genai adapter: SDK mapping, error codes, and the Ask-path routing. |
-| `tests/test_models.py` | Schema constraints and the outcome-vocabulary migration. |
+| `tests/test_models.py` | Schema constraints and vocabularies. |
 | `tests/test_pricing.py` | Cost lookup, reasoning at the output rate, and honest unknowns. |
 | `tests/test_prepass.py` | The deterministic pre-pass and the validator's provided-id and span-bound rules. |
+| `tests/support/__init__.py` | Marks the test support package. |
+| `tests/support/fixture_provider.py` | Deterministic no-network provider the suite runs the pipeline against. |
 | `tests/test_preview.py` | The judgement engine end to end against the fixture provider. |
 | `tests/test_agent.py` | The agent loop: the tool surface, ceilings, fencing, the plan stage, the draft guard, and the confidence floor. |
 | `tests/test_settings.py` | Credential validation and model selection. |
@@ -183,7 +184,6 @@ Every file in the repository and what it does. Directories the application write
 |---|---|
 | `tools/render_screenplay.py` | Renders a Fountain source to PDF for calibration. |
 | `tools/seed_graph.py` | Writes a demo script's ground-truth graph by hand. |
-| `tools/requirements.txt` | The tools' own dependencies. |
 
 ## Demo corpus (`demo-scripts/`)
 

@@ -2,7 +2,6 @@ project/
 .project/
 TODO.md
 .venv/
-tools/.venv/
 __pycache__/
 *.pyc
 *.egg-info/

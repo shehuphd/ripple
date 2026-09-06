@@ -274,7 +274,6 @@ class Scene(Base):
         order_by="ScriptUnit.sequence_index",
     )
 
-
     @property
     def label(self) -> str:
         """The number the script prints, or a dash for a scene it never
@@ -282,6 +281,7 @@ class Scene(Base):
         an OMITTED slug given its index would collide with a numbered scene
         further down the spine."""
         return self.display_scene_number or "—"
+
 
 class ScriptUnit(Base):
     """The atomic editable object."""
@@ -861,6 +861,9 @@ class RippleReport(Base):
     summary: Mapped[str] = mapped_column(Text)
     severity: Mapped[str] = mapped_column(String(16))
     model_id: Mapped[str | None] = mapped_column(String(120))
+    # The model that wrote `summary`, set only once someone asks for the
+    # explanation. Null means the summary is the deterministic one.
+    summary_model_id: Mapped[str | None] = mapped_column(String(120))
     prompt_version: Mapped[str | None] = mapped_column(String(32))
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=now

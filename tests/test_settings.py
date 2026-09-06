@@ -269,7 +269,7 @@ class TestFixtureProvider:
     def test_an_unrecorded_prompt_raises_rather_than_answering_emptily(self, tmp_path):
         """An empty answer is a legitimate extraction outcome, so the two must
         not be confusable."""
-        from ripple.llm.fixture import FixtureProvider
+        from tests.support.fixture_provider import FixtureProvider
 
         provider = FixtureProvider(tmp_path)
         with pytest.raises(ProviderError) as caught:
@@ -277,7 +277,7 @@ class TestFixtureProvider:
         assert caught.value.code == "fixture_missing"
 
     def test_replies_are_deterministic_for_one_prompt(self, tmp_path):
-        from ripple.llm.fixture import FixtureProvider
+        from tests.support.fixture_provider import FixtureProvider
 
         provider = FixtureProvider(tmp_path)
         provider.put("fixture-cheap", "the prompt", '{"ok": true}')
@@ -286,7 +286,7 @@ class TestFixtureProvider:
         assert first.text == second.text == '{"ok": true}'
 
     def test_it_filters_modality_like_a_real_provider(self, tmp_path):
-        from ripple.llm.fixture import FixtureProvider
+        from tests.support.fixture_provider import FixtureProvider
 
         models = FixtureProvider(tmp_path).list_models()
         assert {model.tier.value for model in models} == {"cheap", "mid", "strong"}

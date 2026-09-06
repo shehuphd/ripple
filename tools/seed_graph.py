@@ -5,7 +5,7 @@ The application does this itself at startup for any demo script without a
 graph. This command exists to re-run it by hand, for development, after a
 `Clear all graphs`, or to verify the ground-truth files parse.
 
-    tools/.venv/bin/python tools/seed_graph.py
+    .venv/bin/python tools/seed_graph.py
 """
 
 from __future__ import annotations

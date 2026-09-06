@@ -23,7 +23,7 @@ ripple/
 │   ├── web/            # FastAPI app, Jinja2 templates, static CSS/JS
 │   └── tracing.py      # TraceAct configuration
 ├── tests/              # pytest, one file per module above plus adversarial/integration tests
-├── tools/              # Developer commands (render_screenplay.py, seed_graph.py) and their own .venv
+├── tools/              # Developer commands (render_screenplay.py, seed_graph.py)
 ├── demo-scripts/       # Bundled screenplay corpus, each with an expected-output dependencies.md
 └── data/               # Runtime state: sqlite db, secrets.env, traces/ (gitignored)
 ```
@@ -121,7 +121,7 @@ You upload a screenplay and Ripple reads it into a web of who and what each scen
 | `ripple/graph/` | `diff.py` compares two assertion sets by edge identity (both endpoints plus predicate), not row identity, so a proposed-but-unsaved assertion still compares correctly; `continuity.py` retrieves the bounded evidence packet the continuity judgement consumes and computes the one finding that needs no model (an edit removing an entity's only `establishes` edge while later scenes still reference it); `layout.py` is a fixed, deterministic 2D layout (focus at centre, scenes on a spine, entities in per-department wedges) rather than a force simulation, so two renders of the same graph match; `predicates.py` is the shared vocabulary both the schema and the diff read from; `fixtures.py` builds judge-visible scene context for the preview prompt. |
 | `ripple/llm/` | `base.py` is the provider contract (`ModelInfo`, `GenerationResult`, `ProviderError`) plus provider-agnostic helpers (`infer_tier`, `is_text_model`); `keycall_provider.py` is the adapter behind extraction and judgement, backed by [KeyCall](https://pypi.org/project/keycall); `genai_provider.py` is the [google-genai](https://pypi.org/project/google-genai) adapter behind the Ask path, so a Google SDK generation runs at runtime; `fixture.py` is a deterministic test double that never touches a network. |
 | `ripple/services/` | `preview.py` is the judgement engine: it sends the model the stored assertions and attributes the edited lines support, validates the verdicts through `judge.py`, replays an identical pending judge call from the audit table at no cost, runs the advisory continuity pass over the evidence packet, and links every call to the proposal it produced; `changeset.py` turns a diff and its findings into an atomic accept/reject/undo, with latest-only undo; `spend.py` is the token ledger and the hard budget gate every call site checks before contacting the provider; `settings.py` handles credential entry, validation, and main/fallback model selection; `synthesizer.py` writes the plain-language ripple explanation from the diff and findings, with a deterministic fallback when no model is configured. |
-| `ripple/db/` | SQLAlchemy models for the 22 tables (scripts, scenes, units, entities, aliases, attributes, assertions, extraction runs, change sets, findings, reports, query log, model-call audit, budget, UI preferences, app configuration), with CHECK constraints enforcing every enumerated vocabulary at the database layer. `session.py` enforces SQLite foreign keys per connection, provides the transactional `session_scope` every write path uses, and runs the outcome-vocabulary migration before `create_all` touches the schema. |
+| `ripple/db/` | SQLAlchemy models for the 22 tables (scripts, scenes, units, entities, aliases, attributes, assertions, extraction runs, change sets, findings, reports, query log, model-call audit, budget, UI preferences, app configuration), with CHECK constraints enforcing every enumerated vocabulary at the database layer. `session.py` enforces SQLite foreign keys per connection, turns on write-ahead logging for a file-backed database, and provides the transactional `session_scope` every write path uses. |
 | `ripple/web/` | FastAPI routes, Jinja2 templates, and static CSS/JS for the library, reader, ripple preview, settings, graph views, grounded query, and the list pages (entities, assertions, reports, findings, traces). No frontend build step; plain JS files served directly. |
 | `ripple/tracing.py` | Configures TraceAct once at startup: `capture_inputs=False` (screenplay text and uploaded bytes are never captured automatically), redaction presets for AI prompts, API keys, HTTP, filesystem paths, and env vars. |
 
@@ -147,7 +147,7 @@ The database never holds a credential: `AppConfiguration` stores only the select
 
 ## Deployment and infrastructure
 
-Local development runs through `launch.command`, which terminates any Ripple server already running (a stale instance is never reused), verifies Python 3.11+, creates or repairs `tools/.venv`, marks the virtual environments and `data/` as ignored by Dropbox sync, installs the app in editable mode, and starts `uvicorn` on the first free port from 8420. A port held by another Ripple instance is taken over; a port held by anything else is skipped. Only `launch.command` exists today; `launch.sh` and `launch.bat` don't yet.
+Local development runs through `launch.command`, which terminates any Ripple server already running (a stale instance is never reused), verifies Python 3.11+, creates or repairs `.venv`, marks the virtual environment and `data/` as ignored by Dropbox sync, installs the app in editable mode, and starts `uvicorn` on the first free port from 8420. A port held by another Ripple instance is taken over; a port held by anything else is skipped. Only `launch.command` exists today; `launch.sh` and `launch.bat` don't yet.
 
 The deployment target is Replit Starter Autoscale, which supplies `DATABASE_URL` (PostgreSQL) and holds provider credentials in Replit Secrets. The application hasn't been deployed there yet.
 
@@ -161,9 +161,9 @@ The deployment target is Replit Starter Autoscale, which supplies `DATABASE_URL`
 
 ## Development and testing
 
-- `./launch.command --test` runs the suite; `tools/.venv` is the one environment both the app and the tests run in.
+- `./launch.command --test` runs the suite; `.venv` is the one environment the app, the tests, and the tools run in.
 - `pytest` with `pytest-randomly` left enabled and declared in `required_plugins`: a failure caused by test order is treated as a bug, not hidden by pinning order.
-- `ripple/llm/fixture.py` provides a deterministic, no-network provider for extraction and preview tests, so the pipeline is exercised without spending a credential.
+- `tests/support/fixture_provider.py` provides a deterministic, no-network provider for extraction, preview, and agent tests, so the pipeline is exercised without spending a credential. It lives with the tests; the shipped package never imports it.
 - The web fixtures point `RIPPLE_SECRETS_PATH` at an empty file, so the suite can never read or repopulate a developer's live key.
 - Linting: `ruff` (defaults plus import order, bugbear, modern syntax, and ruff's own checks). Formatting: `black`.
 - `demo-scripts/` ships three screenplays in four formats each, with a `dependencies.md` per script recording the entities, assertions, and planted dependency chains a correct extraction must produce: the adversarial fixture set the format adapters and the extraction pipeline are tested against.
@@ -175,7 +175,7 @@ Known debt and open decisions only, not a roadmap:
 - Whether `pdftoppm` and `tesseract` install on Replit Autoscale through Nix; if not, scanned PDFs stay rejected in production rather than silently degrading.
 - Whether intercut sub-headings should collapse into their parent numbered scene instead of becoming separate scenes.
 - `launch.sh` and `launch.bat` don't exist yet; only `launch.command`.
-- No general migration tooling: `create_all` builds the schema fresh, and the one in-place migration (widening the model-call outcome vocabulary) is hand-written in `ripple/db/session.py`. A second schema change of that kind is the point to adopt Alembic.
+- No migration tooling: `create_all` builds the schema the models declare, and a database from an earlier schema is rebuilt. The first release with users is the point to adopt Alembic.
 
 ## Glossary
 

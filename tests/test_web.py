@@ -2140,6 +2140,110 @@ class TestDraftReportRoutes:
         assert linked.status_code == 200
 
 
+class TestExplanation:
+    """The What changes card offers Write the explanation until the stored
+    report carries model prose; the button posts to the explain route."""
+
+    def _preview(self, client):
+        script_id = _first_script(client)
+        unit_id = _units(client, script_id)[0]
+        response = client.post(
+            f"/api/units/{unit_id}/preview",
+            data={"proposed_text": "A bicycle leans against the gate."},
+        )
+        assert response.status_code == 200, response.text
+        return unit_id, response.json()
+
+    def test_the_reader_carries_the_explain_button(self, client):
+        script_id = _first_script(client)
+        page = client.get(f"/scripts/{script_id}").text
+        assert page.count('id="pv-explain"') == 1
+        assert "Write the explanation" in page
+
+    def test_a_fresh_preview_reports_a_deterministic_summary(self, client, judged):
+        _unit_id, preview = self._preview(client)
+        assert preview["summary_source"] == "deterministic"
+
+    def test_without_a_model_the_explanation_is_refused(
+        self, client, judged, monkeypatch
+    ):
+        _unit_id, preview = self._preview(client)
+        monkeypatch.setattr(
+            web.settings_service, "selected_model", lambda session: (None, None)
+        )
+        response = client.post(f"/api/changes/{preview['change_set_id']}/explain")
+        assert response.status_code == 400
+        assert "Settings" in response.json()["detail"]
+        # The stored summary is untouched: a replay still says deterministic.
+        _unit_id, replay = self._preview(client)
+        assert replay["cached"] is True
+        assert replay["summary"] == preview["summary"]
+        assert replay["summary_source"] == "deterministic"
+
+    def test_an_unknown_change_set_is_not_found(self, client, judged):
+        import uuid
+
+        response = client.post(f"/api/changes/{uuid.uuid4()}/explain")
+        assert response.status_code == 404
+
+    def test_the_explanation_replaces_the_stored_summary(
+        self, client, judged, monkeypatch
+    ):
+        from ripple.services.synthesizer import Synthesis
+
+        _unit_id, preview = self._preview(client)
+        seen = {}
+
+        def fake_synthesize(diff, findings, provider, model_id, session, script_id):
+            seen["operations"] = diff.operation_count
+            seen["model_id"] = model_id
+            return Synthesis(
+                summary="The cart gives way to a bicycle at the gate.",
+                severity="low",
+                model_id=model_id,
+                generated=True,
+            )
+
+        monkeypatch.setattr(web, "synthesize", fake_synthesize)
+        response = client.post(f"/api/changes/{preview['change_set_id']}/explain")
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["source"] == "model"
+        assert body["summary"] == "The cart gives way to a bicycle at the gate."
+        assert body["model_id"] == "fake-judge"
+        assert body["error"] is None
+        assert seen["operations"] == preview["diff"]["operations"]
+        # The prose persists: the cached replay carries it and says a model
+        # wrote it, so the reader hides the button.
+        _unit_id, replay = self._preview(client)
+        assert replay["cached"] is True
+        assert replay["summary"] == "The cart gives way to a bicycle at the gate."
+        assert replay["summary_source"] == "model"
+
+    def test_a_failed_explanation_keeps_the_summary(self, client, judged, monkeypatch):
+        from ripple.services.synthesizer import Synthesis
+
+        _unit_id, preview = self._preview(client)
+        monkeypatch.setattr(
+            web,
+            "synthesize",
+            lambda *args: Synthesis(
+                summary="fallback prose",
+                severity="low",
+                generated=False,
+                error="The model timed out.",
+            ),
+        )
+        response = client.post(f"/api/changes/{preview['change_set_id']}/explain")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["source"] == "deterministic"
+        assert body["error"] == "The model timed out."
+        _unit_id, replay = self._preview(client)
+        assert replay["summary"] == preview["summary"]
+        assert replay["summary_source"] == "deterministic"
+
+
 class TestPreviewFailureSurface:
     """A failed preview names the cause and the run that recorded it."""
 
@@ -2514,7 +2618,7 @@ def extracting(monkeypatch, tmp_path):
     """Route extraction to a fixture provider that answers every scene."""
     import json
 
-    from ripple.llm.fixture import FixtureProvider
+    from tests.support.fixture_provider import FixtureProvider
 
     reply = json.dumps({
         "entities": [
@@ -2643,7 +2747,7 @@ class TestAskRipple:
     @pytest.fixture
     def ripple_model(self, tmp_path, monkeypatch):
         """A fixture provider standing in for the chat's model."""
-        from ripple.llm.fixture import FixtureProvider
+        from tests.support.fixture_provider import FixtureProvider
 
         fake = FixtureProvider(
             tmp_path / "fx", default_reply='{"kind": "question"}'
@@ -2795,3 +2899,42 @@ class TestAskRipple:
         )
         assert closed.status_code == 200
         assert closed.json() == {"rejected": 0}
+
+
+class TestRenameConfirmation:
+    def test_a_possible_rename_finding_offers_confirm_rename(self, client):
+        """The Confirm rename action reaches the page through the findings
+        route's own action list, so no template names the endpoint. This
+        pins that emission, since a text search for the route finds nothing.
+        """
+        import uuid
+
+        from ripple.db.models import ChangeSet, ContinuityFinding
+
+        script_id = _first_script(client)
+        with web._sessions() as session:
+            change_set = ChangeSet(
+                script_id=uuid.UUID(script_id),
+                kind="edit",
+                status="pending",
+                base_script_version=1,
+            )
+            session.add(change_set)
+            session.flush()
+            finding = ContinuityFinding(
+                change_set_id=change_set.id,
+                finding_type="possible_rename",
+                severity="medium",
+                message="MARA may now be MARA REYES. Confirm to join them.",
+                status="open",
+                payload_json={},
+            )
+            session.add(finding)
+            session.commit()
+            finding_id = str(finding.id)
+
+        body = client.get("/findings").text
+        assert f'data-post="/api/findings/{finding_id}/confirm-rename"' in body
+        assert "Confirm rename" in body
+        # A finding of any other type gets no such action.
+        assert body.count("confirm-rename") == 1

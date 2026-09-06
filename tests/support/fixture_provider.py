@@ -4,8 +4,8 @@ Extraction is the first thing that spends money, so the tests must exercise the
 whole pipeline without a credential. This provider is deterministic: the same
 prompt always returns the same reply, so a test that passes once passes again.
 
-It is a development and test aid, not a shipped provider, and is absent from
-the registry in `ripple.llm`.
+It lives with the tests rather than in the package: nothing shipped imports it,
+and the registry in `ripple.llm` never lists it.
 """
 
 from __future__ import annotations

@@ -8,7 +8,7 @@ Ripple treats a screenplay as a production database. You import a script, build 
 ./launch.command
 ```
 
-The launcher stops any Ripple server already running, verifies Python 3.11 or newer, creates or repairs its own virtual environment in `tools/.venv`, installs the package, starts the server on the first free port from 8420, and opens a browser. Run it again at any time; you always get one fresh instance.
+The launcher stops any Ripple server already running, verifies Python 3.11 or newer, creates or repairs its virtual environment in `.venv`, installs the package, starts the server on the first free port from 8420, and opens a browser. Run it again at any time; you always get one fresh instance.
 
 ```bash
 ./launch.command --test
@@ -91,7 +91,7 @@ The reader's sidebar lists every scene with an instant-search box above it, filt
 
 **See ripple** sends every drafted line as one proposal. The engine judges each affected scene in one model call, plus one continuity call per preview: the model is shown the stored assertions and attributes those lines support, each with its evidence, and returns a verdict per item: `holds`, `changed`, or `removed`, plus any new items with cited evidence. Every verdict is verified in code before anything persists; a reply that skips a listed item fails the preview rather than guessing.
 
-While the judgement runs, the overlay shows a waiting interstitial (water, a spreading ripple, "Calculating ripples…") that fades into the results. The preview overlay shows the accepted and proposed text side by side with the changed words highlighted, the graph diff, attribute changes, continuity findings, per-stage timings, and a deterministic summary. **Explain** asks the model for prose on demand; the summary itself never costs a call. After acceptance, the changed words render with a revision tint in the reader, so a skim shows what moved; clicking into a line clears the tint for editing. **Accept** applies the whole proposal atomically, with a base-version check so an edit made against stale text is refused as `stale` rather than applied. **Reject** discards it and changes nothing.
+While the judgement runs, the overlay shows a waiting interstitial (water, a spreading ripple, "Calculating ripples…") that fades into the results. The preview overlay shows the accepted and proposed text side by side with the changed words highlighted, the graph diff, attribute changes, continuity findings, per-stage timings, and a deterministic summary. **Write the explanation** under the summary asks the model for prose on demand (one billable call, and the prose is kept with the preview, so a replay shows it and the button goes); the summary itself never costs a call. After acceptance, the changed words render with a revision tint in the reader, so a skim shows what moved; clicking into a line clears the tint for editing. **Accept** applies the whole proposal atomically, with a base-version check so an edit made against stale text is refused as `stale` rather than applied. **Reject** discards it and changes nothing.
 
 A repeat of a pending proposal with the same lines and texts is rebuilt from the stored result with no model call, and the overlay says so. Undo (one level, latest change set only) restores the previous state through an inverse change set; the undone original is recorded as `reverted`.
 
@@ -292,7 +292,7 @@ class MyAdapter:
 ### Tests
 
 ```bash
-tools/.venv/bin/python -m pytest
+.venv/bin/python -m pytest
 ```
 
 Test-order randomisation is enabled. A failure that depends on order is a bug in shared state, not something to pin away.

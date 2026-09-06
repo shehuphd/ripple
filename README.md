@@ -17,14 +17,14 @@ The full manual is [USAGE.md](https://github.com/shehuphd/ripple/blob/main/USAGE
 ./launch.command
 ```
 
-This stops any Ripple server already running, creates `tools/.venv`, installs the package, picks a free port, starts the server, and opens a browser. The library seeds the three bundled screenplays on first run, so there is something to read immediately. Run `./launch.command --test` to run the test suite instead.
+This stops any Ripple server already running, creates `.venv`, installs the package, picks a free port, starts the server, and opens a browser. The library seeds the three bundled screenplays on first run, so there is something to read immediately. Run `./launch.command --test` to run the test suite instead.
 
 To build a graph, add a provider key in Settings and choose a model. Nothing else needs a credential: import, the reader, the diff engine, and the deterministic continuity findings all work without one.
 
 Manual equivalent:
 
 ```bash
-python3 -m venv tools/.venv && tools/.venv/bin/pip install -e ".[dev]" && tools/.venv/bin/python -m pytest
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/python -m pytest
 ```
 
 ## Importing a screenplay
@@ -54,7 +54,7 @@ Format detection reads the bytes. A file extension is a hint that can break a ti
 `demo-scripts/` holds three original screenplays written for this project, each authored in Fountain and rendered to Final Draft XML, PDF, and plain text by one tool:
 
 ```bash
-tools/.venv/bin/python tools/render_screenplay.py
+.venv/bin/python tools/render_screenplay.py
 ```
 
 Each script ships a `dependencies.md` recording the entities, assertions, and planted dependency chains a correct extraction must produce.
@@ -68,7 +68,7 @@ Set `RIPPLE_TRACING=off` to disable trace writing.
 ## Tests
 
 ```bash
-tools/.venv/bin/python -m pytest
+.venv/bin/python -m pytest
 ```
 
 Test-order randomisation is enabled. A failure that depends on order is a bug in shared state, not something to pin away.

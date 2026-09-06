@@ -22,7 +22,7 @@ done
 REPO_ROOT="$(cd -P "$(dirname "$script_source")" && pwd)"
 cd "$REPO_ROOT"
 
-VENV="$REPO_ROOT/tools/.venv"
+VENV="$REPO_ROOT/.venv"
 PYTHON="$VENV/bin/python"
 BASE_PORT="${RIPPLE_PORT:-8420}"
 
@@ -96,7 +96,7 @@ fi
 # file must not replicate off this machine. Setting the attribute is
 # idempotent, so it runs on every launch rather than only on creation.
 if command -v xattr >/dev/null 2>&1; then
-  for synced_path in "$VENV" "$REPO_ROOT/.venv" "$REPO_ROOT/data"; do
+  for synced_path in "$VENV" "$REPO_ROOT/data"; do
     if [ -e "$synced_path" ]; then
       xattr -w com.dropbox.ignored 1 "$synced_path" 2>/dev/null || true
     fi

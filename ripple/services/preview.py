@@ -162,6 +162,9 @@ class PreviewResult:
     judgement: JudgementReport | None = None
     continuity_error: str | None = None
     trace_id: str | None = None
+    # "model" once an explanation has been written for the stored report,
+    # "deterministic" until then.
+    summary_source: str = "deterministic"
 
 
 def word_diff(before: str, after: str) -> list[dict[str, str]]:
@@ -727,6 +730,7 @@ def _rebuild(
         attribute_changes=attribute_changes,
         findings=findings,
         summary=report.summary,
+        summary_source="model" if report.summary_model_id else "deterministic",
         severity=report.severity or proposal.severity or "none",
         evidence_count=0,
         stages=[

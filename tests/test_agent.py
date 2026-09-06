@@ -17,13 +17,13 @@ from ripple.db.naming import normalize
 from ripple.db.repository import AgentSettings, persist_import
 from ripple.db.session import create_all, create_db_engine, session_factory
 from ripple.llm.base import AgentReply, ToolCall
-from ripple.llm.fixture import FixtureProvider
 from ripple.services.agent import (
     AgentRefused,
     _guard_draft,
     run_turn,
     tool_declarations,
 )
+from tests.support.fixture_provider import FixtureProvider
 
 MODEL = "fixture-cheap"
 

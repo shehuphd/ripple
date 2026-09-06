@@ -36,7 +36,7 @@ from ripple.extraction.service import (
     start_run,
 )
 from ripple.extraction.validate import MalformedResponse, validate_response
-from ripple.llm.fixture import FixtureProvider
+from tests.support.fixture_provider import FixtureProvider
 
 MODEL = "fixture-cheap"
 

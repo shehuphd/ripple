@@ -354,6 +354,7 @@ async function runPreview() {
   rejectBtn.disabled = true;
   const summary = document.getElementById('pv-summary');
   summary.textContent = 'Computing…';
+  document.getElementById('pv-explain').classList.add('hide');
   document.getElementById('pv-diff').innerHTML = '';
   document.getElementById('pv-edits').innerHTML =
     '<div class="empty">Computing…</div>';
@@ -422,6 +423,10 @@ async function runPreview() {
     document.getElementById('pv-meta').textContent =
       `${body.diff.operations} graph operations · ${body.findings.length} findings · ` +
       (body.cached ? 'cached' : body.model_id || body.summary_source);
+    // The summary is assembled from the diff at no cost. Prose from the
+    // model is a click, offered until the stored report carries some.
+    document.getElementById('pv-explain').classList.toggle(
+      'hide', body.summary_source === 'model');
 
     const d = body.diff;
     document.getElementById('pv-diffmeta').textContent =
@@ -654,6 +659,36 @@ document.getElementById('pv-reject').addEventListener('click', async () => {
   ripple.trace('ripple.rejected', { changeSet: rejected });
   preview.classList.add('hide');
   toast('Rejected. Nothing changed.');
+});
+
+document.getElementById('pv-explain').addEventListener('click', async () => {
+  if (!state.changeSet) return;
+  const button = document.getElementById('pv-explain');
+  const summary = document.getElementById('pv-summary');
+  const explained = state.changeSet;
+  button.disabled = true;
+  button.textContent = 'Writing…';
+  try {
+    const body = await api(`/api/changes/${explained}/explain`, { method: 'POST' });
+    ripple.trace('ripple.explained', {
+      changeSet: explained, source: body.source, error: body.error,
+    });
+    if (body.source !== 'model') {
+      toast(body.error || 'The model wrote nothing; the summary stands.', true);
+      return;
+    }
+    summary.textContent = body.summary;
+    document.getElementById('pv-meta').textContent += ` · explained by ${body.model_id}`;
+    button.classList.add('hide');
+  } catch (error) {
+    ripple.trace('ripple.explain_failed', {
+      changeSet: explained, error: error.message,
+    });
+    toast(error.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Write the explanation';
+  }
 });
 
 document.getElementById('pv-accept').addEventListener('click', async () => {

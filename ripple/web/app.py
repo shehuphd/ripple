@@ -2615,7 +2615,7 @@ def _preview_payload(
         "edits": edits,
         "severity": result.severity,
         "summary": result.summary,
-        "summary_source": "deterministic",
+        "summary_source": result.summary_source,
         "model_id": model_id,
         "cached": result.cached,
         "extraction_error": None,
@@ -2756,7 +2756,7 @@ def explain_change(change_set_id: str, session: Session = Depends(get_session)):
     )
     if synthesis.generated:
         report.summary = synthesis.summary
-        report.model_id = synthesis.model_id
+        report.summary_model_id = synthesis.model_id
         session.flush()
     return {
         "summary": synthesis.summary,
