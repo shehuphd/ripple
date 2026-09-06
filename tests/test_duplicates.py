@@ -24,6 +24,7 @@ from ripple.db.naming import normalize
 from ripple.db.session import create_all, create_db_engine, session_factory
 from ripple.services.duplicates import (
     MergeRefused,
+    cited_counts,
     detect,
     keep_separate,
     merge,
@@ -347,3 +348,105 @@ class TestAliasAwareResolution:
         )
         assert resolved.id != world["parka"].id
         assert resolved.entity_type == "prop"
+
+
+class TestCitedCounts:
+    """One grouped query stands in for a per-entity `subject OR object` count."""
+
+    def _per_entity(self, session, entity) -> int:
+        from sqlalchemy import or_
+
+        return session.scalar(
+            select(func.count())
+            .select_from(Assertion)
+            .where(
+                Assertion.active.is_(True),
+                or_(
+                    Assertion.subject_entity_id == entity.id,
+                    Assertion.object_entity_id == entity.id,
+                ),
+            )
+        )
+
+    def test_the_grouped_count_matches_the_per_entity_count(self, session):
+        world = build_world(session)
+        counts = cited_counts(session)
+        assert counts == {world["parka"].id: 3, world["fork"].id: 1}
+        for entity in (world["parka"], world["fork"]):
+            assert counts[entity.id] == self._per_entity(session, entity)
+
+    def test_an_entity_cited_on_both_sides_of_one_assertion_counts_once(
+        self, session
+    ):
+        world = build_world(session)
+        parka = world["parka"]
+        session.add(
+            Assertion(
+                script_id=world["script"].id,
+                subject_kind="entity",
+                subject_entity_id=parka.id,
+                predicate="interacts_with",
+                object_kind="entity",
+                object_entity_id=parka.id,
+                source_unit_id=world["unit"].id,
+                confidence=0.9,
+            )
+        )
+        session.flush()
+        assert cited_counts(session)[parka.id] == 4
+        assert self._per_entity(session, parka) == 4
+
+    def test_a_deactivated_assertion_is_not_a_citation(self, session):
+        world = build_world(session)
+        fork = world["fork"]
+        row = session.scalar(
+            select(Assertion).where(Assertion.subject_entity_id == fork.id)
+        )
+        row.active = False
+        session.flush()
+        counts = cited_counts(session)
+        assert fork.id not in counts
+        assert counts[world["parka"].id] == 3
+
+    def test_the_count_can_be_scoped_to_one_script(self, session):
+        world = build_world(session)
+        other = Script(title="Elsewhere", import_status="accepted")
+        session.add(other)
+        session.flush()
+        scene = Scene(script_id=other.id, sequence_index=0, heading="EXT. ROAD")
+        session.add(scene)
+        session.flush()
+        unit = ScriptUnit(
+            scene_id=scene.id,
+            unit_type="action",
+            sequence_index=0,
+            current_text="A van idles.",
+            parser_method="fountain",
+        )
+        session.add(unit)
+        session.flush()
+        van = Entity(
+            script_id=other.id,
+            entity_type="prop",
+            canonical_name="Van",
+            normalized_name=normalize("Van"),
+        )
+        session.add(van)
+        session.flush()
+        session.add(
+            Assertion(
+                script_id=other.id,
+                subject_kind="entity",
+                subject_entity_id=van.id,
+                predicate="appears_in",
+                object_kind="scene",
+                object_scene_id=scene.id,
+                source_unit_id=unit.id,
+                confidence=0.9,
+            )
+        )
+        session.flush()
+        everywhere = cited_counts(session)
+        assert set(everywhere) == {world["parka"].id, world["fork"].id, van.id}
+        scoped = cited_counts(session, other.id)
+        assert scoped == {van.id: 1}

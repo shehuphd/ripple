@@ -148,14 +148,40 @@ class TestBillableActions:
 
 
 class TestBudget:
+    @staticmethod
+    def _refusal() -> ModelCall:
+        return ModelCall(
+            purpose="judge",
+            prompt_version="judge.v1",
+            model_id="fake",
+            request_text="the prompt about to be sent",
+            outcome="ok",
+        )
+
+    @staticmethod
+    def _refused(session) -> list[ModelCall]:
+        return session.scalars(
+            select(ModelCall).where(ModelCall.outcome == "budget_refused")
+        ).all()
+
     def test_no_budget_means_no_gate(self, session):
         record_call(session, input_tokens=10**9)
-        check_budget(session)  # does not raise
+        refusal = self._refusal()
+        check_budget(session, refusal)
+        # An open gate writes nothing: the call goes ahead and records
+        # itself, so no refusal row appears and the candidate stays unstored.
+        assert self._refused(session) == []
+        assert refusal not in session
+        assert refusal.outcome == "ok"
 
     def test_under_budget_passes(self, session):
         set_budget(session, 1000)
         record_call(session, input_tokens=400, output_tokens=100)
-        check_budget(session)
+        refusal = self._refusal()
+        check_budget(session, refusal)
+        assert self._refused(session) == []
+        assert refusal not in session
+        assert summary(session).total_tokens == 500
 
     def test_at_budget_refuses_and_records_the_refusal(self, session):
         set_budget(session, 500)
@@ -197,7 +223,10 @@ class TestBudget:
             check_budget(session)
         set_budget(session, None)
         assert get_budget(session) is None
-        check_budget(session)
+        refusal = self._refusal()
+        check_budget(session, refusal)
+        assert self._refused(session) == []
+        assert refusal not in session
 
     def test_raising_the_budget_reopens_the_gate(self, session):
         set_budget(session, 100)
@@ -205,7 +234,11 @@ class TestBudget:
         with pytest.raises(BudgetExceeded):
             check_budget(session)
         set_budget(session, 10_000)
-        check_budget(session)
+        refusal = self._refusal()
+        check_budget(session, refusal)
+        # One refusal row from the closed gate, none from the reopened one.
+        assert len(self._refused(session)) == 0
+        assert refusal not in session
 
 
 class TestCallSiteGates:

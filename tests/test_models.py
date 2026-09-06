@@ -698,3 +698,20 @@ class TestModelCalls:
         script = _script(session)
         with pytest.raises(IntegrityError):
             self._call(session, script, input_tokens=-1)
+
+
+class TestSceneLabel:
+    """The label a scene prints: its own number, never its position."""
+
+    def test_a_numbered_scene_prints_its_number(self, session):
+        script = _script(session)
+        scene = _scene(session, script, index=4)
+        scene.display_scene_number = "12A"
+        assert scene.label == "12A"
+
+    def test_an_unnumbered_scene_prints_a_dash_not_its_index(self, session):
+        script = _script(session)
+        scene = _scene(session, script, index=4)
+        assert scene.display_scene_number is None
+        assert scene.label == "—"
+        assert "4" not in scene.label

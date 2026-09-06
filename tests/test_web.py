@@ -108,11 +108,25 @@ class TestBadInput:
         ],
     )
     def test_a_malformed_identifier_is_refused(self, client, path):
-        assert client.get(path).status_code in (400, 404)
+        response = client.get(path)
+        assert response.status_code in (400, 404)
+        # A refusal names itself rather than falling through to a blank 500:
+        # an API route in JSON, a page route on the in-app error view.
+        if response.headers["content-type"].startswith("application/json"):
+            assert response.json()["detail"]
+        else:
+            assert (
+                "Not a valid identifier" in response.text
+                or "Not Found" in response.text
+            )
 
     def test_an_unknown_script_is_a_404(self, client):
         missing = "11111111-1111-1111-1111-111111111111"
-        assert client.get(f"/scripts/{missing}").status_code == 404
+        response = client.get(f"/scripts/{missing}")
+        assert response.status_code == 404
+        # A page route renders the in-app error view with a way back.
+        assert "No such script" in response.text
+        assert 'href="/"' in response.text
 
     def test_an_unparseable_upload_is_a_400_not_a_500(self, client):
         """A file that cannot become a screenplay is an expected outcome."""
@@ -406,9 +420,21 @@ class TestDecisionFlow:
         assert after["unit"]["text"] == original
 
     def test_undo_with_nothing_accepted_is_refused(self, client, judged):
+        from sqlalchemy import func, select
+
+        from ripple.db.models import ChangeSet
+
         script_id = _first_script(client)
         unit_id = _units(client, script_id)[0]
-        assert client.post(f"/api/units/{unit_id}/undo").status_code == 400
+        with web._sessions() as session:
+            before = session.scalar(select(func.count()).select_from(ChangeSet))
+        response = client.post(f"/api/units/{unit_id}/undo")
+        assert response.status_code == 400
+        body = response.json()
+        assert body.get("message") or body.get("detail")
+        # A refused undo writes no inverse change set.
+        with web._sessions() as session:
+            assert session.scalar(select(func.count()).select_from(ChangeSet)) == before
 
 
 class TestMultiUnitPreview:
@@ -578,10 +604,17 @@ class TestLandingPreference:
         assert not re.search(r'value="reader"\s+checked', body)
 
     def test_an_unknown_view_is_refused(self, client):
+        from ripple.db.repository import get_landing_view
+
+        with web._sessions() as session:
+            before = get_landing_view(session)
         response = client.post(
             "/api/settings/landing", data={"landing_view": "dashboard"}
         )
         assert response.status_code == 400
+        assert "one of" in response.json()["detail"]
+        with web._sessions() as session:
+            assert get_landing_view(session) == before
 
 
 class TestTracesAndBudget:
@@ -626,6 +659,8 @@ class TestTracesAndBudget:
         assert "Settings" in body["message"]
 
     def test_clearing_the_budget_reopens_previews(self, client, judged):
+        import uuid
+
         script_id = _first_script(client)
         first, second = _units(client, script_id)[:2]
         client.post(
@@ -639,12 +674,34 @@ class TestTracesAndBudget:
             data={"proposed_text": "Rain hammers the roof."},
         )
         assert response.status_code == 200, response.text
+        # The preview went through: a proposal exists and no refusal row
+        # was written for it, and the cap is gone.
+        from sqlalchemy import select
+
+        from ripple.db.models import ChangeSet, ModelCall
+        from ripple.services import spend
+
+        change_set_id = response.json()["change_set_id"]
+        with web._sessions() as session:
+            assert spend.get_budget(session) is None
+            assert session.get(ChangeSet, uuid.UUID(change_set_id)) is not None
+            refused = session.scalars(
+                select(ModelCall).where(ModelCall.outcome == "budget_refused")
+            ).all()
+            assert all(str(call.change_set_id) != change_set_id for call in refused)
 
     def test_a_junk_budget_is_refused(self, client):
+        from ripple.services import spend
+
+        client.post("/api/settings/budget", data={"max_total_tokens": "5000"})
         response = client.post(
             "/api/settings/budget", data={"max_total_tokens": "a lot"}
         )
         assert response.status_code == 400
+        assert response.json()["detail"]
+        # The cap that was set stays set.
+        with web._sessions() as session:
+            assert spend.get_budget(session) == 5000
 
     def test_settings_shows_the_ledger(self, client):
         body = client.get("/settings").text
@@ -747,9 +804,23 @@ class TestAskTheGraph:
         assert "Béla" in subjects, "accent-less 'Bela' did not retrieve 'Béla'"
 
     def test_the_question_is_logged_for_audit(self, client):
+        from sqlalchemy import select
+
+        from ripple.db.models import QueryLog
+
         script_id = _first_script(client)
-        client.post(f"/api/scripts/{script_id}/ask", data={"question": "Anything?"})
-        assert client.get("/ask").status_code == 200
+        body = client.post(
+            f"/api/scripts/{script_id}/ask", data={"question": "Anything?"}
+        ).json()
+        with web._sessions() as session:
+            logged = session.scalars(
+                select(QueryLog).where(QueryLog.question == "Anything?")
+            ).one()
+            assert str(logged.id) == body["query_id"]
+            assert str(logged.script_id) == script_id
+            assert logged.answer == body["answer"]
+        # The logged question is offered for replay on the Ask page.
+        assert f'data-query="{body["query_id"]}"' in client.get("/ask").text
 
     def test_a_deterministic_answer_carries_an_empty_grounding_check(self, client):
         script_id = _first_script(client)
@@ -837,7 +908,9 @@ class TestAskTheGraph:
 
     def test_a_missing_stored_question_is_404(self, client):
         gone = "00000000-0000-0000-0000-000000000000"
-        assert client.get(f"/api/queries/{gone}").status_code == 404
+        response = client.get(f"/api/queries/{gone}")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "No such question"
 
     def test_a_question_matching_no_assertion_still_grounds_broadly(self, client):
         """The packet never gates on keyword luck: when no assertion text
@@ -1105,10 +1178,19 @@ class TestEveryNavLinkResolves:
             assert client.get(href).status_code == 200, f"dead nav link: {href}"
 
     @pytest.mark.parametrize(
-        "path", ["/reports", "/findings", "/entities", "/assertions", "/ask"]
+        ("path", "heading"),
+        [
+            ("/reports", "Ripple reports"),
+            ("/findings", "Continuity findings"),
+            ("/entities", "Entities"),
+            ("/assertions", "Assertions"),
+            ("/ask", "Ask Ripple"),
+        ],
     )
-    def test_each_analysis_page_renders(self, client, path):
-        assert client.get(path).status_code == 200
+    def test_each_analysis_page_renders(self, client, path, heading):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert f"<h1>{heading}</h1>" in response.text
 
     def test_findings_can_filter_to_one_script(self, client):
         """The reader's findings chip links here; the filter must hold."""
@@ -1501,10 +1583,21 @@ class TestBatchActions:
             assert session.get(Assertion, uuid.UUID(twin_id)).active is False
 
     def test_a_malformed_batch_selection_is_rejected(self, client):
+        from sqlalchemy import func, select
+
+        from ripple.db.models import ChangeSet, Entity
+
+        with web._sessions() as session:
+            entities = session.scalar(select(func.count()).select_from(Entity))
+            changes = session.scalar(select(func.count()).select_from(ChangeSet))
         result = client.post(
             "/api/entities/batch/merge", data={"ids": "not-json"}
         )
         assert result.status_code == 400
+        assert result.json()["detail"]
+        with web._sessions() as session:
+            assert session.scalar(select(func.count()).select_from(Entity)) == entities
+            assert session.scalar(select(func.count()).select_from(ChangeSet)) == changes
 
     def test_the_traces_page_links_to_the_viewer(self, client):
         body = client.get("/traces").text
@@ -1822,6 +1915,7 @@ class TestScriptGraph:
 
         response = client.get(f"/api/scripts/{uuid.uuid4()}/graph")
         assert response.status_code == 404
+        assert response.json()["detail"] == "No such script"
 
     def test_an_unnumbered_scene_never_borrows_a_number(self, client):
         """An intercut sub-heading or an OMITTED slug has no scene number.
@@ -1888,6 +1982,7 @@ class TestEntityDetail:
 
         response = client.get(f"/api/entities/{uuid.uuid4()}/detail")
         assert response.status_code == 404
+        assert response.json()["detail"] == "No such entity"
 
 
 class TestStaleLinksAreHonest:
@@ -1896,13 +1991,28 @@ class TestStaleLinksAreHonest:
     MISSING = "00000000-0000-0000-0000-000000000000"
 
     def test_ask_with_an_unknown_script_is_404(self, client):
-        assert client.get(f"/ask?script={self.MISSING}").status_code == 404
+        response = client.get(f"/ask?script={self.MISSING}")
+        assert response.status_code == 404
+        assert "No such script" in response.text
 
     def test_findings_with_an_unknown_script_is_404(self, client):
-        assert client.get(f"/findings?script={self.MISSING}").status_code == 404
+        response = client.get(f"/findings?script={self.MISSING}")
+        assert response.status_code == 404
+        assert "No such script" in response.text
 
     def test_ask_without_a_script_still_lands_on_the_newest(self, client):
-        assert client.get("/ask").status_code == 200
+        from sqlalchemy import select
+
+        from ripple.db.models import Script
+
+        with web._sessions() as session:
+            newest = session.scalar(
+                select(Script).order_by(Script.created_at.desc())
+            )
+            title = newest.title
+        response = client.get("/ask")
+        assert response.status_code == 200
+        assert f'data-title="{title}"' in response.text
 
 
 class TestDeletionPreviewScoping:
@@ -2047,8 +2157,18 @@ class TestSceneStructure:
         assert "omit-tag" not in client.get(f"/scripts/{script_id}").text
 
     def test_an_unknown_scene_is_a_404(self, client):
+        from sqlalchemy import func, select
+
+        from ripple.db.models import ChangeSet
+
         missing = "11111111-1111-1111-1111-111111111111"
-        assert client.post(f"/api/scenes/{missing}/omit").status_code == 404
+        with web._sessions() as session:
+            before = session.scalar(select(func.count()).select_from(ChangeSet))
+        response = client.post(f"/api/scenes/{missing}/omit")
+        assert response.status_code == 404
+        assert response.json()["detail"]
+        with web._sessions() as session:
+            assert session.scalar(select(func.count()).select_from(ChangeSet)) == before
 
 
 class TestDraftLinking:
@@ -2239,6 +2359,7 @@ class TestExplanation:
 
         response = client.post(f"/api/changes/{uuid.uuid4()}/explain")
         assert response.status_code == 404
+        assert response.json()["detail"] == "No such change set"
 
     def test_the_explanation_replaces_the_stored_summary(
         self, client, judged, monkeypatch
@@ -2386,8 +2507,16 @@ class TestPreviewFailureSurface:
 class TestTraceViewerLaunch:
     """POST /api/traces/{id}/viewer deep-links the TraceAct viewer."""
 
-    def test_a_malformed_trace_id_is_refused(self, client):
-        assert client.post("/api/traces/trc%20nope/viewer").status_code == 400
+    def test_a_malformed_trace_id_is_refused(self, client, monkeypatch):
+        import traceact.viewer.instance as viewer_instance
+
+        def never(*args, **kwargs):
+            raise AssertionError("a refused id must not reach the viewer")
+
+        monkeypatch.setattr(viewer_instance, "launch_or_connect", never)
+        response = client.post("/api/traces/trc%20nope/viewer")
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Not a trace id"
 
     def test_the_url_opens_the_map_filtered_to_the_trace(
         self, client, monkeypatch, tmp_path
@@ -2520,6 +2649,7 @@ class TestCancellingARun:
 
         response = client.post(f"/api/extract/{uuid.uuid4()}/cancel")
         assert response.status_code == 404
+        assert response.json()["detail"] == "No such extraction run"
 
 
 class TestSpendTable:
@@ -2677,6 +2807,32 @@ class TestSortableTables:
         body = client.get("/reports").text
         assert 'class="scripts listtable"' not in body
         assert "No reports yet." in body
+
+
+class TestPageCounts:
+    """The library reads every script's page count in two queries; the
+    grouped read has to agree with the per-script one."""
+
+    def test_the_grouped_page_counts_match_the_per_script_counts(self, client):
+        from sqlalchemy import select
+
+        from ripple.db.models import Script
+        from ripple.web.stats import pages_by_script, script_pages
+
+        with web._sessions() as session:
+            ids = list(session.scalars(select(Script.id)))
+            assert len(ids) >= 3
+            grouped = pages_by_script(session, ids)
+            assert set(grouped) == set(ids)
+            for script_id in ids:
+                assert grouped[script_id] == script_pages(session, script_id)
+                assert grouped[script_id] >= 1
+
+    def test_no_scripts_means_no_queries_and_no_counts(self, client):
+        from ripple.web.stats import pages_by_script
+
+        with web._sessions() as session:
+            assert pages_by_script(session, []) == {}
 
 
 class TestNeedsReviewSurfacing:
