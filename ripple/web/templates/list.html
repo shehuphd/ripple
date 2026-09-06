@@ -77,12 +77,14 @@
       {% set cell = (item.cells or {}).get(column.key) %}
       <td{% if column.numeric %} class="num"{% endif %}>
         {% if column.key == 'actions' %}
+          <div class="acts">
           {% for act in item.actions or [] %}
           {% if act.href %}<a class="btn sm" href="{{ act.href }}">{{ act.label }}</a>
           {% else %}<button class="btn sm{{ ' danger' if act.danger }}" data-post="{{ act.url }}"
                   {% if act.confirm %}data-confirm="{{ act.confirm }}"{% endif %}>{{ act.label }}</button>
           {% endif %}
           {% endfor %}
+          </div>
         {% elif cell %}
           {% if cell.tag %}<span class="tag {{ cell.tag_class }}">{{ cell.text }}</span>
           {% else %}<span class="{{ cell.class }}">{{ cell.text }}</span>{% endif %}

@@ -204,6 +204,8 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **Row actions keep their distance.** Review and Dismiss were spaced by a left margin alone, so a narrow actions column that stacked them left a destructive action a few pixels under a safe one. The actions in a row space themselves in both directions.
+
 - **A plan stated on the last allowed tool call is a plan, not a stop.** When the per-turn ceiling fell on the call that stated the plan, the card rendered with Go ahead beneath a reply saying the turn had stopped without finishing. The stated plan closes the plan stage whichever call states it.
 
 - **A written explanation is no longer cut off mid-sentence.** The model's hidden reasoning counts against the same output ceiling as its prose, and the 400-token cap on the explanation left 19 tokens for the answer on a three-line edit. The ceiling is 2,048.

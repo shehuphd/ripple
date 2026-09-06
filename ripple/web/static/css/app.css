@@ -225,7 +225,10 @@ table.listtable td{padding:10px 14px;vertical-align:top;font-size:13px;
 table.listtable th{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 table.listtable tbody tr{cursor:default}
 table.listtable .tag{margin:0;overflow-wrap:normal;white-space:nowrap}
-table.listtable .btn.sm{margin-left:6px}
+/* Row actions space themselves in both directions, so a narrow column that
+   stacks Review over Dismiss keeps a destructive action clear of the safe
+   one rather than butting them together. */
+table.listtable .acts{display:flex;flex-wrap:wrap;gap:8px}
 table.listtable col.checkcol{width:34px}
 table.listtable td.checkcol{padding-right:0}
 .listtable-wrap{margin-bottom:6px}
