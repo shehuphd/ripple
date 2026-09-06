@@ -157,3 +157,22 @@ class TestPrompt:
         # unit id stays out so the model cannot cite the wrong id.
         assert payload["evidence"]["later_evidence"][0]["assertion_id"] == "a1"
         assert "unit_id" not in payload["evidence"]["later_evidence"][0]
+
+
+class TestThePromptAsksForOneLine:
+    """The message a finding carries is read in a list and acted on, so the
+    prompt asks for a statement of the new state, not an argument."""
+
+    def test_the_system_prompt_bans_the_argued_form(self):
+        from ripple.extraction.continuity_judge import (
+            CONTINUITY_PROMPT_VERSION,
+            CONTINUITY_SYSTEM,
+        )
+
+        assert "what the script now says" in CONTINUITY_SYSTEM
+        assert "Name the thing first" in CONTINUITY_SYSTEM
+        for banned in ("contradicts", "the established", "this conflicts with"):
+            assert banned in CONTINUITY_SYSTEM, "the prompt must name what to avoid"
+        # A wording change moves the version, so the audit rows say which
+        # prompt wrote a stored message.
+        assert CONTINUITY_PROMPT_VERSION == "continuity.v2"

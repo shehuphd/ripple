@@ -23,7 +23,7 @@ from ripple.extraction.validate import MalformedResponse
 from ripple.graph.continuity import EvidencePacket
 
 # Bumped with any wording change: the audit rows record which prompt spoke.
-CONTINUITY_PROMPT_VERSION = "continuity.v1"
+CONTINUITY_PROMPT_VERSION = "continuity.v2"
 
 CONTINUITY_SEVERITIES = ("low", "medium", "high")
 MAX_CONTINUITY_FINDINGS = 10
@@ -70,6 +70,15 @@ conflict, cite the assertion_id values of the evidence that shows it,
 verbatim from the lists. Do not report the graph changes themselves; the
 diff already shows them. Do not report a conflict the evidence does not
 show. An empty findings list is a valid answer.
+
+Write each message as one short statement of what the script now says.
+Name the thing first, then what it became: "Grey walking-costume is now
+green", "The pistol Hedda loads is now a rifle", "Portrait of an elderly
+man is now an elderly woman". Ten words where the fact allows it, fifteen
+at the outside. Never argue the contradiction and never restate the old
+fact twice: no "changing X to Y contradicts", no "the established", no
+"this conflicts with". The reader is looking at the line; the conflict is
+in the sentence.
 
 Severity: high when a cited later scene stops making sense, medium when a
 department deliverable or a stated fact goes inconsistent, low for anything

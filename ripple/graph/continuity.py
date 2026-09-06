@@ -122,11 +122,18 @@ class OrphanedReference:
 
     @property
     def message(self) -> str:
+        """What the script now says, in one line.
+
+        A finding is read in a list and acted on, so it states the new state
+        of the script rather than arguing that the state is wrong. The
+        conflict is in the sentence: something is used where nothing
+        introduces it.
+        """
         scenes = ", ".join(self.later_scene_numbers)
+        one = len(self.later_scene_numbers) == 1
         return (
-            f"{len(self.later_unit_ids)} later unit(s) still reference "
-            f"{self.entity_label}. Scenes {scenes} use it, and removing the "
-            "establishing reference leaves those uses without an introduction."
+            f"{self.entity_label} is used in scene{'' if one else 's'} "
+            f"{scenes} but no longer introduced."
         )
 
 

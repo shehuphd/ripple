@@ -210,6 +210,8 @@ All notable changes to Ripple are documented here.
 
 - **Row actions keep their distance.** Review and Dismiss were spaced by a left margin alone, so a narrow actions column that stacked them left a destructive action a few pixels under a safe one. The actions in a row space themselves in both directions.
 
+- **A finding says what the script now says.** Messages read as an argument that something conflicts ("Changing the grey walking-costume to a green walking-costume contradicts the established costume color."). They now state the new fact and let the conflict speak for itself ("Grey walking-costume is now a scarlet riding-habit"), which is shorter to read in a list and faster to act on. The continuity prompt asks for that form and names the phrasings to avoid, at `continuity.v2`, and the deterministic orphan message follows it too ("Blue sedan is used in scenes 22, 31, 44 but no longer introduced"). Messages already stored keep the words the model wrote at the time; the audit row records which prompt wrote them.
+
 - **Severity dots draw their colour everywhere.** The three severity colours were scoped to the toolbar chip, so every finding row in the preview overlay drew an empty circle where its severity should have been.
 
 - **A plan stated on the last allowed tool call is a plan, not a stop.** When the per-turn ceiling fell on the call that stated the plan, the card rendered with Go ahead beneath a reply saying the turn had stopped without finishing. The stated plan closes the plan stage whichever call states it.

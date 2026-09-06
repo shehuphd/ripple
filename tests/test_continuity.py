@@ -169,6 +169,33 @@ class TestOrphanedReferences:
         assert len(finding.later_unit_ids) == 3
         assert "22, 31, 44" in finding.message
 
+    def test_the_message_states_what_the_script_now_says(self, session, world):
+        """A finding is read in a list and acted on, so it names the thing and
+        the new state in one line rather than arguing the contradiction."""
+        finding = detect_orphaned_references(
+            session,
+            world["script"].id,
+            [(world["sedan"].id, "Blue sedan", world["establishes"].id)],
+        )[0]
+        assert finding.message == (
+            "Blue sedan is used in scenes 22, 31, 44 but no longer introduced."
+        )
+        # None of the argued-contradiction phrasing the card used to carry.
+        for phrase in ("contradicts", "establishing reference", "later unit(s)"):
+            assert phrase not in finding.message
+        assert len(finding.message.split()) <= 14
+
+    def test_one_later_scene_reads_in_the_singular(self, session, world):
+        finding = detect_orphaned_references(
+            session,
+            world["script"].id,
+            [(world["sedan"].id, "Blue sedan", world["establishes"].id)],
+        )[0]
+        object.__setattr__(finding, "later_scene_numbers", ["22"])
+        assert finding.message == (
+            "Blue sedan is used in scene 22 but no longer introduced."
+        )
+
     def test_an_entry_without_an_assertion_id_is_dropped(self, session, world):
         """The contract requires the removed edge's id; None cannot be checked.
 
