@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-06 12:09:09 UTC
+Last updated: 2026-09-06 12:27:45 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `.venv`) are gitignored and not listed.
 
@@ -17,7 +17,6 @@ Every file in the repository and what it does. Directories the application write
 | `launch.command` | macOS launcher: stops any running instance, builds or repairs the venv, starts the server, opens a browser. `--test` runs the suite instead. |
 | `pyproject.toml` | Package metadata, dependencies, pytest and ruff configuration. |
 | `shiplock.toml` | Shiplock docs-vs-code release checks: declared docs, version alignment, architecture and manifest coverage, one declaration per dependency, and an expectation in every test. |
-| `uv.lock` | Locked dependency versions for `uv`. |
 | `.gitignore` | Excludes runtime state, virtual environments, and local tool settings. |
 | `.github/dependabot.yml` | Weekly dependency update checks. |
 
