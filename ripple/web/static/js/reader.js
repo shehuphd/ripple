@@ -268,7 +268,126 @@ function flattenMarks(node) {
   selection.addRange(caret);
 }
 
-document.querySelectorAll('.u').forEach((node) => {
+/* Writing happens in the same lines as editing. On a script with no graph
+   there is no ripple to preview, so an edited line saves itself when focus
+   leaves it; once a graph exists, edits stay drafts for See ripple as
+   before. Enter writes the next line in both worlds, except on a drafted
+   line of a graphed script, where it still opens the ripple. */
+const authoring = () =>
+  document.getElementById('see-ripple').dataset.graphReady !== 'true';
+
+async function saveLine(node) {
+  const text = flatten(node.textContent).trim();
+  if (!text) return deleteLine(node);
+  try {
+    const saved = await api(`/api/units/${node.dataset.unit}/text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    node.dataset.accepted = text;
+    state.drafts.delete(node.dataset.unit);
+    node.classList.remove('edited');
+    refreshDraftIndicator();
+    if (saved.change_set_id) {
+      ripple.trace('unit.direct_saved', { unit: node.dataset.unit });
+    }
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function deleteLine(node) {
+  try {
+    await api(`/api/units/${node.dataset.unit}`, { method: 'DELETE' });
+    state.drafts.delete(node.dataset.unit);
+    refreshDraftIndicator();
+    const neighbour = node.previousElementSibling;
+    document.querySelectorAll('.ucap').forEach((cap) => cap.remove());
+    node.remove();
+    if (neighbour && neighbour.classList.contains('u')) neighbour.focus();
+    ripple.trace('unit.deleted', {});
+  } catch (error) {
+    revertLine(node);
+    toast(error.message, true);
+  }
+}
+
+function composeAfter(node) {
+  const line = document.createElement('div');
+  line.className = 'u action';
+  line.contentEditable = 'plaintext-only';
+  line.spellcheck = false;
+  line.dataset.new = '1';
+  line.dataset.sceneNo = node.dataset.sceneNo || '';
+  line.setAttribute('role', 'textbox');
+  line.setAttribute('aria-label', 'New script line');
+  node.after(line);
+  liveType(line, () => node.classList[1] || null);
+
+  let settled = false;
+  const abandon = () => {
+    if (settled) return;
+    settled = true;
+    line.remove();
+  };
+  const commit = async (thenAnother) => {
+    if (settled) return;
+    const text = flatten(line.textContent).trim();
+    if (!text) return abandon();
+    settled = true;
+    const scene = node.closest('[data-scene-body]');
+    if (!line._forcedType && readsAsHeading(text)) {
+      // A heading typed anywhere starts the next scene, after this one.
+      abandon();
+      await createSceneInline(text, scene);
+      return;
+    }
+    try {
+      const composed = await api(
+        `/api/scenes/${scene.dataset.sceneBody}/units`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            after_unit_id: node.dataset.unit || null,
+            unit_type: line._forcedType || null,
+          }),
+        },
+      );
+      line.className = `u ${composed.unit_type}`;
+      line.textContent = text;
+      line.dataset.unit = composed.unit_id;
+      line.dataset.accepted = text;
+      delete line.dataset.new;
+      line.setAttribute('aria-label', 'Script line');
+      wireUnit(line);
+      ripple.trace('unit.written', { type: composed.unit_type });
+      if (thenAnother) composeAfter(line);
+    } catch (error) {
+      settled = false;
+      toast(error.message, true);
+      line.focus();
+    }
+  };
+  line.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commit(true);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      abandon();
+      node.focus();
+    }
+  });
+  line.addEventListener('focusout', () => {
+    setTimeout(() => { if (!settled) commit(false); }, 0);
+  });
+  line.focus();
+}
+
+function wireUnit(node) {
   // Focus is selection: clicking into a line to type is the same gesture as
   // choosing it, so the two are not separate interactions.
   node.addEventListener('focus', () => {
@@ -279,17 +398,35 @@ document.querySelectorAll('.u').forEach((node) => {
     noteDraft(node);
     state.text = flatten(node.textContent);
   });
+  node.addEventListener('focusout', () => {
+    // On a graphless script an edit has no ripple to wait for, so leaving
+    // the line is what saves it.
+    if (authoring() && state.drafts.has(node.dataset.unit)) saveLine(node);
+  });
   node.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       event.preventDefault();
       revertLine(node);
       node.blur();
     }
-    // A screenplay unit is one block. Enter would split it into markup the
-    // parser never produced, so it opens the ripple instead.
+    // A screenplay unit is one block, so Enter never splits it: on a
+    // drafted line of a graphed script it opens the ripple, and anywhere
+    // else it writes the next line.
     if (event.key === 'Enter') {
       event.preventDefault();
-      if (state.drafts.has(node.dataset.unit)) openPreview();
+      const drafted = state.drafts.has(node.dataset.unit);
+      if (drafted && !authoring()) {
+        openPreview();
+        return;
+      }
+      if (drafted) saveLine(node);
+      composeAfter(node);
+    }
+    // An emptied line is deleted the way an editor deletes one, by one
+    // more Backspace, unless a fact still cites it.
+    if (event.key === 'Backspace' && !flatten(node.textContent).trim()) {
+      event.preventDefault();
+      deleteLine(node);
     }
   });
   // Paste as plain text, flattened: pasted markup or line breaks would become
@@ -299,7 +436,200 @@ document.querySelectorAll('.u').forEach((node) => {
     const text = (event.clipboardData || window.clipboardData).getData('text');
     document.execCommand('insertText', false, text.replace(/\s*\n\s*/g, ' '));
   });
-});
+}
+
+document.querySelectorAll('.u:not(.ghost)').forEach(wireUnit);
+
+/* The typewriter flow: the page itself is the editor. Every scene ends in
+   a write-here line, and an empty script opens with one. Typing a scene
+   heading there starts the next scene in place, the way Final Draft's
+   Enter does, so a script is written top to bottom without a dialog. */
+/* The line being written formats itself as it is typed: the guessed type
+   sets the indentation live, its name shows at the line's edge, and Tab
+   cycles the type when the guess is wrong, the way screenwriting editors
+   correct an element. Fountain's force markers work too: @NAME is a cue,
+   !text is action, >text is a transition. */
+const WRITE_TYPES = ['action', 'character', 'dialogue', 'parenthetical', 'transition'];
+
+function guessType(text, previousType) {
+  if (text.startsWith('@')) return 'character';
+  if (text.startsWith('!')) return 'action';
+  if (text.startsWith('>') && !text.endsWith('<')) return 'transition';
+  const inSpeech = ['character', 'dialogue', 'parenthetical'].includes(previousType);
+  const opensSpeech = ['character', 'parenthetical'].includes(previousType);
+  if (text.startsWith('(') && text.endsWith(')') && inSpeech) return 'parenthetical';
+  if (/^[A-Z0-9 .'-]+TO:$/.test(text)) return 'transition';
+  if (!opensSpeech && text === text.toUpperCase() && text.length <= 40
+      && /[A-Z]/.test(text)) return 'character';
+  if (opensSpeech) return 'dialogue';
+  return 'action';
+}
+
+function liveType(line, previousTypeOf) {
+  line._forcedType = null;
+  const paint = () => {
+    const text = flatten(line.textContent).trim();
+    let type = null;
+    if (text) {
+      if (!line._forcedType && readsAsHeading(text)) type = 'heading';
+      else type = line._forcedType || guessType(text, previousTypeOf());
+    }
+    WRITE_TYPES.forEach((one) => line.classList.remove(one));
+    if (type && type !== 'heading') line.classList.add(type);
+    line.dataset.type = type ? (type === 'heading' ? 'new scene' : type) : '';
+  };
+  line.addEventListener('input', paint);
+  line.addEventListener('keydown', (event) => {
+    if (event.key !== 'Tab') return;
+    const text = flatten(line.textContent).trim();
+    if (!text) return; // an empty line leaves Tab to keyboard navigation
+    event.preventDefault();
+    const current = line._forcedType || guessType(text, previousTypeOf());
+    const from = Math.max(0, WRITE_TYPES.indexOf(current));
+    const step = event.shiftKey ? -1 : 1;
+    line._forcedType =
+      WRITE_TYPES[(from + step + WRITE_TYPES.length) % WRITE_TYPES.length];
+    paint();
+  });
+  return paint;
+}
+
+const readsAsHeading = (text) =>
+  /^(INT|EXT|EST|I\/E|INT\.?\/EXT)[. ]/i.test(text) || /^\.[A-Za-z]/.test(text);
+
+async function createSceneInline(heading, afterSection) {
+  const scriptId = window.location.pathname.split('/').pop();
+  try {
+    const result = await api(`/api/scripts/${scriptId}/scenes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        heading,
+        body: '',
+        after_scene_id: afterSection ? afterSection.dataset.sceneBody : null,
+        extract: false,
+      }),
+    });
+    const scene = result.scene;
+    const section = document.createElement('section');
+    section.dataset.sceneBody = scene.scene_id;
+    const header = document.createElement('div');
+    header.className = 'sh';
+    header.innerHTML = '<span class="no num"></span><span></span>';
+    header.querySelector('.no').textContent = scene.display_number || '';
+    header.querySelector('span:not(.no)').textContent = scene.heading;
+    const ghost = document.createElement('div');
+    ghost.className = 'u ghost';
+    ghost.contentEditable = 'plaintext-only';
+    ghost.spellcheck = false;
+    ghost.dataset.sceneNo = scene.display_number || '';
+    ghost.dataset.hint = 'Type the next line, or a heading for the next scene';
+    ghost.setAttribute('role', 'textbox');
+    ghost.setAttribute('aria-label', 'Write the next line');
+    section.append(header, ghost);
+    if (afterSection) afterSection.after(section);
+    else {
+      const firstGhost = document.getElementById('first-ghost');
+      if (firstGhost) {
+        if (firstGhost.nextElementSibling
+            && firstGhost.nextElementSibling.classList.contains('empty')) {
+          firstGhost.nextElementSibling.remove();
+        }
+        firstGhost.replaceWith(section);
+      } else {
+        document.querySelector('#page .scene-insert').after(section);
+      }
+    }
+    wireGhost(ghost);
+    ghost.focus();
+    ripple.trace('scene.written', { scene: scene.scene_id });
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function commitGhost(ghost) {
+  const text = flatten(ghost.textContent).trim();
+  if (!text) return;
+  const section = ghost.closest('[data-scene-body]');
+  if ((!ghost._forcedType && readsAsHeading(text)) || !section) {
+    if (!section && !readsAsHeading(text)) {
+      toast('Start with a scene heading, such as INT. OFFICE - DAY.');
+      return;
+    }
+    resetGhost(ghost);
+    await createSceneInline(text, section);
+    return;
+  }
+  const lines = [...section.querySelectorAll('.u:not(.ghost)')];
+  const last = lines[lines.length - 1] || null;
+  try {
+    const composed = await api(`/api/scenes/${section.dataset.sceneBody}/units`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        after_unit_id: last ? last.dataset.unit : null,
+        unit_type: ghost._forcedType || null,
+      }),
+    });
+    const line = document.createElement('div');
+    line.className = `u ${composed.unit_type}`;
+    line.contentEditable = 'plaintext-only';
+    line.spellcheck = false;
+    line.textContent = text;
+    line.dataset.unit = composed.unit_id;
+    line.dataset.accepted = text;
+    line.dataset.sceneNo = ghost.dataset.sceneNo || '';
+    line.setAttribute('role', 'textbox');
+    line.setAttribute('aria-label', 'Script line');
+    wireUnit(line);
+    ghost.before(line);
+    resetGhost(ghost);
+    ripple.trace('unit.written', { type: composed.unit_type });
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function resetGhost(ghost) {
+  ghost.textContent = '';
+  ghost._forcedType = null;
+  ghost.dataset.type = '';
+  WRITE_TYPES.forEach((one) => ghost.classList.remove(one));
+}
+
+function wireGhost(ghost) {
+  liveType(ghost, () => {
+    const section = ghost.closest('[data-scene-body]');
+    const lines = section
+      ? section.querySelectorAll('.u:not(.ghost)') : [];
+    const last = lines[lines.length - 1];
+    return last ? last.classList[1] : null;
+  });
+  ghost.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commitGhost(ghost);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      resetGhost(ghost);
+      ghost.blur();
+    }
+  });
+  ghost.addEventListener('focusout', () => {
+    setTimeout(() => commitGhost(ghost), 0);
+  });
+  ghost.addEventListener('paste', (event) => {
+    event.preventDefault();
+    const text = (event.clipboardData || window.clipboardData).getData('text');
+    document.execCommand('insertText', false, text.replace(/\s*\n\s*/g, ' '));
+  });
+}
+
+document.querySelectorAll('.u.ghost').forEach(wireGhost);
+const firstGhost = document.getElementById('first-ghost');
+if (firstGhost) firstGhost.focus();
 
 revertAll.addEventListener('click', async () => {
   const count = state.drafts.size;
@@ -1371,5 +1701,62 @@ if (findBox) {
   // rather than left pointing at words that have moved.
   document.getElementById('page').addEventListener('input', () => {
     if (hits.length) clear();
+  });
+}
+
+/* The title renames in place: click it, type, and Enter or leaving the
+   field saves. The id, and every link to the script, stays. */
+const titleNode = document.getElementById('script-title');
+if (titleNode) {
+  let before = titleNode.textContent;
+  const editTitle = () => {
+    if (titleNode.isContentEditable) return;
+    before = titleNode.textContent;
+    titleNode.contentEditable = 'plaintext-only';
+    titleNode.focus();
+    document.getSelection().selectAllChildren(titleNode);
+  };
+  const settleTitle = async (keep) => {
+    titleNode.contentEditable = 'false';
+    const title = titleNode.textContent.replace(/\s+/g, ' ').trim();
+    if (!keep || !title || title === before) {
+      titleNode.textContent = before;
+      return;
+    }
+    try {
+      const scriptId = window.location.pathname.split('/').pop();
+      const renamed = await api(`/api/scripts/${scriptId}/title`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+      titleNode.textContent = renamed.title;
+      document.title = `${renamed.title} · Ripple`;
+      toast('Renamed.');
+    } catch (error) {
+      titleNode.textContent = before;
+      toast(error.message, true);
+    }
+  };
+  titleNode.addEventListener('click', editTitle);
+  titleNode.addEventListener('keydown', (event) => {
+    if (!titleNode.isContentEditable) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        editTitle();
+      }
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      titleNode.blur();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      titleNode.textContent = before;
+      titleNode.blur();
+    }
+  });
+  titleNode.addEventListener('blur', () => {
+    if (titleNode.isContentEditable) settleTitle(true);
   });
 }

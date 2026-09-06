@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-06 12:27:45 UTC
+Last updated: 2026-09-06 15:28:26 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `.venv`) are gitignored and not listed.
 
@@ -102,6 +102,7 @@ Every file in the repository and what it does. Directories the application write
 | `services/pricing.py` | Money for the token counts, from the rates registry. |
 | `services/duplicates.py` | Suspected duplicate entities: deterministic detection, reviewed merges, keep-separate records. |
 | `services/preview.py` | The judgement engine: one proposal across many lines, verdicts validated, calls audited and replayed. |
+| `services/authoring.py` | Writing a script in Ripple: creation, renaming, line composition typed by text, guarded direct save and delete, and Fountain export. |
 | `services/changeset.py` | Atomic accept, reject, and latest-only undo of a proposal. |
 | `services/draft_report.py` | The cross-draft ripple report: entity deltas, lost introductions, judged conflicts. |
 | `services/drafts.py` | Draft linking: alignment, lineage, graph carry-over. |
@@ -149,6 +150,7 @@ Every file in the repository and what it does. Directories the application write
 | `tests/__init__.py` | Package marker. |
 | `tests/conftest.py` | Shared fixtures, including byte-precise XML attack payloads. |
 | `tests/test_adapters.py` | Import pipeline across all four formats. |
+| `tests/test_authoring.py` | Writing in Ripple: creation, renaming, composition typing, the cited-line guards, undo of a direct save, and the Fountain round trip. |
 | `tests/test_adversarial.py` | Hostile inputs: malformed files, encoding traps, oversized documents. |
 | `tests/test_changeset.py` | Accept, reject, undo, and inverse operations. |
 | `tests/test_alignment.py` | The draft aligner's passes and refusals. |

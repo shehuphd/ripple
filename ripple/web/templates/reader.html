@@ -24,12 +24,15 @@
   </div>
   {% endfor %}
   <div class="side-nomatch hide" id="scene-nomatch">No scene matches.</div>
-  <div class="kbdmap">⌨ Tab reaches lines · Esc reverts a line · Enter opens the ripple</div>
+  <div class="kbdmap">⌨ Enter writes the next line · Tab on a line being
+    written cycles its type · Esc reverts · on an edited line of a built
+    graph, Enter opens the ripple</div>
 </div>
 {% endblock %}
 
 {% block toolbar %}
-<h1>{{ script.title }}</h1>
+<h1 id="script-title" tabindex="0"
+    data-tip="Click to rename the script">{{ script.title }}</h1>
 <span class="sub" id="crumb">base v{{ script.current_version }}</span>
 {% if script.draft_number > 1 and script.predecessor_script_id %}
 <a class="chip" href="/scripts/{{ script.predecessor_script_id }}"
@@ -45,6 +48,8 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
   <span class="btn" aria-disabled="true" tabindex="-1"
         data-tip="Build the graph first, then view it here">⁙ View graph</span>
   {% endif %}
+  <a class="btn" href="/api/scripts/{{ script.id }}/export"
+     data-tip="Download the script as Fountain plain text">Export</a>
   <button class="chip{{ '' if findings else ' hide' }}" id="finding-jump"
           data-tip="Go to the next line a continuity finding cites">
     <i class="dot medium"></i><span id="finding-label"
@@ -146,6 +151,16 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
               data-tip="Insert a new scene at the top"
               aria-label="Insert a scene at the top">＋ scene</button>
     </div>
+    {% if not scenes %}
+    <div class="u ghost" id="first-ghost" contenteditable="plaintext-only"
+         spellcheck="false" role="textbox" aria-label="Write the first scene"
+         data-hint="Type a scene heading to begin: INT. OFFICE - DAY"></div>
+    <div class="empty" style="padding:10px 8px">
+      Write the way you would on the page: the heading, Enter, then the
+      lines. A short all-caps line is a character cue with its dialogue
+      beneath, and another heading starts the next scene.
+    </div>
+    {% endif %}
     {% for scene in scenes %}
     <section data-scene-body="{{ scene.id }}"
              {% if scene.omitted %}class="omitted"{% endif %}>
@@ -174,6 +189,10 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
            contenteditable="plaintext-only" spellcheck="false"
            role="textbox" aria-label="Script line">{% if unit.segments %}{% for seg in unit.segments %}{% if seg.op == 'ins' %}<mark class="rev">{{ seg.text }}</mark>{% else %}{{ seg.text }}{% endif %}{% if not loop.last %} {% endif %}{% endfor %}{% else %}{{ unit.text }}{% endif %}</div>
       {% endfor %}
+      <div class="u ghost" contenteditable="plaintext-only" spellcheck="false"
+           role="textbox" aria-label="Write the next line"
+           data-scene-no="{{ scene.number }}"
+           data-hint="Type the next line, or a heading for the next scene"></div>
       {% endif %}
       <div class="scene-insert">
         <button class="btn sm scene-add" data-scene="{{ scene.id }}"

@@ -313,3 +313,46 @@ function setUpPaneResizers() {
 
 document.addEventListener('DOMContentLoaded', setUpPaneToggles);
 document.addEventListener('DOMContentLoaded', setUpPaneResizers);
+
+/* A one-line question: the confirm dialog's shape with a text field in it.
+   Resolves to the typed string, or null when the person backs out. */
+function askDialog(message, confirmLabel, placeholder) {
+  return new Promise((resolve) => {
+    const veil = document.createElement('div');
+    veil.className = 'confirm-veil';
+    veil.innerHTML = `
+      <div class="confirm-box" role="dialog" aria-modal="true"
+           aria-label="Name" aria-describedby="ask-msg">
+        <p id="ask-msg"></p>
+        <input id="ask-value" autocomplete="off">
+        <div class="confirm-acts">
+          <button class="btn" data-cancel>Cancel</button>
+          <button class="btn pri" data-ok></button>
+        </div>
+      </div>`;
+    veil.querySelector('#ask-msg').textContent = message;
+    veil.querySelector('[data-ok]').textContent = confirmLabel || 'Create';
+    const field = veil.querySelector('#ask-value');
+    field.placeholder = placeholder || '';
+    const previousFocus = document.activeElement;
+    const close = (answer) => {
+      veil.remove();
+      if (previousFocus && previousFocus.focus) previousFocus.focus();
+      resolve(answer);
+    };
+    veil.querySelector('[data-cancel]').addEventListener('click', () => close(null));
+    veil.querySelector('[data-ok]').addEventListener('click', () => close(field.value));
+    veil.addEventListener('click', (event) => {
+      if (event.target === veil) close(null);
+    });
+    veil.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); close(null); }
+      if (event.key === 'Enter' && event.target === field) {
+        event.preventDefault();
+        close(field.value);
+      }
+    });
+    document.body.appendChild(veil);
+    field.focus();
+  });
+}

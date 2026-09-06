@@ -196,3 +196,24 @@ function reviewSuggestions(preview) {
     veil.querySelector('input, button').focus();
   });
 }
+
+/* A script can start empty and be written in Ripple, not only imported. */
+const newScript = document.getElementById('new-script');
+if (newScript) {
+  newScript.addEventListener('click', async () => {
+    const title = await askDialog(
+      'Name the script. You can rename it any time from the reader.',
+      'Create', 'WORKING TITLE');
+    if (title === null) return;
+    try {
+      const created = await api('/api/scripts/new', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+      window.location.href = `/scripts/${created.id}`;
+    } catch (error) {
+      toast(error.message, true);
+    }
+  });
+}

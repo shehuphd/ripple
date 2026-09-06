@@ -10,6 +10,8 @@
   <div class="search"><span class="ic">⌕</span>
     <input id="search" placeholder="Search" autocomplete="off"></div>
   {% if not model %}<a class="chip" href="/settings">◎ no model selected</a>{% endif %}
+  <button class="btn" id="new-script"
+          data-tip="Start an empty script and write it in Ripple">+ New script</button>
   <button class="btn pri" id="pick">+ Import script</button>
   <input type="file" id="file" class="hide"
          accept=".fountain,.fdx,.pdf,.txt,.xml,.text">

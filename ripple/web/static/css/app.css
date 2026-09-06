@@ -342,6 +342,19 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
    which is indented a third of the page and sits tight against its speech,
    the old rule laid the caption over the dialogue in the left margin. */
 .u:has(+ .ucap){margin-bottom:0}
+/* The write-here line at the end of every scene. Empty, it shows its hint;
+   typed into, it is the next line of the script, and a typed scene heading
+   is the next scene. */
+.u.ghost:empty::before{content:attr(data-hint);color:var(--t4)}
+.u.ghost{min-height:22px}
+/* The line being written names its type at the page's edge while it has
+   one, so the writer sees what Enter will make of it and can Tab past a
+   wrong guess before committing. */
+.u.ghost,.u[data-new]{position:relative}
+.u.ghost[data-type]:not([data-type=""])::after,
+.u[data-new][data-type]:not([data-type=""])::after{content:attr(data-type);
+  position:absolute;right:7px;top:3px;font-family:var(--sf);font-size:11px;
+  color:var(--t4);pointer-events:none;text-transform:none}
 .ucap{font-family:var(--sf);font-size:11.5px;color:var(--t4);
   margin:3px 0 12px 7px}
 .u.action + .ucap{margin-left:43px}
@@ -834,6 +847,16 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .confirm-box{background:var(--panel);border:.5px solid var(--bd2);border-radius:10px;
   padding:18px 20px;max-width:420px;box-shadow:0 18px 44px rgba(0,0,0,.55)}
 .confirm-box p{font-size:13.5px;white-space:pre-wrap;margin-bottom:16px}
+.confirm-box input{width:100%;background:var(--inset);border:.5px solid var(--bd2);
+  border-radius:7px;color:var(--t1);padding:8px 10px;font:inherit;font-size:13px;
+  margin-bottom:16px}
+.confirm-box input:focus{outline:none;border-color:var(--ac);
+  box-shadow:0 0 0 3px var(--ac-w)}
+/* The toolbar title renames in place, so its edit state reads as a field. */
+#script-title{cursor:text;border-radius:6px;padding:1px 7px;margin-left:-7px}
+#script-title:hover{background:var(--raised)}
+#script-title[contenteditable="plaintext-only"]{background:var(--ac-w);
+  outline:none;box-shadow:inset 0 0 0 1px var(--ac-d)}
 .confirm-acts{display:flex;gap:9px;justify-content:flex-end}
 
 /* Settings tabs */
@@ -853,7 +876,7 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 /* Scene structure controls: insertion, omission, restoration. */
 .sh .sctl{margin-left:auto;display:flex;gap:6px;opacity:0;transition:opacity .12s}
 .sh:hover .sctl,.sh:focus-within .sctl{opacity:1}
-.scene-insert{display:flex;justify-content:center;margin:2px 0;opacity:0;
+.scene-insert{display:flex;justify-content:center;margin:2px 0;opacity:.55;
   transition:opacity .12s}
 .scene-insert:hover,.scene-insert:focus-within{opacity:1}
 @media (prefers-reduced-motion:reduce){

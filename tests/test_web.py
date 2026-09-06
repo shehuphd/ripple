@@ -3428,3 +3428,100 @@ class TestRenameConfirmation:
         assert "Confirm rename" in body
         # A finding of any other type gets no such action.
         assert body.count("confirm-rename") == 1
+
+
+class TestAuthoring:
+    """Writing a script in the app: create, rename, compose, export."""
+
+    def _create(self, client, title="Fresh Pages") -> str:
+        response = client.post("/api/scripts/new", json={"title": title})
+        assert response.status_code == 200, response.text
+        return response.json()["id"]
+
+    def test_a_script_is_created_empty_and_opens(self, client):
+        script_id = self._create(client)
+        page = client.get(f"/scripts/{script_id}")
+        assert page.status_code == 200
+        assert "Fresh Pages" in page.text
+        assert "Type a scene heading to begin" in page.text
+
+    def test_a_blank_title_is_refused_with_the_reason(self, client):
+        response = client.post("/api/scripts/new", json={"title": "  "})
+        assert response.status_code == 400
+        assert "title" in response.json()["message"]
+
+    def test_a_rename_shows_everywhere(self, client):
+        script_id = self._create(client, "Working Title")
+        response = client.post(
+            f"/api/scripts/{script_id}/title", json={"title": "Opening Night"}
+        )
+        assert response.status_code == 200
+        assert "Opening Night" in client.get(f"/scripts/{script_id}").text
+        assert "Opening Night" in client.get("/").text
+
+    def test_lines_compose_save_and_delete_through_the_api(self, client):
+        script_id = self._create(client)
+        inserted = client.post(
+            f"/api/scripts/{script_id}/scenes",
+            json={"heading": "INT. STAGE - NIGHT", "body": "The house is empty."},
+        ).json()
+        scene_id = inserted["scene"]["scene_id"]
+
+        cue = client.post(
+            f"/api/scenes/{scene_id}/units", json={"text": "MARLA"}
+        )
+        assert cue.status_code == 200, cue.text
+        assert cue.json()["unit_type"] == "character"
+        line = client.post(
+            f"/api/scenes/{scene_id}/units",
+            json={"text": "Places, everyone.", "after_unit_id": cue.json()["unit_id"]},
+        )
+        assert line.status_code == 200, line.text
+
+        saved = client.post(
+            f"/api/units/{line.json()['unit_id']}/text",
+            json={"text": "Places, please."},
+        )
+        assert saved.status_code == 200, saved.text
+        assert "Places, please." in client.get(f"/scripts/{script_id}").text
+
+        gone = client.delete(f"/api/units/{line.json()['unit_id']}")
+        assert gone.status_code == 200, gone.text
+        assert "Places, please." not in client.get(f"/scripts/{script_id}").text
+
+    def test_a_cited_line_refuses_the_direct_paths(self, client):
+        script_id = _first_script(client)
+        import re as re_module
+
+        page = client.get(f"/scripts/{script_id}").text
+        unit_id = re_module.search(r'data-unit="([0-9a-f-]{36})"', page).group(1)
+        # The seeded corpus cites its lines, so the guard answers for both.
+        saved = client.post(f"/api/units/{unit_id}/text", json={"text": "changed"})
+        deleted = client.delete(f"/api/units/{unit_id}")
+        refusals = {saved.status_code, deleted.status_code}
+        assert refusals <= {400}, (saved.text, deleted.text)
+
+    def test_a_typed_heading_starts_a_scene_without_billing(self, client):
+        script_id = self._create(client, "Typed")
+        response = client.post(
+            f"/api/scripts/{script_id}/scenes",
+            json={"heading": "INT. OFFICE - DAY", "body": "", "extract": False},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["run"] is None
+        page = client.get(f"/scripts/{script_id}").text
+        assert "INT. OFFICE - DAY" in page
+        # The write-here line renders at the scene's end for the next line.
+        assert 'data-hint="Type the next line' in page
+
+    def test_export_downloads_fountain_that_reimports(self, client):
+        script_id = _first_script(client)
+        response = client.get(f"/api/scripts/{script_id}/export")
+        assert response.status_code == 200
+        assert ".fountain" in response.headers["content-disposition"]
+        assert response.text.startswith("Title: ")
+
+        from ripple.adapters import import_screenplay
+
+        result = import_screenplay(response.text.encode(), "again.fountain")
+        assert result.accepted, result.rejection_message

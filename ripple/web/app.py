@@ -29,7 +29,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
@@ -90,7 +90,7 @@ from ripple.graph.fixtures import seed_demo_graphs
 from ripple.graph.layout import DEPARTMENT_ORDER, script_layout
 from ripple.graph.layout import layout as graph_layout
 from ripple.llm import ProviderError, get_provider, get_query_provider
-from ripple.services import agent, changeset, conversations, pricing, spend
+from ripple.services import agent, authoring, changeset, conversations, pricing, spend
 from ripple.services import draft_report as report_service
 from ripple.services import drafts as drafts_service
 from ripple.services import duplicates as duplicates_service
@@ -2257,7 +2257,10 @@ def add_scene(
 
     run_progress = None
     _, model_id = settings_service.selected_model(session)
-    if model_id:
+    # A scene created while writing sends extract=false: billing a model
+    # read per skeleton scene would price the act of typing. Build graph
+    # picks the written scenes up later in one run.
+    if model_id and payload.get("extract", True):
         run = start_run(
             session,
             _uuid(script_id),
@@ -2266,6 +2269,98 @@ def add_scene(
         )
         run_progress = progress(session, run.id).__dict__
     return {"scene": inserted.__dict__, "run": run_progress}
+
+
+@app.post("/api/scripts/new")
+def create_script(
+    payload: dict[str, Any] = Body(...), session: Session = Depends(get_session)
+):
+    """Create an empty script to write into. The body takes `title`."""
+    script = authoring.create_script(session, str(payload.get("title") or ""))
+    return {"id": str(script.id), "title": script.title}
+
+
+@app.post("/api/scripts/{script_id}/title")
+def rename_script(
+    script_id: str,
+    payload: dict[str, Any] = Body(...),
+    session: Session = Depends(get_session),
+):
+    """Rename a script. The body takes `title`."""
+    try:
+        script = authoring.rename_script(
+            session, _uuid(script_id), str(payload.get("title") or "")
+        )
+    except ValueError as error:
+        raise HTTPException(404, str(error)) from None
+    return {"id": str(script.id), "title": script.title}
+
+
+@app.post("/api/units/{unit_id}/text")
+def save_unit_text(
+    unit_id: str,
+    payload: dict[str, Any] = Body(...),
+    session: Session = Depends(get_session),
+):
+    """Save one line's text directly, for a line no active fact cites."""
+    try:
+        return authoring.save_unit_text(
+            session, _uuid(unit_id), str(payload.get("text") or "")
+        )
+    except ValueError as error:
+        raise HTTPException(404, str(error)) from None
+
+
+@app.post("/api/scenes/{scene_id}/units")
+def insert_unit(
+    scene_id: str,
+    payload: dict[str, Any] = Body(...),
+    session: Session = Depends(get_session),
+):
+    """Write one new line into a scene.
+
+    The body takes `text` and an optional `after_unit_id` (omitted or null
+    writes the line at the top of the scene). The line's type is read from
+    the text by the same conventions the importers use.
+    """
+    try:
+        composed = authoring.insert_unit(
+            session,
+            _uuid(scene_id),
+            _uuid(payload["after_unit_id"]) if payload.get("after_unit_id") else None,
+            str(payload.get("text") or ""),
+            unit_type=payload.get("unit_type") or None,
+        )
+    except ValueError as error:
+        raise HTTPException(404, str(error)) from None
+    return composed.__dict__
+
+
+@app.delete("/api/units/{unit_id}")
+def delete_unit(unit_id: str, session: Session = Depends(get_session)):
+    """Remove one line, when no active fact cites it as its source."""
+    try:
+        return authoring.delete_unit(session, _uuid(unit_id))
+    except ValueError as error:
+        raise HTTPException(404, str(error)) from None
+
+
+@app.get("/api/scripts/{script_id}/export")
+def export_script(script_id: str, session: Session = Depends(get_session)):
+    """The script as Fountain plain text, downloaded as a file."""
+    try:
+        text = authoring.export_fountain(session, _uuid(script_id))
+        script = session.get(Script, _uuid(script_id))
+    except ValueError as error:
+        raise HTTPException(404, str(error)) from None
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", script.title).strip("-").lower() or "script"
+    return PlainTextResponse(
+        text,
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{slug}.fountain"'
+        },
+    )
 
 
 @app.post("/api/entities/{keep_id}/merge/{absorb_id}")
