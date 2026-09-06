@@ -1,8 +1,8 @@
 # Ripple
 
-Ripple treats a screenplay as a production database rather than a static document. It imports Fountain, Final Draft XML, PDF, and plain text, parses them into structured script units, extracts production entities and evidence-backed assertions into a graph, and shows the downstream production and continuity impact of a proposed edit before anything is applied.
+Ripple treats a screenplay as a production database rather than a static document. It imports Fountain, Final Draft XML, PDF, and plain text, or writes one from nothing in the page itself, parses them into structured script units, extracts production entities and evidence-backed assertions into a graph, and shows the downstream production and continuity impact of a proposed edit before anything is applied. A script written in Ripple exports as Fountain that imports back as itself.
 
-The loop is: select a unit, inspect its graph, edit it, see the ripple, decide.
+The loop is: write or import a script, build its graph, edit a line, see the ripple, decide.
 
 The full manual is [USAGE.md](https://github.com/shehuphd/ripple/blob/main/USAGE.md).
 
@@ -64,6 +64,16 @@ Each script ships a `dependencies.md` recording the entities, assertions, and pl
 Meaningful actions are traced with [TraceAct](https://github.com/traceact/traceact), full payloads included: every model call records its complete prompt, reply, and token usage (answer, hidden reasoning, input) on the trace, so a failed run is diagnosed by reading its trace rather than reconstructing a cause. Traces are written to `data/traces/`, which stays on the local machine and out of version control. Credential-shaped values are still caught by TraceAct's value-pattern redaction.
 
 Set `RIPPLE_TRACING=off` to disable trace writing.
+
+## Hooks
+
+The repository carries its own git hooks, so the docs gate travels with it:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`pre-push` runs ruff and the Shiplock gate and refuses a push whose docs have drifted from the code. `RIPPLE_PREPUSH_TESTS=1` runs the suite there too, and `git push --no-verify` goes round it. `commit-msg` refuses a co-author trailer.
 
 ## Tests
 

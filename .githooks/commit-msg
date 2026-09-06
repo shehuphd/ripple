@@ -1,0 +1,10 @@
+#!/bin/sh
+# Refuse any commit whose message carries a co-author trailer.
+#
+# The repository sets core.hooksPath to .githooks so the push gate travels
+# with it, which takes this repo out of any global hooks directory. This
+# keeps that guard in force here.
+if grep -qiE '^[[:space:]]*co-authored-by:' "$1"; then
+  echo "commit refused: co-author trailer in the message" >&2
+  exit 1
+fi

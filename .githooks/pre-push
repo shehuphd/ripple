@@ -1,0 +1,36 @@
+#!/bin/sh
+# Refuse a push whose docs have drifted from the code.
+#
+# Shiplock is the gate: declared docs present, banned words, version
+# alignment, the architecture doc's module list against ripple/, the
+# per-file manifest against the shipped sources, one declaration per
+# dependency, an expectation in every test, and README link hygiene. Ruff
+# runs first because a lint failure is cheaper to read than a docs report.
+#
+# The suite runs the same Shiplock gate in tests/test_docs.py, so this is
+# the last line rather than the only one. Set RIPPLE_PREPUSH_TESTS=1 to run
+# the whole suite here too. An emergency push goes through with
+# `git push --no-verify`.
+set -e
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+if [ ! -x .venv/bin/shiplock ]; then
+  echo "pre-push: no .venv/bin/shiplock. Run:" >&2
+  echo "  python3 -m venv .venv && .venv/bin/pip install -e \".[dev]\"" >&2
+  exit 1
+fi
+
+echo "pre-push: ruff"
+.venv/bin/ruff check ripple/ tests/ tools/
+
+echo "pre-push: shiplock"
+.venv/bin/shiplock check
+
+if [ "${RIPPLE_PREPUSH_TESTS:-0}" = "1" ]; then
+  echo "pre-push: pytest"
+  .venv/bin/python -m pytest -q
+fi
+
+echo "pre-push: clean"
