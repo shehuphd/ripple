@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-06 11:48:34 UTC
+Last updated: 2026-09-06 12:09:09 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `.venv`) are gitignored and not listed.
 
@@ -177,6 +177,7 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_settings.py` | Credential validation and model selection. |
 | `tests/test_spend.py` | Budget gate and refusal auditing. |
 | `tests/test_tracing.py` | TraceAct configuration and redaction. |
+| `tests/test_tools.py` | The commands under `tools/`: which findings a restatement picks, and what it refuses to write. |
 | `tests/test_paging.py` | The list pages' query-string contract: defaults left out of links, sort direction per column, page bounds, search over cell text. |
 | `tests/test_web.py` | Routes, pages, and API behaviour. |
 
@@ -185,6 +186,7 @@ Every file in the repository and what it does. Directories the application write
 | File | Purpose |
 |---|---|
 | `tools/render_screenplay.py` | Renders a Fountain source to PDF for calibration. |
+| `tools/restate_findings.py` | Rewrites stored continuity messages in the current continuity voice, dry run by default. |
 | `tools/seed_graph.py` | Writes a demo script's ground-truth graph by hand. |
 
 ## Demo corpus (`demo-scripts/`)

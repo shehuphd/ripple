@@ -293,7 +293,7 @@ class MyAdapter:
 
 ### Demo corpus
 
-`tools/render_screenplay.py` renders each authored Fountain source to Final Draft XML, PDF, and plain text. The renders diverge from the source in three documented ways: Fountain notes are stripped from every derivative, dual dialogue flattens to sequential dialogue, and shot lines type as action. Each script's `dependencies.md` records the expected extraction output and the expected divergence. `tools/seed_graph.py` writes a script's ground-truth graph by hand; the application runs the same builder at startup.
+`tools/render_screenplay.py` renders each authored Fountain source to Final Draft XML, PDF, and plain text. The renders diverge from the source in three documented ways: Fountain notes are stripped from every derivative, dual dialogue flattens to sequential dialogue, and shot lines type as action. Each script's `dependencies.md` records the expected extraction output and the expected divergence. `tools/seed_graph.py` writes a script's ground-truth graph by hand; the application runs the same builder at startup. `tools/restate_findings.py` rewrites stored continuity messages in the voice the current continuity prompt asks for, which a prompt change leaves behind: it prints what each would become and writes nothing until `--apply`, keeps the original wording on the row it replaces, and refuses a reply that comes back truncated or too short.
 
 ### Tests
 

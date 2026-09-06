@@ -120,6 +120,8 @@ def _call_model(
 # Hidden reasoning bills against the same ceiling as the prose: a 400-token
 # cap cut a two-sentence explanation off after 381 reasoning tokens.
 SYNTHESIS_MAX_OUTPUT_TOKENS = 2048
+# A restatement is one sentence, and the reasoning before it is not.
+RESTATE_MAX_OUTPUT_TOKENS = 2048
 SYNTHESIS_PROMPT_VERSION = "synthesize.v1"
 QUERY_PROMPT_VERSION = "query.v6"
 
@@ -500,13 +502,94 @@ def _deterministic_answer(
     )
 
 
+# A finding written before continuity.v2 argues the contradiction instead of
+# stating the new fact. These are the forms that prompt now names as wrong,
+# and finding one in a stored message is what marks it as the older voice.
+ARGUED_FORMS = ("contradicts", "the established", "conflicts with")
+
+
+def reads_as_argued(message: str) -> bool:
+    """Whether a stored finding message is written in the pre-v2 voice."""
+    lowered = message.lower()
+    return any(form in lowered for form in ARGUED_FORMS)
+
+
+def _wording_rule() -> str:
+    """The message rule the continuity prompt states, lifted verbatim.
+
+    Read from the prompt rather than copied, so a restatement is held to the
+    same instruction that writes new findings and cannot drift from it.
+    """
+    from ripple.extraction.continuity_judge import CONTINUITY_SYSTEM
+
+    return CONTINUITY_SYSTEM[
+        CONTINUITY_SYSTEM.index("Write each message") : CONTINUITY_SYSTEM.index(
+            "Severity:"
+        )
+    ].strip()
+
+
+RESTATE_SYSTEM_PREFIX = (
+    "You restate one continuity finding in the house voice. The facts are "
+    "fixed: say what the message says, about the same entities, in the form "
+    "below. Return the sentence and nothing else.\n\n"
+)
+
+
+def restate_message(
+    message: str,
+    lines: list[str],
+    provider: LLMProvider,
+    model_id: str,
+    session,
+    script_id=None,
+) -> str | None:
+    """Rewrite one stored finding message in the current continuity voice.
+
+    Returns None when the model gives nothing usable: a truncated reply, or a
+    fragment too short to be a sentence. The caller keeps the stored message
+    in that case, since half a sentence is worse than an old one. Hidden
+    reasoning bills against the output ceiling, so the ceiling is wide enough
+    for a model that thinks before writing eight words.
+    """
+    cited = "\n".join(f"- {line}" for line in lines)
+    prompt = (
+        f"Message to restate:\n{message}\n\n"
+        "The line it is about, for the wording of the thing itself:\n"
+        f"{cited or '- (none recorded)'}"
+    )
+    from ripple.extraction.continuity_judge import CONTINUITY_PROMPT_VERSION
+
+    result = _call_model(
+        provider,
+        model_id,
+        prompt,
+        RESTATE_SYSTEM_PREFIX + _wording_rule(),
+        RESTATE_MAX_OUTPUT_TOKENS,
+        # A continuity call under the current continuity prompt: the ledger
+        # and the audit row say so, and the stored request text records the
+        # question that was put.
+        "continuity",
+        CONTINUITY_PROMPT_VERSION,
+        session=session,
+        script_id=script_id,
+    )
+    if result.truncated:
+        return None
+    restated = result.text.strip().strip('"').strip()
+    return restated if len(restated.split()) >= 3 else None
+
+
 __all__ = [
+    "ARGUED_FORMS",
     "QUERY_PROMPT_VERSION",
     "SYNTHESIS_PROMPT_VERSION",
     "GroundedAnswer",
     "Synthesis",
     "answer_question",
     "deterministic_summary",
+    "reads_as_argued",
+    "restate_message",
     "severity_for",
     "synthesize",
     "ungrounded_entities",

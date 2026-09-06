@@ -210,6 +210,8 @@ All notable changes to Ripple are documented here.
 
 - **Row actions keep their distance.** Review and Dismiss were spaced by a left margin alone, so a narrow actions column that stacked them left a destructive action a few pixels under a safe one. The actions in a row space themselves in both directions.
 
+- **`tools/restate_findings.py` brings stored findings up to the current voice.** A finding keeps the words the model wrote when it was raised, so a prompt change leaves older rows reading the older way. The command restates them under the rule the live continuity prompt states, one audited call each, dry run until `--apply`, `--script` to limit it and `--all` to take every open finding. The original wording stays on the row, and a reply that comes back truncated or too short is refused rather than written.
+
 - **A finding says what the script now says.** Messages read as an argument that something conflicts ("Changing the grey walking-costume to a green walking-costume contradicts the established costume color."). They now state the new fact and let the conflict speak for itself ("Grey walking-costume is now a scarlet riding-habit"), which is shorter to read in a list and faster to act on. The continuity prompt asks for that form and names the phrasings to avoid, at `continuity.v2`, and the deterministic orphan message follows it too ("Blue sedan is used in scenes 22, 31, 44 but no longer introduced"). Messages already stored keep the words the model wrote at the time; the audit row records which prompt wrote them.
 
 - **Severity dots draw their colour everywhere.** The three severity colours were scoped to the toolbar chip, so every finding row in the preview overlay drew an empty circle where its severity should have been.

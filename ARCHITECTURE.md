@@ -23,7 +23,8 @@ ripple/
 │   ├── web/            # FastAPI app, Jinja2 templates, static CSS/JS
 │   └── tracing.py      # TraceAct configuration
 ├── tests/              # pytest, one file per module above plus adversarial/integration tests
-├── tools/              # Developer commands (render_screenplay.py, seed_graph.py)
+├── tools/              # Developer commands (render_screenplay.py, seed_graph.py,
+│                      #   restate_findings.py)
 ├── demo-scripts/       # Bundled screenplay corpus, each with an expected-output dependencies.md
 └── data/               # Runtime state: sqlite db, secrets.env, traces/ (gitignored)
 ```
