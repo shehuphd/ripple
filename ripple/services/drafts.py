@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from traceact import ActionTrace
 
+from ripple.db.ids import as_uuid
 from ripple.db.models import (
     Assertion,
     Entity,
@@ -95,7 +96,7 @@ def preview_link(session, script_id, predecessor_script_id) -> dict:
     )
 
     def scene_card(scene_id) -> dict:
-        scene = session.get(Scene, _uuid(scene_id))
+        scene = session.get(Scene, as_uuid(scene_id))
         first = session.scalar(
             select(ScriptUnit.current_text)
             .where(
@@ -171,12 +172,12 @@ def link_draft(
         unit_map: dict = {}  # old unit id -> new unit id, unchanged scenes
         unchanged_pairs = []
         for pair in alignment.pairs:
-            new_scene = session.get(Scene, _uuid(pair.new_id))
-            new_scene.predecessor_scene_id = _uuid(pair.old_id)
+            new_scene = session.get(Scene, as_uuid(pair.new_id))
+            new_scene.predecessor_scene_id = as_uuid(pair.old_id)
             new_scene.lineage_kind = pair.kind
             if pair.kind == "unchanged":
-                old_units = _units_of(session, _uuid(pair.old_id))
-                new_units = _units_of(session, _uuid(pair.new_id))
+                old_units = _units_of(session, as_uuid(pair.old_id))
+                new_units = _units_of(session, as_uuid(pair.new_id))
                 if len(old_units) != len(new_units):
                     # Content said identical but structure disagrees; the
                     # safe reading is modified, so the scene re-extracts.
@@ -185,7 +186,7 @@ def link_draft(
                     result.to_extract.append(pair.new_id)
                     continue
                 unchanged_pairs.append(pair)
-                scene_map[_uuid(pair.old_id)] = new_scene.id
+                scene_map[as_uuid(pair.old_id)] = new_scene.id
                 for old_unit, new_unit in zip(old_units, new_units, strict=True):
                     unit_map[old_unit.id] = new_unit.id
                     new_unit.predecessor_unit_id = old_unit.id
@@ -195,7 +196,7 @@ def link_draft(
                 result.modified += 1
                 result.to_extract.append(pair.new_id)
         for scene_id in alignment.inserted:
-            scene = session.get(Scene, _uuid(scene_id))
+            scene = session.get(Scene, as_uuid(scene_id))
             scene.lineage_kind = "inserted"
             result.inserted += 1
             result.to_extract.append(scene_id)
@@ -349,8 +350,8 @@ def _link_units(session, old_scene_id, new_scene_id) -> None:
     The graph is not carried here (the scene re-extracts), but the lineage
     lets a later pass tell an edited line from an untouched one.
     """
-    old_units = _units_of(session, _uuid(old_scene_id))
-    new_units = _units_of(session, _uuid(new_scene_id))
+    old_units = _units_of(session, as_uuid(old_scene_id))
+    new_units = _units_of(session, as_uuid(new_scene_id))
     mapping = align_units(
         [unit.current_text for unit in old_units],
         [unit.current_text for unit in new_units],
@@ -503,7 +504,3 @@ def _in_chain(session, start: Script, target_id) -> bool:
     return False
 
 
-def _uuid(value):
-    import uuid as uuid_module
-
-    return value if not isinstance(value, str) else uuid_module.UUID(value)

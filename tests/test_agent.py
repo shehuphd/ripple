@@ -41,7 +41,9 @@ def world(tmp_path, night_freight_fountain):
 
     scenes = list(
         session.scalars(
-            select(Scene).where(Scene.script_id == script.id).order_by(Scene.sequence_index)
+            select(Scene)
+            .where(Scene.script_id == script.id)
+            .order_by(Scene.sequence_index)
         )
     )
     units = list(
@@ -129,7 +131,9 @@ class TestTheLoop:
                     input_tokens=10,
                     output_tokens=5,
                 ),
-                AgentReply(text="Here is what I found.", input_tokens=8, output_tokens=4),
+                AgentReply(
+                    text="Here is what I found.", input_tokens=8, output_tokens=4
+                ),
             ],
         )
         assert [run.name for run in turn.tools] == ["coverage"]
@@ -164,7 +168,9 @@ class TestTheLoop:
         turn = _run(
             world,
             [
-                AgentReply(text="", tool_calls=[ToolCall("get_scene", {"scene": "999"})]),
+                AgentReply(
+                    text="", tool_calls=[ToolCall("get_scene", {"scene": "999"})]
+                ),
                 AgentReply(text="That scene does not exist."),
             ],
         )
@@ -179,10 +185,7 @@ class TestTheLoop:
                 AgentReply(text="Nothing open."),
             ],
         )
-        purposes = [
-            row.purpose
-            for row in world["session"].scalars(select(ModelCall))
-        ]
+        purposes = [row.purpose for row in world["session"].scalars(select(ModelCall))]
         assert purposes == ["agent", "agent"]
 
     def test_a_turn_refuses_without_a_model(self, world):
@@ -282,12 +285,12 @@ class TestThePlanStage:
 
         world["provider"].script_turns(
             [
-                AgentReply(text="", tool_calls=[ToolCall("coverage", {"entity": "sedan"})]),
+                AgentReply(
+                    text="", tool_calls=[ToolCall("coverage", {"entity": "sedan"})]
+                ),
                 AgentReply(
                     text="",
-                    tool_calls=[
-                        ToolCall("state_plan", {"rows": []})
-                    ],
+                    tool_calls=[ToolCall("state_plan", {"rows": []})],
                 ),
                 AgentReply(text="Plan stated."),
             ]
@@ -403,7 +406,9 @@ class TestPlanStageEnforcement:
             [
                 AgentReply(
                     text="",
-                    tool_calls=[ToolCall("draft_scene", {"scene": "1", "instruction": "x"})],
+                    tool_calls=[
+                        ToolCall("draft_scene", {"scene": "1", "instruction": "x"})
+                    ],
                 ),
                 AgentReply(text="Understood."),
             ]

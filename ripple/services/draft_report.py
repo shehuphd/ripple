@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from traceact import ActionTrace
 
+from ripple.db.ids import as_uuid
 from ripple.db.models import (
     Assertion,
     ChangeSet,
@@ -366,7 +367,7 @@ def _scenes_using(session, script: Script, entity: Entity) -> list[str]:
         if unit is None:
             continue
         scene = session.get(Scene, unit.scene_id)
-        label = scene.display_scene_number or "—"
+        label = scene.label
         if label not in seen:
             seen.add(label)
             numbers.append(label)
@@ -552,7 +553,7 @@ def _judge_changed_scenes(
         packet = retrieve(session, script.id, affected, scene.sequence_index)
         if packet.total_items == 0:
             continue
-        label = scene.display_scene_number or "?"
+        label = scene.label
         diff_payload = {
             "removed": [],
             "added": [],
@@ -593,7 +594,7 @@ def _judge_changed_scenes(
                 session.add(
                     FindingEvidence(
                         finding_id=finding.id,
-                        script_unit_id=_uuid(unit_id),
+                        script_unit_id=as_uuid(unit_id),
                         rank=rank,
                         match_reason="continuity",
                     )
@@ -680,7 +681,3 @@ def _summary(session, script: Script, report: DraftReport) -> str:
     return " ".join(parts)
 
 
-def _uuid(value):
-    import uuid as uuid_module
-
-    return value if not isinstance(value, str) else uuid_module.UUID(value)

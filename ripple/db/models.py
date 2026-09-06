@@ -49,8 +49,8 @@ def _uuid_pk() -> Mapped[uuid.UUID]:
     return mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
 
 
-def _now() -> datetime:
-    """Timezone-aware creation timestamp."""
+def now() -> datetime:
+    """The timezone-aware moment every timestamp column and service uses."""
     return datetime.now(UTC)
 
 
@@ -191,9 +191,9 @@ class Script(Base):
         ForeignKey("scripts.id", ondelete="SET NULL")
     )
     current_version: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, onupdate=_now
+        DateTime(timezone=True), default=now, onupdate=now
     )
     # When the reader last displayed this script. Distinct from updated_at,
     # which moves on any write: a script edited by an accepted change was not
@@ -229,7 +229,7 @@ class Import(Base):
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
     outcome: Mapped[str] = mapped_column(String(32))
     warnings_json: Mapped[list | None] = mapped_column(JSON, default=list)
-    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     script: Mapped[Script] = relationship(back_populates="imports")
 
@@ -275,6 +275,14 @@ class Scene(Base):
     )
 
 
+    @property
+    def label(self) -> str:
+        """The number the script prints, or a dash for a scene it never
+        numbered. Position is never substituted: an intercut sub-heading or
+        an OMITTED slug given its index would collide with a numbered scene
+        further down the spine."""
+        return self.display_scene_number or "—"
+
 class ScriptUnit(Base):
     """The atomic editable object."""
 
@@ -314,7 +322,7 @@ class ScriptUnit(Base):
         ForeignKey("script_units.id", ondelete="SET NULL")
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, onupdate=_now
+        DateTime(timezone=True), default=now, onupdate=now
     )
 
     scene: Mapped[Scene] = relationship(back_populates="units")
@@ -381,7 +389,7 @@ class Entity(Base):
     # portable between PostgreSQL and SQLite. Written via naming.normalize.
     normalized_name: Mapped[str] = mapped_column(String(300))
     description: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     # The predecessor draft's entity this one continues. The chain is the
     # entity's cross-draft identity: Mara in draft 2 links to Mara in draft
     # 1, so her history survives a new draft, and a rename is a new label on
@@ -442,7 +450,7 @@ class EntityDistinction(Base):
     entity_b_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("entities.id", ondelete="CASCADE")
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 class EntityAttribute(Base):
@@ -502,7 +510,7 @@ class EntityAttribute(Base):
     prompt_version: Mapped[str | None] = mapped_column(String(32))
     model_id: Mapped[str | None] = mapped_column(String(120))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     entity: Mapped[Entity] = relationship(back_populates="attributes")
 
@@ -600,7 +608,7 @@ class Assertion(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Derived, never set by callers. See the dedupe index above.
     dedupe_key: Mapped[str] = mapped_column(String(400), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     def compute_dedupe_key(self) -> str:
         """The identity of this edge: both endpoints, the predicate, the evidence."""
@@ -713,7 +721,7 @@ class ChangeSet(Base):
     status: Mapped[str] = mapped_column(String(32), default="pending")
     base_script_version: Mapped[int] = mapped_column(Integer)
     severity: Mapped[str | None] = mapped_column(String(16))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     units: Mapped[list[ChangeSetUnit]] = relationship(
@@ -804,7 +812,7 @@ class ContinuityFinding(Base):
     # Typed data an actionable finding carries beyond its message: a
     # possible_rename holds the two entity ids its Confirm action joins.
     payload_json: Mapped[dict | None] = mapped_column(JSON)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     change_set: Mapped[ChangeSet] = relationship(back_populates="findings")
@@ -855,7 +863,7 @@ class RippleReport(Base):
     model_id: Mapped[str | None] = mapped_column(String(120))
     prompt_version: Mapped[str | None] = mapped_column(String(32))
     generated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now
+        DateTime(timezone=True), default=now
     )
 
 
@@ -874,7 +882,7 @@ class QueryLog(Base):
     cited_assertion_ids_json: Mapped[list | None] = mapped_column(JSON, default=list)
     model_id: Mapped[str | None] = mapped_column(String(120))
     prompt_version: Mapped[str | None] = mapped_column(String(32))
-    asked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    asked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 # What a conversation turn can be. "user" is what the person typed; "ripple"
@@ -901,10 +909,10 @@ class Conversation(Base):
         ForeignKey("scripts.id", ondelete="CASCADE")
     )
     title: Mapped[str] = mapped_column(String(120))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
-    turns: Mapped[list["ConversationTurn"]] = relationship(
+    turns: Mapped[list[ConversationTurn]] = relationship(
         back_populates="conversation",
         cascade="all, delete-orphan",
         order_by="ConversationTurn.created_at",
@@ -938,7 +946,7 @@ class ConversationTurn(Base):
     change_set_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("change_sets.id", ondelete="SET NULL")
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     conversation: Mapped[Conversation] = relationship(back_populates="turns")
 
@@ -998,7 +1006,7 @@ class ModelCall(Base):
     outcome: Mapped[str] = mapped_column(String(16))
     error_message: Mapped[str | None] = mapped_column(Text)
     validation_json: Mapped[dict | None] = mapped_column(JSON)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 class BudgetSetting(Base):
@@ -1019,7 +1027,7 @@ class BudgetSetting(Base):
     key: Mapped[str] = mapped_column(String(32), primary_key=True)
     max_total_tokens: Mapped[int] = mapped_column(Integer)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, onupdate=_now
+        DateTime(timezone=True), default=now, onupdate=now
     )
 
 
@@ -1031,7 +1039,7 @@ class UiPreference(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str] = mapped_column(String(120))
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, onupdate=_now
+        DateTime(timezone=True), default=now, onupdate=now
     )
 
 
@@ -1048,5 +1056,5 @@ class AppConfiguration(Base):
     provider_id: Mapped[str | None] = mapped_column(String(32))
     model_id: Mapped[str | None] = mapped_column(String(120))
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, onupdate=_now
+        DateTime(timezone=True), default=now, onupdate=now
     )

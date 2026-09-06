@@ -9,9 +9,11 @@ audit table it would have written the call to.
 
 from __future__ import annotations
 
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -137,7 +139,7 @@ def actions(session: Session) -> list[dict]:
     runs = list(session.scalars(select(ExtractionRun)))
     questions = list(session.scalars(select(QueryLog).order_by(QueryLog.asked_at)))
     scene_numbers = {
-        row.id: row.display_scene_number or str(row.sequence_index + 1)
+        row.id: row.label
         for row in session.scalars(select(Scene))
     }
 
@@ -263,6 +265,44 @@ def actions(session: Session) -> list[dict]:
         )
     rows.sort(key=lambda row: row["when"] or "", reverse=True)
     return rows
+
+
+def elapsed_ms(started: float) -> int:
+    """Milliseconds since a `time.perf_counter()` reading."""
+    return int((time.perf_counter() - started) * 1000)
+
+
+def note_result(call: ModelCall, result: Any, started: float) -> None:
+    """Copy a completed generation onto its audit row.
+
+    Fields only: the caller decides when the row reaches the session, since
+    a preview persists its audit rows in one commit before any rollback.
+    """
+    call.response_text = result.text
+    call.input_tokens = result.input_tokens
+    call.output_tokens = result.output_tokens
+    call.reasoning_tokens = getattr(result, "reasoning_tokens", None)
+    call.duration_ms = elapsed_ms(started)
+
+
+def record_success(
+    session: Session, call: ModelCall, result: Any, started: float
+) -> None:
+    """A completed generation, written to the ledger."""
+    note_result(call, result, started)
+    session.add(call)
+    session.flush()
+
+
+def record_failure(
+    session: Session, call: ModelCall, error: Any, started: float
+) -> None:
+    """A provider failure, written to the ledger with the provider's message."""
+    call.outcome = "provider_error"
+    call.error_message = error.message
+    call.duration_ms = elapsed_ms(started)
+    session.add(call)
+    session.flush()
 
 
 def check_budget(session: Session, refusal: ModelCall | None = None) -> None:

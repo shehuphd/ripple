@@ -46,15 +46,22 @@ from ripple.db.models import (
 from ripple.db.repository import AgentSettings
 from ripple.graph.continuity import detect_orphaned_references
 from ripple.llm.base import AgentReply, LLMProvider, ProviderError
+from ripple.services import pricing
 from ripple.services.preview import (
     PreviewFailed,
     PreviewRefused,
     UnitEdit,
     preview_changes,
 )
-from ripple.services import pricing
 from ripple.services.retrieval import build_packet, fold
-from ripple.services.spend import BudgetExceeded, check_budget
+from ripple.services.spend import (
+    BudgetExceeded,
+    check_budget,
+    elapsed_ms,
+    note_result,
+    record_failure,
+    record_success,
+)
 from ripple.tracing import ensure_configured
 
 logger = logging.getLogger(__name__)
@@ -456,11 +463,7 @@ def route_message(
     except (BudgetExceeded, ProviderError) as error:
         logger.info("routing fell back to the question path: %s", error)
         return "question"
-    call.response_text = result.text
-    call.input_tokens = result.input_tokens
-    call.output_tokens = result.output_tokens
-    call.reasoning_tokens = result.reasoning_tokens
-    call.duration_ms = int((time.perf_counter() - started) * 1000)
+    note_result(call, result, started)
     kind = "question"
     try:
         kind = json.loads(result.text).get("kind", "question")
@@ -669,12 +672,8 @@ def _call_orchestrator(
             max_output_tokens=MAX_OUTPUT_TOKENS,
         )
     except ProviderError as error:
-        call.outcome = "provider_error"
-        call.error_message = error.message
-        call.duration_ms = int((time.perf_counter() - started) * 1000)
-        session.add(call)
+        record_failure(session, call, error, started)
         state.audit.append(call)
-        session.flush()
         raise
     call.response_text = json.dumps(
         {
@@ -689,7 +688,7 @@ def _call_orchestrator(
     call.input_tokens = reply.input_tokens
     call.output_tokens = reply.output_tokens
     call.reasoning_tokens = reply.reasoning_tokens
-    call.duration_ms = int((time.perf_counter() - started) * 1000)
+    call.duration_ms = elapsed_ms(started)
     session.add(call)
     state.audit.append(call)
     session.flush()
@@ -891,7 +890,7 @@ def _tool_get_scene(
     )[:MAX_SCENE_UNITS]
     return ToolRun(
         "get_scene",
-        f"Read scene {scene.display_scene_number or scene.sequence_index + 1}",
+        f"Read scene {scene.label}",
         {
             "scene": scene.display_scene_number,
             "heading": _fence(state, scene.heading or ""),
@@ -1005,26 +1004,16 @@ def _tool_draft(
             json_schema=DRAFT_SCHEMA,
         )
     except ProviderError as error:
-        call.outcome = "provider_error"
-        call.error_message = error.message
-        call.duration_ms = int((time.perf_counter() - started) * 1000)
-        session.add(call)
+        record_failure(session, call, error, started)
         state.audit.append(call)
-        session.flush()
         return ToolRun(
             "draft_scene",
             "The drafting call failed",
             {"error": error.message},
             ok=False,
         )
-    call.response_text = result.text
-    call.input_tokens = result.input_tokens
-    call.output_tokens = result.output_tokens
-    call.reasoning_tokens = result.reasoning_tokens
-    call.duration_ms = int((time.perf_counter() - started) * 1000)
-    session.add(call)
+    record_success(session, call, result, started)
     state.audit.append(call)
-    session.flush()
     state.model_calls += 1
     state.tokens += (result.input_tokens or 0) + (result.output_tokens or 0)
     state.tokens += result.reasoning_tokens or 0
@@ -1051,7 +1040,7 @@ def _tool_draft(
             continue
         state.drafts[unit_id] = text
         kept.append({"unit_id": unit_id, "before": originals[unit_id], "after": text})
-    label = scene.display_scene_number or str(scene.sequence_index + 1)
+    label = scene.label
     if label not in state.draft_scenes and kept:
         state.draft_scenes.append(label)
     if not kept and not refused:
@@ -1284,7 +1273,7 @@ def _tool_preview_omit(
         establishes,
         {str(row.id) for row in rows},
     )
-    label = scene.display_scene_number or str(scene.sequence_index + 1)
+    label = scene.label
     return ToolRun(
         "preview_omit",
         f"Checked what cutting scene {label} breaks",

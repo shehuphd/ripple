@@ -190,6 +190,16 @@ All notable changes to Ripple are documented here.
 - **`script_units.speaker_name`**, so a reload between import and extraction does not lose who was speaking.
 - **Third demo screenplay**, SEVEN MINUTES, targeting graph behaviour: accented names, an omitted scene, an intercut, an entity that changes state, and an identity that resolves only in the final act.
 
+### Changed
+
+- **The Entities and library pages read the graph in a handful of queries.** Entities used to run two queries per entity plus the duplicate detector's two per candidate pair, 2,187 statements and 2.6 seconds over the demo corpus; aliases and citation counts now arrive in one grouped read each and the detector counts citations once per script, 53 statements and under half a second for the same page. The library reads its import records, scene counts, and page counts across all scripts at once instead of four times per script.
+
+- **One clock, one identifier parser, one scene label.** The services share `now()`, `as_uuid()`, and `Scene.label` (the printed scene number, or a dash for an unnumbered scene) instead of each carrying its own copy, and every model call records its outcome through the same two ledger helpers.
+
+### Removed
+
+- `GET /api/scripts/{id}/runs`, an extraction-run listing nothing called, and a stylesheet the pages never loaded.
+
 ### Fixed
 
 - **Continuity findings survive their own validation again.** The evidence packet exposed each item's unit id while the system prompt told the model to cite assertion ids, so every citation failed the validator and the continuity pass silently returned zero findings. The packet now carries the assertion id, and the demo corpus's planted conflicts (a repainted sedan against a later scene that still calls it blue, a cut forklift a character hides behind later) come back as warnings with citations.

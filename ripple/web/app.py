@@ -40,6 +40,7 @@ from traceact import ActionTrace
 from ripple.adapters import import_screenplay
 from ripple.adapters.base import MAX_UPLOAD_BYTES, ImportRejected
 from ripple.config.secrets import SecretStore
+from ripple.db.ids import as_uuid
 from ripple.db.models import (
     Assertion,
     ChangeOperation,
@@ -48,7 +49,6 @@ from ripple.db.models import (
     Conversation,
     Entity,
     EntityAlias,
-    ExtractionRun,
     Import,
     ModelCall,
     QueryLog,
@@ -88,8 +88,7 @@ from ripple.graph.fixtures import seed_demo_graphs
 from ripple.graph.layout import DEPARTMENT_ORDER, script_layout
 from ripple.graph.layout import layout as graph_layout
 from ripple.llm import ProviderError, get_provider, get_query_provider
-from ripple.services import agent, changeset, pricing, spend
-from ripple.services import conversations
+from ripple.services import agent, changeset, conversations, pricing, spend
 from ripple.services import draft_report as report_service
 from ripple.services import drafts as drafts_service
 from ripple.services import duplicates as duplicates_service
@@ -105,9 +104,10 @@ from ripple.services.synthesizer import (
     synthesize,
     ungrounded_entities,
 )
+from ripple.text import when_label
 from ripple.tracing import configure_tracing
 from ripple.tracing import ensure_configured as ensure_tracing
-from ripple.web.stats import eighths, page_of, runtime, script_pages
+from ripple.web.stats import eighths, page_of, pages_by_script, runtime, script_pages
 
 logger = logging.getLogger(__name__)
 
@@ -455,13 +455,26 @@ def library(
             .order_by(Script.last_opened_at.desc())
         )
     scripts = list(session.scalars(query))
+    ids = [script.id for script in scripts]
+    # One read per figure across the library, rather than four per script.
+    imports: dict = {}
+    for record in session.scalars(
+        select(Import).where(Import.script_id.in_(ids)).order_by(Import.imported_at)
+    ):
+        imports.setdefault(record.script_id, record)
+    scene_counts = dict(
+        session.execute(
+            select(Scene.script_id, func.count())
+            .where(Scene.script_id.in_(ids))
+            .group_by(Scene.script_id)
+        ).all()
+    )
+    page_counts = pages_by_script(session, ids)
 
     rows = []
     for script in scripts:
-        record = session.scalar(
-            select(Import).where(Import.script_id == script.id).limit(1)
-        )
-        pages = script_pages(session, script.id)
+        record = imports.get(script.id)
+        pages = page_counts.get(script.id, 1)
         rows.append(
             {
                 "id": str(script.id),
@@ -470,11 +483,7 @@ def library(
                     record.detected_format if record else "", "Unknown"
                 ),
                 "pages": pages,
-                "scenes": session.scalar(
-                    select(func.count())
-                    .select_from(Scene)
-                    .where(Scene.script_id == script.id)
-                ),
+                "scenes": scene_counts.get(script.id, 0),
                 "runtime": runtime(pages),
                 "outcome": script.import_status,
                 "outcome_label": OUTCOME_LABELS.get(
@@ -783,7 +792,7 @@ def ask_page(
                     {
                         "id": str(row.id),
                         "question": row.question,
-                        "asked_at": row.asked_at.strftime("%d %b %H:%M"),
+                        "asked_at": when_label(row.asked_at),
                     }
                     for row in session.scalars(
                         select(QueryLog)
@@ -852,7 +861,7 @@ def reports_page(request: Request, session: Session = Depends(get_session)):
         {
             "cells": {
                 "when": {
-                    "text": report.generated_at.strftime("%d %b %H:%M"),
+                    "text": when_label(report.generated_at),
                     "class": "tiny muted num",
                 },
                 "severity": {
@@ -939,7 +948,7 @@ def findings_page(
         {
             "cells": {
                 "when": {
-                    "text": finding.created_at.strftime("%d %b %H:%M"),
+                    "text": when_label(finding.created_at),
                     "class": "tiny muted num",
                 },
                 "status": {
@@ -1087,7 +1096,7 @@ def traces_page(request: Request, session: Session = Depends(get_session)):
         {
             "cells": {
                 "when": {
-                    "text": call.created_at.strftime("%d %b %H:%M"),
+                    "text": when_label(call.created_at),
                     "class": "tiny muted num",
                 },
                 "outcome": {
@@ -1340,8 +1349,8 @@ def entities_page(request: Request, session: Session = Depends(get_session)):
         .order_by(Entity.entity_type, Entity.canonical_name)
     ).all()
     items = []
-    for script_id in {script.id for _, script in rows}:
-        script = session.get(Script, script_id)
+    scripts = {script.id: script for _, script in rows}
+    for script_id, script in scripts.items():
         for pair in duplicates_service.detect(session, script_id):
             items.append(
                 {
@@ -1395,21 +1404,17 @@ def entities_page(request: Request, session: Session = Depends(get_session)):
                     ],
                 }
             )
+    # Aliases and citation counts for every entity in two reads, rather
+    # than two reads per entity.
+    aliases_of: dict = {}
+    for entity_id, alias in session.execute(
+        select(EntityAlias.entity_id, EntityAlias.alias)
+    ).all():
+        aliases_of.setdefault(entity_id, []).append(alias)
+    cited = duplicates_service.cited_counts(session)
     for entity, script in rows:
-        aliases = list(
-            session.scalars(
-                select(EntityAlias.alias).where(EntityAlias.entity_id == entity.id)
-            )
-        )
-        uses = session.scalar(
-            select(func.count())
-            .select_from(Assertion)
-            .where(
-                Assertion.active.is_(True),
-                (Assertion.subject_entity_id == entity.id)
-                | (Assertion.object_entity_id == entity.id),
-            )
-        )
+        aliases = aliases_of.get(entity.id, [])
+        uses = cited.get(entity.id, 0)
         items.append(
             {
                 "id": str(entity.id),
@@ -1490,7 +1495,7 @@ def assertions_page(request: Request, session: Session = Depends(get_session)):
     active_total = 0
     inactive_total = 0
     for script_id, script in scripts.items():
-        labels = _labels(session, script_id)
+        labels = graph_labels(session, script_id)
         active_rows = list(
             session.scalars(
                 select(Assertion).where(
@@ -1815,7 +1820,7 @@ def unit_requirements(unit_id: str, session: Session = Depends(get_session)):
         )
     )
     scene = session.get(Scene, unit.scene_id)
-    labels = _labels(session, scene.script_id)
+    labels = graph_labels(session, scene.script_id)
     entity_ids = {
         endpoint
         for assertion in assertions
@@ -1862,7 +1867,7 @@ def unit_graph(
     if unit is None:
         raise HTTPException(404, "No such unit")
     scene = session.get(Scene, unit.scene_id)
-    labels = _labels(session, scene.script_id)
+    labels = graph_labels(session, scene.script_id)
     wanted = set(departments.split(",")) if departments else None
 
     seed = list(
@@ -2029,7 +2034,7 @@ def script_graph(
     script = session.get(Script, _uuid(script_id))
     if script is None:
         raise HTTPException(404, "No such script")
-    labels = _labels(session, script.id)
+    labels = graph_labels(session, script.id)
     wanted = set(departments.split(",")) if departments else None
 
     nodes: dict[str, dict[str, Any]] = {}
@@ -2102,7 +2107,7 @@ def entity_detail(entity_id: str, session: Session = Depends(get_session)):
     entity = session.get(Entity, _uuid(entity_id))
     if entity is None:
         raise HTTPException(404, "No such entity")
-    labels = _labels(session, entity.script_id)
+    labels = graph_labels(session, entity.script_id)
 
     assertions = list(
         session.scalars(
@@ -2530,27 +2535,6 @@ def extraction_progress(run_id: str, session: Session = Depends(get_session)):
     return payload
 
 
-@app.get("/api/scripts/{script_id}/runs")
-def script_runs(script_id: str, session: Session = Depends(get_session)):
-    """Extraction runs for a script, newest first."""
-    runs = session.scalars(
-        select(ExtractionRun)
-        .where(ExtractionRun.script_id == _uuid(script_id))
-        .order_by(ExtractionRun.started_at.desc())
-    )
-    return [
-        {
-            "id": str(run.id),
-            "status": run.status,
-            "model_id": run.model_id,
-            "total": run.total_scenes,
-            "completed": run.completed_scenes,
-            "failed": run.failed_scenes,
-        }
-        for run in runs
-    ]
-
-
 # Ripple preview
 
 
@@ -2599,7 +2583,7 @@ def _preview_payload(
                 **edit,
                 # An unnumbered scene shows a dash rather than its position,
                 # which would collide with a numbered scene elsewhere.
-                "scene_number": edit_scene.display_scene_number or "—",
+                "scene_number": edit_scene.label,
             }
         )
     first = edits[0]
@@ -3220,7 +3204,7 @@ def stored_query(query_id: str, session: Session = Depends(get_session)):
         if ids
         else []
     )
-    labels = _labels(session, record.script_id)
+    labels = graph_labels(session, record.script_id)
     scene_of = {
         unit_id: {"number": number, "heading": heading}
         for unit_id, number, heading in session.execute(
@@ -3269,7 +3253,7 @@ def stored_query(query_id: str, session: Session = Depends(get_session)):
         # grounding set at ask time, and the graph may have changed since.
         "ungrounded_entities": None,
         "stored": True,
-        "asked_at": record.asked_at.strftime("%d %b %H:%M"),
+        "asked_at": when_label(record.asked_at),
     }
 
 
@@ -3352,16 +3336,10 @@ def choose_fallback(
 
 def _uuid(value: str):
     """Parse a path identifier, refusing anything that is not a UUID."""
-    import uuid as uuid_module
-
     try:
-        return uuid_module.UUID(value)
+        return as_uuid(value)
     except ValueError:
         raise HTTPException(400, "Not a valid identifier") from None
-
-
-def _labels(session: Session, script_id) -> dict[Any, str]:
-    return graph_labels(session, script_id)
 
 
 def _entity_type(session: Session, entity_id) -> str | None:

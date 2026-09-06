@@ -32,6 +32,7 @@ from ripple.db.models import (
     Scene,
     Script,
     ScriptUnit,
+    now,
 )
 from ripple.graph.continuity import detect_orphaned_references
 from ripple.services import changeset
@@ -454,7 +455,7 @@ def restore_scene(session: Session, scene_id) -> OmittedScene:
             )
         ):
             finding.status = "resolved"
-            finding.resolved_at = changeset._now()
+            finding.resolved_at = now()
             resolved += 1
         session.flush()
 

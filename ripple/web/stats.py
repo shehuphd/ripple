@@ -47,6 +47,42 @@ def script_pages(session: Session, script_id) -> int:
     return max(1, round((characters or 0) / CHARS_PER_PAGE))
 
 
+def pages_by_script(session: Session, script_ids: list) -> dict:
+    """`script_pages` for several scripts in two queries instead of two each."""
+    if not script_ids:
+        return {}
+    from_source = dict(
+        session.execute(
+            select(Scene.script_id, func.max(SourceAnchor.source_page_number))
+            .join(ScriptUnit, ScriptUnit.scene_id == Scene.id)
+            .join(SourceAnchor, SourceAnchor.script_unit_id == ScriptUnit.id)
+            .where(Scene.script_id.in_(script_ids))
+            .group_by(Scene.script_id)
+        ).all()
+    )
+    characters = dict(
+        session.execute(
+            select(
+                Scene.script_id,
+                func.coalesce(func.sum(func.length(ScriptUnit.current_text)), 0),
+            )
+            .join(ScriptUnit, ScriptUnit.scene_id == Scene.id)
+            .where(Scene.script_id.in_(script_ids))
+            .group_by(Scene.script_id)
+        ).all()
+    )
+    pages = {}
+    for script_id in script_ids:
+        counted = from_source.get(script_id)
+        if counted:
+            pages[script_id] = int(counted)
+        else:
+            pages[script_id] = max(
+                1, round((characters.get(script_id) or 0) / CHARS_PER_PAGE)
+            )
+    return pages
+
+
 def page_of(offset_characters: int) -> int:
     """Which page a running character offset falls on."""
     return max(1, int(offset_characters / CHARS_PER_PAGE) + 1)

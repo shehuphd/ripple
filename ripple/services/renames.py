@@ -36,6 +36,7 @@ from ripple.db.models import (
     Scene,
     Script,
     ScriptUnit,
+    now,
 )
 from ripple.db.naming import normalize
 
@@ -316,9 +317,7 @@ def confirm_rename(session, finding: ContinuityFinding) -> Entity:
     )
     survivor = apply_rename(session, script, candidate)
     finding.status = "resolved"
-    from ripple.services.changeset import _now
-
-    finding.resolved_at = _now()
+    finding.resolved_at = now()
     file_partial_finding(
         session, script, finding.change_set_id, survivor, candidate.old_name
     )
@@ -473,7 +472,7 @@ def _scene_labels(session, units: list) -> str:
     seen = set()
     for unit in units:
         scene = session.get(Scene, unit.scene_id)
-        label = scene.display_scene_number or "—"
+        label = scene.label
         if label not in seen:
             seen.add(label)
             labels.append(label)

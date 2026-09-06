@@ -136,6 +136,29 @@ def encrypted_pdf(night_freight_fountain: bytes) -> bytes:
     return buffer.getvalue()
 
 
+@pytest.fixture
+def captured_answer(monkeypatch):
+    """Stand in for the grounded answerer and keep what it was handed.
+
+    The ask route's job is to assemble the evidence packet; these tests read
+    the packet, so the model behind it is replaced with a fake that answers
+    "ok" and records its arguments.
+    """
+    from ripple.services.synthesizer import GroundedAnswer
+    from ripple.web import app as web
+
+    captured: dict = {}
+
+    def fake(question, assertions, provider, model_id, session, script_id, facts=None):
+        captured.update(
+            question=question, assertions=assertions, facts=facts, script_id=script_id
+        )
+        return GroundedAnswer(answer="ok")
+
+    monkeypatch.setattr(web, "answer_question", fake)
+    return captured
+
+
 @pytest.fixture(autouse=True)
 def _no_trace_files(tmp_path, monkeypatch):
     """Route tracing to a temp directory so a test run writes nothing durable."""

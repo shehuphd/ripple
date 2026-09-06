@@ -70,5 +70,7 @@ ignore = ["UP042"]
 # would change the bytes under test.
 "tests/conftest.py" = ["E501"]
 # The adversarial fixtures deliberately carry curly quotes and en-dashes,
-# because uploaded screenplays do.
+# because uploaded screenplays do, and the cue regex matches those same
+# quotes at the start of a spoken line.
 "tests/test_adversarial.py" = ["RUF001"]
+"ripple/adapters/base.py" = ["RUF001"]

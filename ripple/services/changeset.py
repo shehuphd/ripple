@@ -18,7 +18,6 @@ from __future__ import annotations
 import logging
 import uuid as uuid_module
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -38,6 +37,7 @@ from ripple.db.models import (
     SceneExtraction,
     Script,
     ScriptUnit,
+    now,
 )
 from ripple.db.naming import normalize, normalize_key
 from ripple.extraction.prompt import PROMPT_VERSION, input_hash
@@ -121,10 +121,6 @@ class AcceptanceResult:
     script_version: int
     operations_applied: int
     entities_created: int
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 def create_proposal(
@@ -260,11 +256,11 @@ def accept(session: Session, change_set_id) -> AcceptanceResult:
         for unit_link in change_set.units:
             unit = session.get(ScriptUnit, unit_link.script_unit_id)
             unit.current_version += 1
-            unit.updated_at = _now()
+            unit.updated_at = now()
 
         script.current_version += 1
         change_set.status = "accepted"
-        change_set.accepted_at = _now()
+        change_set.accepted_at = now()
         session.flush()
 
         stamped = _stamp_extractions(session, script, pre_hashes)
@@ -366,7 +362,7 @@ def _stamp_extractions(session: Session, script: Script, pre_hashes: dict) -> in
     if not stampable:
         return 0
 
-    now = _now()
+    stamped_at = now()
     run = ExtractionRun(
         script_id=script.id,
         status="ready",
@@ -374,8 +370,8 @@ def _stamp_extractions(session: Session, script: Script, pre_hashes: dict) -> in
         model_id=model,
         total_scenes=len(stampable),
         completed_scenes=len(stampable),
-        started_at=now,
-        completed_at=now,
+        started_at=stamped_at,
+        completed_at=stamped_at,
     )
     session.add(run)
     session.flush()
@@ -388,8 +384,8 @@ def _stamp_extractions(session: Session, script: Script, pre_hashes: dict) -> in
                 input_hash=new_hash,
                 prompt_version=PROMPT_VERSION,
                 model_id=model,
-                started_at=now,
-                completed_at=now,
+                started_at=stamped_at,
+                completed_at=stamped_at,
             )
         )
     session.flush()
@@ -416,7 +412,7 @@ def _resolve_open_findings(session: Session, change_set_id) -> int:
     )
     for finding in open_findings:
         finding.status = "resolved"
-        finding.resolved_at = _now()
+        finding.resolved_at = now()
     return len(open_findings)
 
 
@@ -435,7 +431,7 @@ def reject(session: Session, change_set_id, reason: str | None = None) -> Change
                 severity="low",
                 message=reason,
                 status="resolved",
-                resolved_at=_now(),
+                resolved_at=now(),
             )
         )
     session.flush()

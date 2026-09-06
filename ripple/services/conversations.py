@@ -29,6 +29,7 @@ from ripple.db.models import (
     ScriptUnit,
 )
 from ripple.services import changeset
+from ripple.text import when_label
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ def listing(session: Session, script_id) -> list[dict[str, Any]]:
         {
             "id": str(row.id),
             "title": row.title,
-            "updated_at": row.updated_at.strftime("%d %b %H:%M"),
+            "updated_at": when_label(row.updated_at),
         }
         for row in rows
     ]
@@ -205,7 +206,7 @@ def applied_summary(
         ).all()
     )
     scene_numbers = {
-        row.id: row.display_scene_number or str(row.sequence_index + 1)
+        row.id: row.label
         for row in session.scalars(select(Scene).where(Scene.script_id == script.id))
     }
 

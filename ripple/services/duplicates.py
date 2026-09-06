@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, union
 from sqlalchemy.orm import Session
 from traceact import ActionTrace
 
@@ -134,32 +134,40 @@ def detect(session: Session, script_id) -> list[DuplicatePair]:
                 matches[a.id] = matches.get(a.id, 0) + 1
                 matches[b.id] = matches.get(b.id, 0) + 1
 
+    cited = cited_counts(session, script_id)
     pairs = []
     for a, b, reason in raw:
-        keep, absorb = _rank(session, a, b)
+        keep, absorb = _rank(cited, a, b)
         pairs.append(DuplicatePair(keep=keep, absorb=absorb, reason=reason))
     pairs.sort(key=lambda pair: max(matches[pair.keep.id], matches[pair.absorb.id]))
     return pairs
 
 
-def _cited_count(session: Session, entity: Entity) -> int:
-    return (
-        session.scalar(
-            select(func.count())
-            .select_from(Assertion)
-            .where(
-                Assertion.active.is_(True),
-                (Assertion.subject_entity_id == entity.id)
-                | (Assertion.object_entity_id == entity.id),
-            )
+def cited_counts(session: Session, script_id=None) -> dict:
+    """How many active assertions cite each entity, in one query.
+
+    An assertion citing the same entity on both sides counts once, the
+    way a per-entity `subject OR object` count would have it.
+    """
+    sides = union(
+        select(Assertion.id, Assertion.subject_entity_id.label("entity_id")).where(
+            Assertion.active.is_(True), Assertion.subject_entity_id.is_not(None)
+        ),
+        select(Assertion.id, Assertion.object_entity_id.label("entity_id")).where(
+            Assertion.active.is_(True), Assertion.object_entity_id.is_not(None)
+        ),
+    ).subquery()
+    query = select(sides.c.entity_id, func.count()).group_by(sides.c.entity_id)
+    if script_id is not None:
+        query = query.join(Entity, Entity.id == sides.c.entity_id).where(
+            Entity.script_id == script_id
         )
-        or 0
-    )
+    return dict(session.execute(query).all())
 
 
-def _rank(session: Session, a: Entity, b: Entity) -> tuple[Entity, Entity]:
+def _rank(cited: dict, a: Entity, b: Entity) -> tuple[Entity, Entity]:
     """(keep, absorb): the more-cited entity survives, longer name on a tie."""
-    cited_a, cited_b = _cited_count(session, a), _cited_count(session, b)
+    cited_a, cited_b = cited.get(a.id, 0), cited.get(b.id, 0)
     if cited_a != cited_b:
         return (a, b) if cited_a > cited_b else (b, a)
     if len(a.canonical_name) != len(b.canonical_name):
@@ -216,7 +224,7 @@ def merge(session: Session, keep_id, absorb_id) -> ChangeSet:
                     )
                 )
             ),
-            "active_assertions": _cited_count(session, absorbed),
+            "active_assertions": cited_counts(session, script.id).get(absorbed.id, 0),
         }
         absorbed_name = absorbed.canonical_name
 

@@ -281,13 +281,12 @@ def _preview(
     mark = time.perf_counter()
     units, script = _resolve_units(session, edits)
     live_edits = [
-        (unit, proposed)
-        for unit, proposed in units
-        if unit.current_text != proposed
+        (unit, proposed) for unit, proposed in units if unit.current_text != proposed
     ]
     if not live_edits:
         raise PreviewRefused(
-            "no_change", "Nothing differs from the accepted text yet. Edit a line first."
+            "no_change",
+            "Nothing differs from the accepted text yet. Edit a line first.",
         )
 
     _require_baseline(session, script)
@@ -314,7 +313,7 @@ def _preview(
     attribute_changes: list[AttributeChange] = []
     operations: list[dict[str, Any]] = []
     judgements: list[JudgementReport] = []
-    labels = _labels(session, script.id)
+    labels = graph_labels(session, script.id)
 
     used_models: set[str] = set()
     listed_total = 0
@@ -359,9 +358,7 @@ def _preview(
         for row in listed
         if row is not None
     ]
-    removed_ids = {
-        edge.assertion_id for edge in diff.removed if edge.assertion_id
-    }
+    removed_ids = {edge.assertion_id for edge in diff.removed if edge.assertion_id}
     removed_establishes = [
         (row.object_entity_id, labels.get(row.object_entity_id, "?"), row.id)
         for row in accepted_rows
@@ -531,8 +528,7 @@ def _preview(
         change_set=proposal,
         diff=diff,
         attribute_changes=attribute_changes,
-        findings=[row for _, row in finding_rows]
-        + [row for _, row in conflict_rows],
+        findings=[row for _, row in finding_rows] + [row for _, row in conflict_rows],
         summary=summary,
         severity=severity,
         evidence_count=packet.total_items,
@@ -679,15 +675,11 @@ def _rebuild(
         elif operation.operation_type == "remove_assertion":
             diff.removed.append(_edge_from_payload(before))
         elif operation.operation_type == "update_assertion":
-            diff.changed.append(
-                (_edge_from_payload(before), _edge_from_payload(after))
-            )
+            diff.changed.append((_edge_from_payload(before), _edge_from_payload(after)))
         elif operation.operation_type == "set_entity_attribute":
             entity_label = after.get("entity_label") or after.get("entity_ref") or ""
             if after.get("entity_id"):
-                entity = session.get(
-                    Entity, uuid_module.UUID(str(after["entity_id"]))
-                )
+                entity = session.get(Entity, uuid_module.UUID(str(after["entity_id"])))
                 if entity is not None:
                     entity_label = entity.canonical_name
             attribute_changes.append(
@@ -738,8 +730,10 @@ def _rebuild(
         severity=report.severity or proposal.severity or "none",
         evidence_count=0,
         stages=[
-            {"name": "Reused the stored preview", "seconds": round(
-                time.perf_counter() - started, 2)}
+            {
+                "name": "Reused the stored preview",
+                "seconds": round(time.perf_counter() - started, 2),
+            }
         ],
         edits=[
             {
@@ -773,9 +767,7 @@ def _mentioned_rows(
     scene_ids = {unit.scene_id for unit, _ in scene_edits}
     script_id = session.get(Scene, next(iter(scene_ids))).script_id
     text_words = _significant_words(
-        " ".join(
-            f"{unit.current_text} {proposed}" for unit, proposed in scene_edits
-        )
+        " ".join(f"{unit.current_text} {proposed}" for unit, proposed in scene_edits)
     )
     if not text_words:
         return []
@@ -789,9 +781,7 @@ def _mentioned_rows(
         if words and words <= text_words:
             mentioned.add(entity_id)
     for entity in session.execute(
-        select(Entity.id, Entity.canonical_name).where(
-            Entity.script_id == script_id
-        )
+        select(Entity.id, Entity.canonical_name).where(Entity.script_id == script_id)
     ):
         words = _significant_words(entity.canonical_name)
         if words and words <= text_words:
@@ -830,7 +820,7 @@ def _listed(
     labels = {}
     if rows:
         script_id = rows[0].script_id
-        labels = _labels(session, script_id)
+        labels = graph_labels(session, script_id)
     alias_names: dict = {}
     alias_entity_ids = {
         endpoint
@@ -840,9 +830,7 @@ def _listed(
     }
     if alias_entity_ids:
         for alias in session.scalars(
-            select(EntityAlias).where(
-                EntityAlias.entity_id.in_(alias_entity_ids)
-            )
+            select(EntityAlias).where(EntityAlias.entity_id.in_(alias_entity_ids))
         ):
             alias_names.setdefault(alias.entity_id, []).append(alias.alias)
     for row in rows:
@@ -905,9 +893,7 @@ def _listed(
                 "key": attribute.key,
                 "value": attribute.value,
                 "source_unit_id": (
-                    str(attribute.source_unit_id)
-                    if attribute.source_unit_id
-                    else None
+                    str(attribute.source_unit_id) if attribute.source_unit_id else None
                 ),
                 "evidence": evidence,
                 "confidence": attribute.confidence,
@@ -997,8 +983,8 @@ def _judge_scene(
 
     if judgement.coverage_misses:
         call.outcome = "incomplete"
-        call.error_message = (
-            "No verdict for: " + ", ".join(judgement.coverage_misses[:5])
+        call.error_message = "No verdict for: " + ", ".join(
+            judgement.coverage_misses[:5]
         )
         session.add(call)
         session.flush()
@@ -1040,13 +1026,8 @@ def _truncation_message(model_id: str, result: Any) -> str:
             "output tokens Ripple requested"
         )
     else:
-        where = (
-            f"before the {MAX_OUTPUT_TOKENS} output tokens Ripple requested"
-        )
-    message = (
-        f"{model_id} stopped mid-reply {where} "
-        f"(finish reason: {reason})."
-    )
+        where = f"before the {MAX_OUTPUT_TOKENS} output tokens Ripple requested"
+    message = f"{model_id} stopped mid-reply {where} " f"(finish reason: {reason})."
     if reasoning or produced < MAX_OUTPUT_TOKENS:
         message += (
             " Models that reason before answering bill the hidden "
@@ -1149,13 +1130,9 @@ def _generate_verdicts(
                         budget_error.code, budget_error.message
                     ) from budget_error
                 continue
-            call.outcome = "provider_error"
-            call.error_message = error.message
-            call.duration_ms = int((time.perf_counter() - started) * 1000)
-            session.add(call)
+            spend.record_failure(session, call, error, started)
             if error.code == "model_not_available":
                 mark_model_unavailable(session, provider.name, model_id)
-            session.flush()
             model_event(
                 purpose=purpose,
                 model_id=model_id,
@@ -1168,11 +1145,7 @@ def _generate_verdicts(
             raise PreviewFailed(error.code, error.message) from error
 
     clear_model_unavailable(session, provider.name, model_id)
-    call.response_text = result.text
-    call.input_tokens = result.input_tokens
-    call.output_tokens = result.output_tokens
-    call.reasoning_tokens = getattr(result, "reasoning_tokens", None)
-    call.duration_ms = int((time.perf_counter() - started) * 1000)
+    spend.note_result(call, result, started)
     model_event(
         purpose=purpose,
         model_id=model_id,
@@ -1347,9 +1320,7 @@ def _edges_from_verdicts(
         if verdict.verdict != "removed":
             proposed.append(edge)
 
-    new_entity_types = {
-        entity.local_id: entity for entity in judgement.new_entities
-    }
+    new_entity_types = {entity.local_id: entity for entity in judgement.new_entities}
     for assertion in judgement.new_assertions:
         signature = SIGNATURES.get(assertion.predicate)
         if signature is None:
@@ -1538,7 +1509,10 @@ def _new_endpoint(
         # The label the diff rows print. An empty label falls back to the
         # ref, and a scene's ref is its UUID, which is what the overlay
         # would then show.
-        return EdgeRef.scene(scene.id), f"Sc {scene.display_scene_number or scene.sequence_index + 1}"
+        return (
+            EdgeRef.scene(scene.id),
+            f"Sc {scene.label}",
+        )
     if local_id in new_entities:
         entity = new_entities[local_id]
         return (
@@ -1580,9 +1554,7 @@ def _edge_from_row(session: Session, row: Assertion, labels: dict[Any, str]) -> 
         confidence=row.confidence,
         source_unit_id=str(row.source_unit_id),
         assertion_id=str(row.id),
-        display_subject=labels.get(
-            row.subject_entity_id or row.subject_scene_id, ""
-        ),
+        display_subject=labels.get(row.subject_entity_id or row.subject_scene_id, ""),
         display_object=labels.get(row.object_entity_id or row.object_scene_id, ""),
     )
 
@@ -1627,10 +1599,6 @@ def _row(session: Session, assertion_id: str) -> Assertion | None:
         return session.get(Assertion, uuid_module.UUID(str(assertion_id)))
     except ValueError:
         return None
-
-
-def _labels(session: Session, script_id) -> dict[Any, str]:
-    return graph_labels(session, script_id)
 
 
 __all__ = [

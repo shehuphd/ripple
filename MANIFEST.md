@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-05 21:49:37 UTC
+Last updated: 2026-09-06 09:36:01 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `tools/.venv`) are gitignored and not listed.
 
@@ -26,6 +26,7 @@ Every file in the repository and what it does. Directories the application write
 | File | Purpose |
 |---|---|
 | `ripple/__init__.py` | Package marker and version lookup. |
+| `ripple/text.py` | Display formatters the pages and services share (timestamps). |
 | `ripple/tracing.py` | TraceAct configuration: no automatic input capture, redaction presets. |
 
 ### Import (`ripple/adapters/`)
@@ -55,6 +56,7 @@ Every file in the repository and what it does. Directories the application write
 |---|---|
 | `db/__init__.py` | Package marker. |
 | `db/models.py` | SQLAlchemy models for all 22 tables, with CHECK constraints for every vocabulary. |
+| `db/ids.py` | Identifier coercion: strings to UUIDs, shared by routes, payloads, and stored history. |
 | `db/naming.py` | Entity name normalization, shared by extraction and the change-set service. |
 | `db/repository.py` | Query helpers: persistence, deletion previews, counts, shared graph labels. |
 | `db/session.py` | Engine and session setup, SQLite foreign-key pragma, the outcome-vocabulary migration. |
@@ -132,7 +134,6 @@ Every file in the repository and what it does. Directories the application write
 | `web/templates/error.html` | In-app error page for page routes. |
 | `web/static/css/ripple-tokens.css` | Design tokens. |
 | `web/static/css/ripple-fonts.css` | Font faces. |
-| `web/static/css/ripple-components.css` | Shared components. |
 | `web/static/css/app.css` | Per-screen styles. |
 | `web/static/js/app.js` | Shared helpers: `api()`, escaping, dialogs, the decision log, and the collapse and drag-resize behaviour every pane uses. |
 | `web/static/js/library.js` | Library page behaviour. |

@@ -22,7 +22,6 @@ import logging
 import time
 import uuid as uuid_module
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -40,6 +39,7 @@ from ripple.db.models import (
     SceneExtraction,
     Script,
     ScriptUnit,
+    now,
 )
 from ripple.db.naming import normalize
 from ripple.db.repository import (
@@ -69,7 +69,12 @@ from ripple.extraction.validate import (
 from ripple.graph.predicates import canonical_endpoints
 from ripple.llm.base import AVAILABILITY_CODES, LLMProvider, ProviderError
 from ripple.services import pricing
-from ripple.services.spend import BudgetExceeded, check_budget
+from ripple.services.spend import (
+    BudgetExceeded,
+    check_budget,
+    record_failure,
+    record_success,
+)
 from ripple.tracing import ensure_configured, model_event
 
 logger = logging.getLogger(__name__)
@@ -122,10 +127,6 @@ class RunProgress:
     @property
     def finished(self) -> bool:
         return self.pending == 0
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 def _scene_units(session: Session, scene_id) -> list[tuple[str, str, str]]:
@@ -228,7 +229,7 @@ def start_run(
         model_id=model_id,
         total_scenes=len(scenes),
         forced=force,
-        started_at=_now(),
+        started_at=now(),
     )
     session.add(run)
     session.flush()
@@ -328,7 +329,7 @@ def claim_next_scene(session: Session, run_id) -> SceneExtraction | None:
     claimed = session.execute(
         update(SceneExtraction)
         .where(SceneExtraction.id == candidate, SceneExtraction.status == "pending")
-        .values(status="running", started_at=_now())
+        .values(status="running", started_at=now())
         .returning(SceneExtraction.id)
     ).scalar_one_or_none()
 
@@ -443,13 +444,7 @@ def extract_scene(
             except ProviderError as error:
                 if error.code == "model_not_available":
                     mark_model_unavailable(session, provider.name, candidate)
-                call.outcome = "provider_error"
-                call.error_message = error.message
-                call.duration_ms = int(
-                    (time.perf_counter() - call_started) * 1000
-                )
-                session.add(call)
-                session.flush()
+                record_failure(session, call, error, call_started)
                 more = candidate != candidates[-1]
                 if more and error.code in AVAILABILITY_CODES:
                     logger.info(
@@ -459,11 +454,7 @@ def extract_scene(
                 return _fail(session, job, run, trace, error.code)
             clear_model_unavailable(session, provider.name, candidate)
 
-            call.response_text = result.text
-            call.input_tokens = result.input_tokens
-            call.output_tokens = result.output_tokens
-            call.reasoning_tokens = getattr(result, "reasoning_tokens", None)
-            call.duration_ms = int((time.perf_counter() - call_started) * 1000)
+            record_success(session, call, result, call_started)
 
             model_event(
                 purpose="extract",
@@ -585,7 +576,7 @@ def _reuse_cached(session: Session, job: SceneExtraction) -> SceneOutcome | None
     ]
 
     job.status = "completed"
-    job.completed_at = _now()
+    job.completed_at = now()
     run = session.get(ExtractionRun, job.extraction_run_id)
     run.completed_scenes += 1
     # Without the roll-up, a run whose last scene is a cache hit keeps its
@@ -650,7 +641,7 @@ def _complete(
                 attributes_written += 1
 
     job.status = "completed"
-    job.completed_at = _now()
+    job.completed_at = now()
     job.error_code = None
     run.completed_scenes += 1
     _roll_up(session, run)
@@ -691,7 +682,7 @@ def _fail(
     job.status = "pending" if retryable else "failed"
     job.error_code = error_code
     if not retryable:
-        job.completed_at = _now()
+        job.completed_at = now()
         run.failed_scenes += 1
         _roll_up(session, run)
     session.flush()
@@ -1006,11 +997,11 @@ def _roll_up(session: Session, run: ExtractionRun) -> None:
         # "ready" is reserved for a run every scene of which completed.
         run.status = "failed" if not run.completed_scenes else "partially_ready"
         if run.completed_at is None:
-            run.completed_at = _now()
+            run.completed_at = now()
     else:
         run.status = "ready"
         if run.completed_at is None:
-            run.completed_at = _now()
+            run.completed_at = now()
 
     script = session.get(Script, run.script_id)
     if script is not None:
@@ -1042,7 +1033,7 @@ def cancel_run(session: Session, run_id) -> ExtractionRun:
     )
     run.status = "cancelled"
     if run.completed_at is None:
-        run.completed_at = _now()
+        run.completed_at = now()
     script = session.get(Script, run.script_id)
     if script is not None and script.graph_status == "analysing":
         script.graph_status = (

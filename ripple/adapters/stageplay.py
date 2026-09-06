@@ -47,10 +47,26 @@ _TITLE_LINE = re.compile(r"^Title:\s*(?P<title>.+)$", re.IGNORECASE | re.MULTILI
 
 _ROMAN_VALUES = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
 _WORD_VALUES = {
-    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
-    "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
-    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "first": 1,
+    "second": 2,
+    "third": 3,
+    "fourth": 4,
+    "fifth": 5,
+    "sixth": 6,
+    "seventh": 7,
+    "eighth": 8,
+    "ninth": 9,
+    "tenth": 10,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
 }
 # A cue is short; a setting paragraph is not. Kept in step with the plain-text
 # adapter's cue ceiling.
@@ -182,7 +198,9 @@ class StagePlayAdapter:
             if scene_match:
                 in_front_matter = False
                 setting = scene_match.group("rest").strip()
-                scene = self._open(scenes, current_act, _ordinal(scene_match.group("num")))
+                scene = self._open(
+                    scenes, current_act, _ordinal(scene_match.group("num"))
+                )
                 started = True
                 previous = speaker = None
                 setting_parts = []
@@ -258,10 +276,12 @@ class StagePlayAdapter:
                 stripped,
                 offset,
                 raw,
-                speaker
-                if unit_type
-                in (UnitType.CHARACTER, UnitType.DIALOGUE, UnitType.PARENTHETICAL)
-                else None,
+                (
+                    speaker
+                    if unit_type
+                    in (UnitType.CHARACTER, UnitType.DIALOGUE, UnitType.PARENTHETICAL)
+                    else None
+                ),
             )
             previous = unit_type
             offset += advance
@@ -361,7 +381,11 @@ class StagePlayAdapter:
             UnitType.DIALOGUE,
             UnitType.PARENTHETICAL,
         )
-        if not in_speech and parse_character_cue(stripped) and len(stripped) <= MAX_CUE_CHARS:
+        if (
+            not in_speech
+            and parse_character_cue(stripped)
+            and len(stripped) <= MAX_CUE_CHARS
+        ):
             return UnitType.CHARACTER
         if in_speech:
             return UnitType.DIALOGUE

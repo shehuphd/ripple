@@ -683,21 +683,14 @@ class TestAskTheGraph:
         )
         assert ok.status_code == 200
 
-    def test_the_facts_packet_counts_entities_by_department(self, client, monkeypatch):
+    def test_the_facts_packet_counts_entities_by_department(
+        self, client, captured_answer
+    ):
         """A database-level question about one department ("how many cast
         members", "how many props") is answerable because the packet carries a
         per-type entity breakdown, not only the flat total. Without it the model
         said "the graph does not record it" about a graph that records it."""
-        captured = {}
-
-        def _capture(question, assertions, provider, model_id, session, script_id,
-                     facts=None):
-            captured["facts"] = facts
-            from ripple.services.synthesizer import GroundedAnswer
-
-            return GroundedAnswer(answer="ok")
-
-        monkeypatch.setattr(web, "answer_question", _capture)
+        captured = captured_answer
         script_id = _first_script(client)
         client.post(
             f"/api/scripts/{script_id}/ask",
@@ -718,19 +711,10 @@ class TestAskTheGraph:
         # The counts sum to the flat entity total the packet also carries.
         assert sum(slot["count"] for slot in by_type.values()) == facts["entities"]
 
-    def test_the_facts_packet_lists_every_scene_in_order(self, client, monkeypatch):
+    def test_the_facts_packet_lists_every_scene_in_order(self, client, captured_answer):
         """Scene enumeration ("list the scene headings", "the opening scene")
         answers from a full ordered scene roster, not from sampled assertions."""
-        captured = {}
-
-        def _capture(question, assertions, provider, model_id, session, script_id,
-                     facts=None):
-            captured["facts"] = facts
-            from ripple.services.synthesizer import GroundedAnswer
-
-            return GroundedAnswer(answer="ok")
-
-        monkeypatch.setattr(web, "answer_question", _capture)
+        captured = captured_answer
         script_id = _first_script(client)
         client.post(
             f"/api/scripts/{script_id}/ask",
@@ -741,21 +725,13 @@ class TestAskTheGraph:
         assert len(scenes) == captured["facts"]["scenes"]
         assert all(item["heading"] for item in scenes)
 
-    def test_keyword_matching_ignores_accents(self, client, monkeypatch):
+    def test_keyword_matching_ignores_accents(self, client, captured_answer):
         """A name typed without its accent still retrieves the accented entity's
         assertions: "Bela" finds "Béla", so the question is answered instead of
         met with a false "the graph does not record it"."""
         import re
 
-        captured = {}
-
-        def _capture(question, assertions, *args, **kwargs):
-            captured["assertions"] = assertions
-            from ripple.services.synthesizer import GroundedAnswer
-
-            return GroundedAnswer(answer="ok")
-
-        monkeypatch.setattr(web, "answer_question", _capture)
+        captured = captured_answer
         # SEVEN MINUTES carries the accented entity "Béla".
         rows = client.get("/").text
         match = re.search(
@@ -2804,12 +2780,9 @@ class TestAskRipple:
         self, client, ripple_model, judged
     ):
         """Walking away must not leave a change set waiting to be accepted."""
-        from ripple.llm.base import AgentReply
-
         # judged patches get_provider; the chat rides get_query_provider, so
         # re-point it after the judged fixture replaced the registry.
         script_id = _first_script(client)
-        unit_id = _units(client, script_id)[1]
         opened = client.post(
             f"/api/scripts/{script_id}/ripple",
             data={"message": "Recolour the sedan.", "stage": "draft"},
