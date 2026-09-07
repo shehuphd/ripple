@@ -20,6 +20,8 @@ All notable changes to Ripple are documented here.
 
 ### Changed
 
+- **Ask Ripple opens on a chooser, not the newest script.** Bare `/ask` used to assume the most recently created script, which after any test upload was the wrong one. It now asks which script to work over: every script lists in the sidebar pane with its graph mark and assertion count, and picking one opens its ask surface.
+
 - **A library row says whether its script has a graph.** The glyph beside the title was decoration; it is now the graph mark in accent when a graph exists and the plain script mark when not, each with a tooltip. Two same-titled copies, one analysed and one not, read apart at a glance.
 
 - **A byte-identical re-upload asks before importing twice.** Every upload's SHA-256 is already recorded; a file whose bytes match a script still in the library now comes back as a named duplicate instead of a silent second copy, and a dialog asks whether to import it anyway. Declining imports nothing.

@@ -770,7 +770,9 @@ def ask_page(
             # different script would answer questions about the wrong one.
             raise HTTPException(404, "No such script")
     else:
-        chosen = session.scalar(select(Script).order_by(Script.created_at.desc()))
+        # No script named, none assumed: the page opens on a chooser, since
+        # asking is always about one script and the choice is the user's.
+        chosen = None
     counts_by_script = dict(
         session.execute(
             select(Assertion.script_id, func.count())

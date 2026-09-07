@@ -836,7 +836,10 @@ class TestAskTheGraph:
             assert str(logged.script_id) == script_id
             assert logged.answer == body["answer"]
         # The logged question is offered for replay on the Ask page.
-        assert f'data-query="{body["query_id"]}"' in client.get("/ask").text
+        assert (
+            f'data-query="{body["query_id"]}"'
+            in client.get(f"/ask?script={script_id}").text
+        )
 
     def test_a_deterministic_answer_carries_an_empty_grounding_check(self, client):
         script_id = _first_script(client)
@@ -1740,7 +1743,7 @@ class TestLockedFeatures:
 
     def test_ask_shows_the_empty_state_when_the_graph_is_empty(self, client):
         client.post("/api/graphs/clear")
-        body = client.get("/ask").text
+        body = client.get(f"/ask?script={_first_script(client)}").text
         assert "Nothing to ask yet" in body
         assert "nothing to work from" in body
         # No model is configured in the fixture, so the one action offered
@@ -1764,7 +1767,7 @@ class TestLockedFeatures:
     def test_the_empty_state_renders_no_ask_box_at_all(self, client):
         """A control that cannot work should not render, greyed or otherwise."""
         client.post("/api/graphs/clear")
-        body = client.get("/ask").text
+        body = client.get(f"/ask?script={_first_script(client)}").text
         assert 'id="askform"' not in body
         assert 'id="q"' not in body
 
@@ -1784,7 +1787,7 @@ class TestLockedFeatures:
 
     def test_ask_is_live_on_the_seeded_corpus(self, client):
         """First open must not show a locked page: the graphs ship seeded."""
-        body = client.get("/ask").text
+        body = client.get(f"/ask?script={_first_script(client)}").text
         assert "No graph has been built yet" not in body
 
 
@@ -2018,19 +2021,15 @@ class TestStaleLinksAreHonest:
         assert response.status_code == 404
         assert "No such script" in response.text
 
-    def test_ask_without_a_script_still_lands_on_the_newest(self, client):
-        from sqlalchemy import select
-
-        from ripple.db.models import Script
-
-        with web._sessions() as session:
-            newest = session.scalar(
-                select(Script).order_by(Script.created_at.desc())
-            )
-            title = newest.title
+    def test_ask_without_a_script_offers_the_chooser(self, client):
+        """No script is assumed: the bare page asks which script to work
+        over, listing every script as a link."""
         response = client.get("/ask")
         assert response.status_code == 200
-        assert f'data-title="{title}"' in response.text
+        assert "Choose a script" in response.text
+        assert f'href="/ask?script={_first_script(client)}"' in response.text
+        # The ask surface itself waits for the choice.
+        assert 'id="askform"' not in response.text
 
 
 class TestDeletionPreviewScoping:
