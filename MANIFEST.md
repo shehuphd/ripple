@@ -190,6 +190,7 @@ Every file in the repository and what it does. Directories the application write
 
 | File | Purpose |
 |---|---|
+| `tools/check_changelog.py` | Refuses a changelog entry over 500 characters, checking only entries the branch adds. Runs in the pre-push hook. |
 | `tools/render_screenplay.py` | Renders a Fountain source to PDF for calibration. |
 | `tools/restate_findings.py` | Rewrites stored continuity messages in the current continuity voice, dry run by default. |
 | `tools/seed_graph.py` | Writes a demo script's ground-truth graph by hand. |

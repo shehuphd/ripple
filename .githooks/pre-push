@@ -28,6 +28,12 @@ echo "pre-push: ruff"
 echo "pre-push: shiplock"
 .venv/bin/shiplock check
 
+# Shiplock is a released package, so the repo's own rules run beside it.
+# This one caps any changelog entry this branch adds: the detail belongs in
+# the entry's first sentences or not at all.
+echo "pre-push: changelog"
+python3 tools/check_changelog.py
+
 if [ "${RIPPLE_PREPUSH_TESTS:-0}" = "1" ]; then
   echo "pre-push: pytest"
   .venv/bin/python -m pytest -q

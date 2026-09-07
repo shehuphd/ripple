@@ -18,6 +18,8 @@ All notable changes to Ripple are documented here.
 
 ### Changed
 
+- **Changelog entries are capped.** A new entry is a bold title and a few sentences, 500 characters at most; `tools/check_changelog.py` refuses a longer one in the pre-push gate, checking only entries the branch adds. This session's entries are trimmed to fit, and settings paths are written with arrows (Settings → Interface → Screensaver).
+
 - **The lake fades in and out.** It used to appear and vanish between frames. **Fade** in Settings → Interface → Screensaver sets the length: Instant, 0.5s, 1s (the default), or 2s. Reduced motion skips it.
 
 - **The library sorts, and its runtimes carry units.** A bare `2:51` read as either two hours fifty-one or two minutes fifty-one; it is `2h 51m` now. Every column header sorts, a second click reverses it, and runtime sorts on minutes. Sorting and search both run over the rows already in the page.
