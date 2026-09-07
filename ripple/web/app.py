@@ -49,6 +49,7 @@ from ripple.db.models import (
     Conversation,
     Entity,
     EntityAlias,
+    ExtractionRun,
     FindingEvidence,
     Import,
     ModelCall,
@@ -68,6 +69,7 @@ from ripple.db.repository import (
     SCREENSAVER_THEMES,
     SCREENSAVER_THROTTLE_SECONDS,
     clear_all_graphs,
+    clear_graph,
     delete_script,
     deletion_preview,
     get_agent_settings,
@@ -425,6 +427,7 @@ def sidebar_counts(session: Session) -> dict[str, int]:
         "reports": count(RippleReport),
         "findings": count(ContinuityFinding, ContinuityFinding.status == "open"),
         "queries": count(QueryLog),
+        "graphs": count(Script, Script.graph_status != "not_analysed"),
         "entities": count(Entity),
         "assertions": count(Assertion, Assertion.active.is_(True)),
         "model_calls": count(ModelCall),
@@ -1384,6 +1387,117 @@ def choose_landing_view(
     return {"landing_view": landing_view}
 
 
+@app.get("/graphs")
+def graphs_page(request: Request, session: Session = Depends(get_session)):
+    """Every built graph, one row per script, with batch delete.
+
+    Deleting here removes the graph alone: entities, assertions, runs,
+    change sets, and findings. The script, its scenes, and its units stay,
+    ready to be re-analysed, which is the point: a graph can be rebuilt for
+    pennies, a script cannot.
+    """
+    scripts = list(
+        session.scalars(
+            select(Script)
+            .where(Script.graph_status != "not_analysed")
+            .order_by(Script.title)
+        )
+    )
+    entity_counts = dict(
+        session.execute(
+            select(Entity.script_id, func.count()).group_by(Entity.script_id)
+        ).all()
+    )
+    assertion_counts = dict(
+        session.execute(
+            select(Assertion.script_id, func.count())
+            .where(Assertion.active.is_(True))
+            .group_by(Assertion.script_id)
+        ).all()
+    )
+    latest_runs: dict = {}
+    for run in session.scalars(
+        select(ExtractionRun).order_by(ExtractionRun.started_at)
+    ):
+        latest_runs[run.script_id] = run
+
+    items = []
+    for script in scripts:
+        entities = entity_counts.get(script.id, 0)
+        assertions = assertion_counts.get(script.id, 0)
+        run = latest_runs.get(script.id)
+        built = ""
+        if run is not None and run.completed_at is not None:
+            built = run.completed_at.strftime("%Y-%m-%d %H:%M")
+        elif run is not None and run.started_at is not None:
+            built = run.started_at.strftime("%Y-%m-%d %H:%M")
+        model = run.model_id if run is not None else "seeded"
+        items.append(
+            {
+                "id": str(script.id),
+                "batch_kinds": ["clear_graph"],
+                "assertions": entities + assertions,
+                "cells": {
+                    "script": {"text": script.title},
+                    "status": {
+                        "text": script.graph_status.replace("_", " "),
+                        "tag": True,
+                        "tag_class": {
+                            "ready": "location",
+                            "failed": "stunt",
+                        }.get(script.graph_status, "off"),
+                    },
+                    "entities": {"text": str(entities)},
+                    "assertions": {"text": str(assertions)},
+                    "model": {"text": model, "class": "tiny muted"},
+                    "built": {"text": built or "—", "class": "tiny muted num"},
+                },
+                "sort": {
+                    "script": script.title,
+                    "status": script.graph_status,
+                    "entities": entities,
+                    "assertions": assertions,
+                    "model": model,
+                    "built": built,
+                },
+                "actions": [
+                    {"href": f"/scripts/{script.id}/graph", "label": "Open"},
+                ],
+            }
+        )
+    return _list_page(
+        request,
+        session,
+        heading="Graphs",
+        active="graphs",
+        subtitle=(
+            f"{len(items)} built graph(s). Deleting one keeps its script; "
+            "Build graph starts it over."
+        ),
+        items=items,
+        columns=[
+            {"key": "script", "label": "Script", "width": "30%"},
+            {"key": "status", "label": "Status", "width": "12%"},
+            {"key": "entities", "label": "Entities", "numeric": True, "width": "10%"},
+            {"key": "assertions", "label": "Assertions", "numeric": True,
+             "width": "11%"},
+            {"key": "model", "label": "Model", "width": "17%"},
+            {"key": "built", "label": "Built", "numeric": True, "width": "12%"},
+            {"key": "actions", "label": "", "width": "8%"},
+        ],
+        empty="No graph has been built yet. Open a script and press Build graph.",
+        batch_actions=[
+            {
+                "kind": "clear_graph",
+                "label": "Delete selected graphs",
+                "url": "/api/graphs/batch/delete",
+                "danger": True,
+                "confirm": True,
+            },
+        ],
+    )
+
+
 @app.get("/entities")
 def entities_page(request: Request, session: Session = Depends(get_session)):
     """Every extracted entity, with its aliases and how often it is asserted.
@@ -1831,6 +1945,22 @@ def remove_script(script_id: str, session: Session = Depends(get_session)):
 def preview_deletion(script_id: str, session: Session = Depends(get_session)):
     """What deleting this script would remove, counted before anything is."""
     return deletion_preview(session, _uuid(script_id)).__dict__
+
+
+@app.post("/api/graphs/batch/delete")
+def batch_delete_graphs(ids: str = Form(...), session: Session = Depends(get_session)):
+    """Delete several scripts' graphs, keeping the scripts themselves."""
+    cleared = 0
+    entities = assertions = 0
+    for raw in _batch_ids(ids):
+        script = session.get(Script, _uuid(raw))
+        if script is None:
+            continue
+        counts = clear_graph(session, script.id)
+        entities += counts.entities
+        assertions += counts.assertions
+        cleared += 1
+    return {"cleared": cleared, "entities": entities, "assertions": assertions}
 
 
 @app.post("/api/graphs/clear")

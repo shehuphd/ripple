@@ -3557,3 +3557,58 @@ class TestScreensaverRoutes:
         assert "two modifiers" in refused.json()["detail"]
         assert client.get("/api/settings/screensaver").json()[
             "shortcut"] == "ctrl+alt+Space"
+
+
+class TestGraphDeletion:
+    """A graph can be deleted without its script: the script, scenes, and
+    units stay, ready for re-analysis, while entities, assertions, runs,
+    change sets, and findings go. Another script's graph is untouched."""
+
+    def _graph_rows(self, client) -> str:
+        return client.get("/graphs").text
+
+    def test_the_page_lists_built_graphs(self, client):
+        page = self._graph_rows(client)
+        assert "Delete selected graphs" in page
+        assert 'data-kinds="clear_graph"' in page
+
+    def test_deleting_one_graph_keeps_the_script_and_the_other_graphs(
+        self, client
+    ):
+        import json
+        import re
+
+        ids = re.findall(r'data-id="([0-9a-f-]{36})"', self._graph_rows(client))
+        assert len(ids) >= 2, "the seeded corpus should hold several graphs"
+        target, survivor = ids[0], ids[1]
+
+        outcome = client.post(
+            "/api/graphs/batch/delete", data={"ids": json.dumps([target])}
+        )
+        assert outcome.status_code == 200
+        body = outcome.json()
+        assert body["cleared"] == 1
+        assert body["entities"] > 0
+
+        # The script is intact and readable, and can be analysed again.
+        reader = client.get(f"/scripts/{target}")
+        assert reader.status_code == 200
+        assert "Build graph" in reader.text
+
+        # Its graph is gone from the list; the other script's stays.
+        remaining = re.findall(
+            r'data-id="([0-9a-f-]{36})"', self._graph_rows(client)
+        )
+        assert target not in remaining
+        assert survivor in remaining
+
+    def test_a_missing_script_is_skipped_rather_than_fatal(self, client):
+        import json
+        import uuid
+
+        outcome = client.post(
+            "/api/graphs/batch/delete",
+            data={"ids": json.dumps([str(uuid.uuid4())])},
+        )
+        assert outcome.status_code == 200
+        assert outcome.json()["cleared"] == 0

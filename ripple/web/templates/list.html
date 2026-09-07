@@ -262,6 +262,10 @@ document.querySelectorAll('#list-rows [data-post]').forEach((button) => {
       + 'them, and cannot be undone.',
     deactivate: (n) => `Deactivate ${n} selected assertion(s)? They leave the `
       + 'active graph; the rows remain and can be reactivated.',
+    clear_graph: (n, extra) => `Delete ${n} selected graph(s)? This permanently `
+      + `removes their ${extra} entities and assertions, with the runs, change `
+      + 'sets, and findings built on them. The scripts themselves stay and can '
+      + 'be re-analysed.',
   };
 
   function refresh() {
@@ -303,10 +307,10 @@ document.querySelectorAll('#list-rows [data-post]').forEach((button) => {
       const ids = chosen.map((r) => r.dataset.id);
       if (btn.dataset.batchConfirm) {
         let message;
-        if (kind === 'delete') {
+        if (kind === 'delete' || kind === 'clear_graph') {
           const extra = chosen.reduce(
             (sum, r) => sum + (parseInt(r.dataset.assertions, 10) || 0), 0);
-          message = CONFIRM.delete(ids.length, extra);
+          message = CONFIRM[kind](ids.length, extra);
         } else {
           const build = CONFIRM[kind] || ((n) => `Apply to ${n} selected row(s)?`);
           message = build(ids.length);

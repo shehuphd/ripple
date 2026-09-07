@@ -23,6 +23,9 @@
     <span class="ct num">{{ counts.queries }}</span></a>
 
   <div class="sgroup">Graph</div>
+  <a class="srow {{ 'on' if active == 'graphs' }}"{% if active == 'graphs' %} aria-current="page"{% endif %} href="/graphs">
+    <span class="ic">◍</span><span class="lb">Graphs</span>
+    <span class="ct num">{{ counts.graphs }}</span></a>
   <a class="srow {{ 'on' if active == 'entities' }}"{% if active == 'entities' %} aria-current="page"{% endif %} href="/entities">
     <span class="ic">⁙</span><span class="lb">Entities</span>
     <span class="ct num">{{ counts.entities }}</span></a>

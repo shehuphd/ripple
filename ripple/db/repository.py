@@ -310,6 +310,71 @@ def clear_all_graphs(session: Session) -> DeletionCounts:
     return counts
 
 
+def clear_graph(session: Session, script_id) -> DeletionCounts:
+    """Delete one script's graph while preserving the script itself.
+
+    The scoped counterpart of `clear_all_graphs`: entities, assertions,
+    extraction runs, change sets, and findings go; the script, its scenes,
+    units, anchors, and query log stay, and the script can be re-analysed.
+    Deletion order mirrors the global clear so it does not depend on
+    database cascade behaviour.
+    """
+    scene_ids = select(Scene.id).where(Scene.script_id == script_id)
+    entity_ids = select(Entity.id).where(Entity.script_id == script_id)
+    change_set_ids = select(ChangeSet.id).where(ChangeSet.script_id == script_id)
+
+    def count(model, *where) -> int:
+        return (
+            session.scalar(select(func.count()).select_from(model).where(*where))
+            or 0
+        )
+
+    counts = DeletionCounts(
+        entities=count(Entity, Entity.script_id == script_id),
+        assertions=count(Assertion, Assertion.script_id == script_id),
+        extraction_runs=count(ExtractionRun, ExtractionRun.script_id == script_id),
+        change_sets=count(ChangeSet, ChangeSet.script_id == script_id),
+        findings=count(
+            ContinuityFinding, ContinuityFinding.change_set_id.in_(change_set_ids)
+        ),
+    )
+
+    session.execute(
+        ScriptUnit.__table__.update()
+        .where(ScriptUnit.scene_id.in_(scene_ids))
+        .values(speaker_entity_id=None)
+    )
+    session.execute(
+        delete(RippleReport).where(RippleReport.change_set_id.in_(change_set_ids))
+    )
+    session.execute(
+        delete(ContinuityFinding).where(
+            ContinuityFinding.change_set_id.in_(change_set_ids)
+        )
+    )
+    session.execute(delete(ChangeSet).where(ChangeSet.script_id == script_id))
+    session.execute(delete(Assertion).where(Assertion.script_id == script_id))
+    session.execute(
+        delete(SceneExtraction).where(SceneExtraction.scene_id.in_(scene_ids))
+    )
+    session.execute(
+        delete(ExtractionRun).where(ExtractionRun.script_id == script_id)
+    )
+    session.execute(
+        delete(EntityAlias).where(EntityAlias.entity_id.in_(entity_ids))
+    )
+    session.execute(delete(Entity).where(Entity.script_id == script_id))
+
+    session.execute(
+        Script.__table__.update()
+        .where(Script.id == script_id)
+        .values(graph_status="not_analysed")
+    )
+    session.flush()
+    session.expire_all()
+    return counts
+
+
 def set_active_model(session: Session, provider_id: str, model_id: str) -> None:
     """Record the selected provider and model. Never a credential."""
     row = session.get(AppConfiguration, "active_model")
@@ -640,6 +705,7 @@ __all__ = [
     "DeletionCounts",
     "ScreensaverSettings",
     "clear_all_graphs",
+    "clear_graph",
     "clear_model_unavailable",
     "delete_all_scripts",
     "delete_script",
