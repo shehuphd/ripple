@@ -9,6 +9,20 @@ readme = "README.md"
 [version]
 package = "ripple"
 
+# The words beyond shiplock's built-in list. Word-boundary matching spares
+# identifiers (clearRect, gap:12px inside a token), and only the public docs
+# are swept, so a code keyword such as SQL's REAL is out of the gate's reach
+# unless it is quoted in prose.
+[style]
+extra_banned = [
+    "mattered", "clean", "clear", "stayed", "simple", "plainly",
+]
+# "shape" and "shaped" stay off the extra list: a literal description
+# ("credential-shaped", "the one ambiguous shape on the page") is fine, and
+# the STRuFO template requires the heading "### Shape" in ARCHITECTURE.md.
+# The verb tic ("shapes the design") is caught by the built-in "shapes".
+allow = []
+
 [architecture]
 doc = "ARCHITECTURE.md"
 source_dir = "ripple"

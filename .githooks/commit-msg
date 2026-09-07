@@ -18,3 +18,13 @@ if grep -qiE 'noreply@anthropic\.com' "$1"; then
   echo "commit refused: tool attribution address in the message" >&2
   exit 1
 fi
+
+# The banned-word list governs commit messages too: shiplock's built-ins
+# plus this repo's extra_banned. Literal shape words are exempt, matching
+# the shiplock.toml note; the verb tic is caught by "shapes".
+BANNED='travel|matters|serious|intersection|quietly|exactly|genuine|genuinely|consistently|straightforward|worth|earn|earns|sits|sat|lands|landed|shapes|actually|land|shifts|gap|gaps|sharper|cleanly|real|mattered|clean|clear|stayed|simple|plainly'
+hit=$(grep -oiwE "$BANNED" "$1" | head -1)
+if [ -n "$hit" ]; then
+  echo "commit refused: banned word '$hit' in the message" >&2
+  exit 1
+fi

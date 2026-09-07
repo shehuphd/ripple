@@ -116,7 +116,7 @@ The preview refuses, before any model contact, with one of these codes:
 | `cross_script` | One proposal spans two scripts. | Propose per script. |
 | `no_baseline` | No graph exists for this script. | Build the graph first. |
 | `no_model` | No model is selected. | Pick one in Settings. |
-| `budget_exceeded` | The token budget is spent. | Raise or clear it in Settings. |
+| `budget_exceeded` | The token budget is spent. | Raise the cap or remove it in Settings. |
 
 A preview that fails after model contact persists nothing except its audit record:
 
