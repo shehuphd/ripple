@@ -210,9 +210,18 @@ table.scripts tbody tr.on{background:#15242b;font-weight:600}
    The horizontal rule is for a narrow window, where the columns win. */
 /* The import-review banner: amber-edged so it reads as the reader's one
    attention item, matching the Build graph gleam's colour family. */
-.review-banner{border-color:color-mix(in srgb, var(--amber) 45%, var(--bd))}
-.review-banner strong{color:var(--amber)}
+.review-banner{border-color:color-mix(in srgb, var(--amber) 45%, var(--bd));
+  margin-bottom:14px;display:flex;align-items:flex-start;gap:14px}
+/* The heading and its warnings stack; the button holds the top right. The
+   banner styles its own parts rather than borrowing `.grow`, whose flex row
+   laid the heading and the list side by side. */
+.review-said{flex:1;min-width:0}
+.review-banner strong{color:var(--amber);display:block;line-height:1.45}
+.review-banner ul{margin:6px 0 0;padding-left:17px}
 .review-banner li{margin-top:3px;color:var(--t2)}
+/* The button is taller than the heading it sits beside, so it is pulled
+   up by the difference and the two texts read on one line. */
+.review-banner .btn{flex:0 0 auto;margin-top:-5px}
 .tscroll{overflow-x:auto;border:.5px solid var(--bd);
   border-radius:9px;margin-top:11px}
 .tscroll table.scripts{border:0;border-radius:0}

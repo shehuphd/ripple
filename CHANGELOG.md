@@ -26,6 +26,8 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **The import-review banner lays out correctly.** Its wrapper used the `grow` class, a centred flex row elsewhere, so the heading and its warnings shared one line. The banner styles its own parts now: heading over warnings, button top right.
+
 - **A changed screensaver setting applies without a reload.** The overlay read its settings once at page load, so setting the stones a second apart carried on gating them at three. Opening the screensaver re-reads them, so a tab open in another window runs on the current values.
 
 ### Changed

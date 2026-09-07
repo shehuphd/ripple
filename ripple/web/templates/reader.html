@@ -103,18 +103,16 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
   <a href="/settings">Choose a model</a></div>
 {% endif %}
 {% if review_warnings %}
-<div class="card review-banner" id="review-banner" style="margin-bottom:14px">
-  <div style="display:flex;align-items:flex-start;gap:12px">
-    <div class="grow">
-      <strong>This import needs a review</strong>
-      <ul class="tiny" style="margin:7px 0 0;padding-left:18px">
-        {% for warning in review_warnings %}<li>{{ warning }}</li>{% endfor %}
-      </ul>
-    </div>
-    <button class="btn" id="mark-reviewed"
-            data-tip="Move this script out of the review queue; the warnings stay on its library row">
-      Mark reviewed</button>
+<div class="card review-banner" id="review-banner">
+  <div class="review-said">
+    <strong>This import needs a review</strong>
+    <ul class="tiny">
+      {% for warning in review_warnings %}<li>{{ warning }}</li>{% endfor %}
+    </ul>
   </div>
+  <button class="btn" id="mark-reviewed"
+          data-tip="Move this script out of the review queue; the warnings stay on its library row">
+    Mark reviewed</button>
 </div>
 {% endif %}
 
