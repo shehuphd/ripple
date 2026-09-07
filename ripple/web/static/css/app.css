@@ -22,6 +22,9 @@ button{font:inherit}
 .muted{color:var(--t3)}
 .tiny{font-size:12px}
 .hide{display:none !important}
+/* An element's own display rule (the veil's flex) would otherwise beat the
+   browser's [hidden] handling, since author rules win over UA rules. */
+[hidden]{display:none !important}
 
 /* Window shell */
 .win{height:100vh;display:grid;grid-template-columns:var(--side-w,238px) 1fr}
@@ -296,16 +299,27 @@ table.scripts .title{font-family:var(--serif);font-size:17px;display:flex;
   align-items:center;gap:11px}
 table.scripts .title .ic{color:var(--t4);font-size:13px}
 
-/* Drop zone */
-.drop{border:1px dashed var(--bd2);border-radius:8px;padding:26px;text-align:center;
-  color:var(--t3);font-size:13px;cursor:pointer}
-.drop.over{border-color:var(--ac);background:var(--ac-w);color:var(--t1)}
-.drop .big{font-size:20px;margin-bottom:8px;color:var(--t4)}
+/* The library imports by drag and drop over the whole window. While a file
+   is held over it, a full-page veil says where it will go; pointer events
+   pass through it so the drop reaches the window underneath. */
+.drop-veil{position:fixed;inset:0;z-index:200;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(10,14,18,.72);backdrop-filter:blur(2px);
+  box-shadow:inset 0 0 0 2px var(--ac)}
+.drop-veil-box{display:flex;flex-direction:column;align-items:center;gap:7px;
+  padding:34px 52px;border:1.5px dashed var(--ac);border-radius:13px;
+  background:var(--card);color:var(--t2);font-size:13px}
+.drop-veil-ic{font-size:26px;color:var(--ac)}
+.drop-veil-say{font-size:16px;font-weight:600;color:var(--t1)}
 
 /* Progress */
 .progress .n{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums}
 .track{height:5px;background:var(--inset);border-radius:3px;overflow:hidden;margin:12px 0 9px}
 .track i{display:block;height:100%;background:var(--ac);transition:width .25s}
+/* An import has no measurable fraction, so its bar sweeps instead. */
+.track.busy i{width:40%;animation:track-sweep 1.1s ease-in-out infinite}
+@keyframes track-sweep{from{margin-left:-40%}to{margin-left:100%}}
+@media (prefers-reduced-motion:reduce){.track.busy i{animation:none;width:100%}}
 
 /* Reader page */
 .reader{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;

@@ -1,6 +1,8 @@
 const fileInput = document.getElementById('file');
-const drop = document.getElementById('drop');
 const result = document.getElementById('upload-result');
+const importCard = document.getElementById('import-card');
+const importLabel = document.getElementById('import-label');
+const importTrack = document.getElementById('import-track');
 
 // The page reloads after an import so the new row appears, which would wipe
 // the outcome and its warnings; the rendered result is stashed across the
@@ -12,13 +14,22 @@ try {
   if (stashed) {
     sessionStorage.removeItem(IMPORT_STASH);
     result.innerHTML = stashed;
+    importCard.hidden = false;
+    importLabel.hidden = true;
+    importTrack.hidden = true;
   }
 } catch (error) { /* no storage, nothing to restore */ }
 
 async function upload(file) {
   const data = new FormData();
   data.append('file', file);
-  result.innerHTML = '<span class="muted">Importing…</span>';
+  // The card is the sign something is happening: the file's name over a
+  // moving bar while the request runs, then the outcome in its place.
+  importCard.hidden = false;
+  importLabel.hidden = false;
+  importTrack.hidden = false;
+  importLabel.textContent = `Importing ${file.name}…`;
+  result.innerHTML = '';
   try {
     const body = await api('/api/scripts', { method: 'POST', body: data });
     ripple.trace('import.result', {
@@ -27,6 +38,8 @@ async function upload(file) {
       units: body.units,
       warnings: body.warnings.length,
     });
+    importTrack.hidden = true;
+    importLabel.hidden = true;
     const warnings = body.warnings
       .map((w) => `<div class="muted">${esc(w.code).replace(/_/g, ' ')}:
         ${esc(w.message)}</div>`).join('');
@@ -85,6 +98,8 @@ async function upload(file) {
     }
     setTimeout(() => window.location.reload(), 900);
   } catch (error) {
+    importTrack.hidden = true;
+    importLabel.hidden = true;
     ripple.trace('import.rejected', { error: error.message });
     result.innerHTML = `<span class="status">rejected</span>
       <span class="muted"> ${esc(error.message)}</span>`;
@@ -95,13 +110,49 @@ document.getElementById('pick').addEventListener('click', () => fileInput.click(
 fileInput.addEventListener('change', () => {
   if (fileInput.files.length) upload(fileInput.files[0]);
 });
-drop.addEventListener('click', () => fileInput.click());
-['dragenter', 'dragover'].forEach((event) =>
-  drop.addEventListener(event, (e) => { e.preventDefault(); drop.classList.add('over'); }));
-['dragleave', 'drop'].forEach((event) =>
-  drop.addEventListener(event, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
-drop.addEventListener('drop', (e) => {
-  if (e.dataTransfer.files.length) upload(e.dataTransfer.files[0]);
+/* The whole page is the drop target: a file held anywhere over the window
+   raises a veil saying so, and dropping imports it. A file whose extension
+   is not an importable format is refused with a toast before any request;
+   the server still judges everything past the extension. */
+const FORMATS = ['.fountain', '.fdx', '.pdf', '.txt', '.xml', '.text'];
+const veil = document.getElementById('drop-veil');
+const holdsFiles = (e) => [...((e.dataTransfer && e.dataTransfer.types) || [])]
+  .includes('Files');
+
+// The veil lives on the dragover stream, which the browser keeps firing
+// while a file is held over the window, rather than on enter/leave counts,
+// which fall out of step when the drag leaves the window. When the stream
+// stops, for any reason, the veil goes with it.
+let veilTimer;
+window.addEventListener('dragover', (e) => {
+  if (!holdsFiles(e)) return;
+  e.preventDefault();
+  veil.hidden = false;
+  clearTimeout(veilTimer);
+  veilTimer = setTimeout(() => { veil.hidden = true; }, 500);
+});
+// A plain pointer or key event never fires while a file drag is in
+// progress, so either one means the drag is over whatever the drag
+// events said; a veil still up then is stale and goes at once.
+['mousemove', 'keydown'].forEach((event) =>
+  window.addEventListener(event, () => {
+    if (veil.hidden) return;
+    clearTimeout(veilTimer);
+    veil.hidden = true;
+  }));
+window.addEventListener('drop', (e) => {
+  if (!holdsFiles(e)) return;
+  e.preventDefault();
+  clearTimeout(veilTimer);
+  veil.hidden = true;
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const name = file.name.toLowerCase();
+  if (!FORMATS.some((ext) => name.endsWith(ext))) {
+    toast('Invalid file. Upload .fountain, .fdx, .pdf, or .txt.', true);
+    return;
+  }
+  upload(file);
 });
 
 // Where a script opens is a Settings preference; the reader is the default,

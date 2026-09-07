@@ -77,24 +77,18 @@
 </table>
 {% if not rows %}<div class="empty" style="padding:18px">{{ empty_message }}</div>{% endif %}
 
-<div class="cards two" style="margin-top:16px">
-  <div class="card progress" id="progress-card" style="display:none">
-    <div><span class="n" id="p-done">0</span>
-      <span class="muted">of <span id="p-total">0</span> scenes extracted ·
-      <span id="p-title"></span></span></div>
-    <div class="track"><i id="p-bar" style="width:0"></i></div>
-    <div class="tiny muted" style="display:flex">
-      <span id="p-label">Waiting</span><span id="p-rate" style="margin-left:auto"></span></div>
+<div class="drop-veil" id="drop-veil" hidden>
+  <div class="drop-veil-box">
+    <div class="drop-veil-ic">▤</div>
+    <div class="drop-veil-say">Drop to import</div>
+    <div class="tiny muted">.fountain, .fdx, .pdf, .txt</div>
   </div>
-  <div class="card">
-    <div class="tiny muted" style="margin-bottom:11px">Drop a screenplay to import</div>
-    <div class="drop" id="drop">
-      <div class="big">▤</div>
-      .fountain, .fdx, .pdf with a text layer, .txt<br>
-      <span class="tiny">Scanned PDFs are rejected when OCR is unavailable</span>
-    </div>
-    <div id="upload-result" aria-live="polite" class="tiny" style="margin-top:11px"></div>
-  </div>
+</div>
+
+<div class="card" id="import-card" hidden style="margin-top:16px;max-width:520px">
+  <div class="tiny muted" id="import-label" style="margin-bottom:9px">Importing…</div>
+  <div class="track busy" id="import-track"><i></i></div>
+  <div id="upload-result" aria-live="polite" class="tiny"></div>
 </div>
 {% endblock %}
 
