@@ -27,6 +27,20 @@ Manual equivalent:
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/python -m pytest
 ```
 
+## The first ten minutes
+
+**See what the name means.** With the app open, press `Ctrl` `Opt` `Space`. The tab becomes a dark lake: stones drop, ripples spread, and as each wavefront passes a point a production entity surfaces there, thin lines connecting the ones that come up together. That is the idea the tool is built on, drawn rather than explained. Escape brings the app back where you left it, down to the scroll position.
+
+**Open a script.** Three screenplays are already in the library, each with its graph built, so there is something to work on before you configure anything. Drop a Fountain, Final Draft, PDF, or plain-text file on the library to import your own, or press **New script** and write one in the page.
+
+**Add a key.** Settings, Models: paste a Google AI Studio key, press Validate, then pick a main model. The key is checked against the provider's own models endpoint and stored in a local owner-only file, never in the database. Everything that does not call a model, importing, reading, writing, exporting, the diff engine, works without this step.
+
+**Build the graph.** Open a script and press **Build graph**. Ripple reads one scene per call and writes what it finds: the cast, props, locations, wardrobe, and vehicles a production has to move, each assertion citing the line it came from. A scene commits on its own, so a build can be stopped, resumed, or left to run while you read.
+
+**Change a line, and see the ripple.** Click into a line and edit it. The line goes amber, and **See ripple** puts the edit through the judgement pipeline before anything is applied: which stored facts still hold, what the graph gains and loses, which attributes changed, and any continuity conflict the change opens with the lines it contradicts. Accept applies it as one change set with undo. Reject leaves the script untouched.
+
+**Read what it found.** The graph views show the production graph around a scene or an entity, **Continuity findings** lists the conflicts still open with a link into the line each is about, and **Ask Ripple** answers questions about the script from the graph, with its evidence, or takes a change request and plans it scene by scene. Every model call, its tokens, and its cost are in Traces and in the billable-actions ledger.
+
 ## Importing a screenplay
 
 ```python
@@ -73,7 +87,7 @@ The repository carries its own git hooks, so the docs gate travels with it:
 git config core.hooksPath .githooks
 ```
 
-`pre-push` runs ruff and the Shiplock gate and refuses a push whose docs have drifted from the code. `RIPPLE_PREPUSH_TESTS=1` runs the suite there too, and `git push --no-verify` goes round it. `commit-msg` refuses a co-author trailer.
+`pre-push` runs ruff and the Shiplock gate and refuses a push whose docs have drifted from the code. `RIPPLE_PREPUSH_TESTS=1` runs the suite there too, and `git push --no-verify` goes round it. `commit-msg` refuses an attribution trailer: a co-author line, a generated-by line, or a tool's noreply address.
 
 ## Commits
 

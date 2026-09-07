@@ -54,6 +54,14 @@ Under the cap, **Billable actions** lists what has been billed, one row per acti
 
 **Interface** holds three groups. **Ask Ripple** governs the agent: whether omitting a scene also drafts patches for the neighbouring scenes or reports what breaks and stops, whether the plan renders before any drafting spend, how many tool calls one turn may make, and whether conversations persist per script. **Reader** chooses what opening a script shows first: the production graph (the default) or the reader itself. **Screensaver** governs the idle takeover: whether it runs at all, how long the tab has to sit untouched first (2, 5, 10 or 20 minutes, or Never, which keeps the shortcut and drops only the idle trigger), the shortcut that opens and closes it on demand (Ctrl+Opt+Space, rebindable to any chord of two modifiers and a key that the writing surface does not already answer; Escape, Space and Enter also close it, while a click throws another stone), and the least time between two thrown stones.
 
+## The screensaver
+
+After five minutes with no keystroke, pointer move or scroll, the tab becomes a dark lake. Stones drop at random, each one sending damped rings outward, and as a wavefront reaches a point a production entity surfaces there and fades again; an entity that comes up while another is on the water is joined to it by a thin line, which leaves with whichever of the two fades first. `Ctrl+Opt+Space` opens it at once from anywhere in Ripple, the unit editor included.
+
+Escape, Space, Enter, or the shortcut closes it and puts you back where you were, with the same scroll position and the same focus. Nothing else does: a click throws another stone, and every other key is ignored, so a brushed mouse cannot end a screening. Under `prefers-reduced-motion` it holds still, showing the wordmark and one ring set with nothing that moves.
+
+It is decorative. It reads no script, changes nothing, and calls no model, and the idle timer holds off while a dialog, a ripple preview, an edited line, an agent turn, or a running build is waiting on you. Extraction and agent turns carry on behind it, and closing it restarts nothing. Every row that governs it is in Settings, Interface, Screensaver.
+
 ## Building a graph
 
 Open a script and press **Build graph**. Extraction runs one scene per model call on the server: each scene commits independently, so a failure late in a run keeps everything before it, and re-running resumes from the unfinished scenes instead of restarting. The page reports progress rather than driving it, so you can leave the screen, reload, or close the tab and the build carries on. A scene already extracted from identical input under the same prompt and model is served from the cache with no call and no spend. Before the model reads a scene, a deterministic pre-pass records what code can parse: the speaking cast from dialogue cues and the location from the heading, each citing its line, at no model cost.
