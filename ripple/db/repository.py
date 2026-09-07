@@ -197,21 +197,31 @@ def graph_labels(session: Session, script_id) -> dict:
     """Display labels for every node in one script's graph.
 
     Entities are labelled by canonical name; scenes by their display number.
-    An unnumbered scene (an intercut sub-heading, an OMITTED slug) stays
-    visibly unnumbered as "Sc —": substituting the position invents a number
-    that collides with a numbered scene further along the spine.
+    In a numbered script, an unnumbered scene (an intercut sub-heading, an
+    OMITTED slug) stays visibly unnumbered as "Sc —": substituting the
+    position invents a number that collides with a numbered scene further
+    along the spine. A script with no numbers at all (written in Ripple, or
+    imported from an unnumbered document) has nothing to collide with, so
+    its scenes are labelled by their position.
     """
     labels: dict = {}
     for entity_id, name in session.execute(
         select(Entity.id, Entity.canonical_name).where(Entity.script_id == script_id)
     ):
         labels[entity_id] = name
-    for scene_id, number in session.execute(
-        select(Scene.id, Scene.display_scene_number).where(
-            Scene.script_id == script_id
+    scenes = list(
+        session.execute(
+            select(Scene.id, Scene.display_scene_number, Scene.sequence_index)
+            .where(Scene.script_id == script_id)
+            .order_by(Scene.sequence_index)
         )
-    ):
-        labels[scene_id] = f"Sc {number}" if number else "Sc —"
+    )
+    numbered = any(number for _, number, _ in scenes)
+    for position, (scene_id, number, _) in enumerate(scenes, start=1):
+        if number:
+            labels[scene_id] = f"Sc {number}"
+        else:
+            labels[scene_id] = "Sc —" if numbered else f"Sc {position}"
     return labels
 
 

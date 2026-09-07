@@ -715,3 +715,44 @@ class TestSceneLabel:
         assert scene.display_scene_number is None
         assert scene.label == "—"
         assert "4" not in scene.label
+
+
+class TestGraphLabels:
+    """Scene labels: printed numbers where the document has them, positions
+    where it has none, and a visible dash only where the two would mix."""
+
+    @pytest.fixture
+    def session(self):
+        engine = create_db_engine("sqlite+pysqlite:///:memory:")
+        create_all(engine)
+        instance = session_factory(engine)()
+        yield instance
+        instance.close()
+
+    def _script(self, session, numbers):
+        from ripple.db.models import Scene, Script
+        from ripple.db.repository import graph_labels
+
+        script = Script(title="T", import_status="accepted")
+        session.add(script)
+        session.flush()
+        ids = []
+        for index, number in enumerate(numbers):
+            scene = Scene(
+                script_id=script.id,
+                sequence_index=index,
+                heading=f"INT. PLACE {index} - DAY",
+                display_scene_number=number,
+            )
+            session.add(scene)
+            session.flush()
+            ids.append(scene.id)
+        return [graph_labels(session, script.id)[one] for one in ids]
+
+    def test_an_unnumbered_script_labels_scenes_by_position(self, session):
+        assert self._script(session, [None, None, None]) == [
+            "Sc 1", "Sc 2", "Sc 3",
+        ]
+
+    def test_a_numbered_script_keeps_the_dash_for_the_odd_one_out(self, session):
+        assert self._script(session, ["1", None, "3"]) == ["Sc 1", "Sc —", "Sc 3"]

@@ -32,6 +32,8 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **An unnumbered script's scenes count from 1 in the graph.** A screenplay written in Ripple carries no printed scene numbers, so its graph labelled every scene `Sc —`. When no scene in a script has a number, the graph numbers them by position down the spine instead. A script with some printed numbers keeps the dash for the unnumbered ones, so a counted label never collides with a printed one.
+
 - **The import-review banner lays out correctly.** Its wrapper used the `grow` class, a centred flex row elsewhere, so the heading and its warnings shared one line. The banner styles its own parts now: heading over warnings, button top right.
 
 - **A changed screensaver setting applies without a reload.** The overlay read its settings once at page load, so setting the stones a second apart carried on gating them at three. Opening the screensaver re-reads them, so a tab open in another window runs on the current values.
