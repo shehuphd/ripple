@@ -8,7 +8,7 @@ Ripple treats a screenplay as a production database. You import a script, build 
 ./launch.command
 ```
 
-The launcher stops any Ripple server already running, verifies Python 3.11 or newer, creates or repairs its virtual environment in `.venv`, installs the package, starts the server on the first free port from 8420, and opens a browser. Run it again at any time; you always get one fresh instance.
+On Windows, `launch.bat` is the same launcher. Both stop any Ripple server already running, verify Python 3.11 or newer, create or repair the virtual environment in `.venv`, install the package, start the server on the first free port from 8420, and open a browser. Run either again at any time; you always get one fresh instance.
 
 ```bash
 ./launch.command --test

@@ -6,6 +6,8 @@ All notable changes to Ripple are documented here.
 
 ### Added
 
+- **A Windows launcher.** `launch.bat` mirrors `launch.command`: stops any running instance, builds or repairs `.venv`, picks a free port from 8420, and opens a browser once the server answers. `--test` runs the suite. Written on macOS, so untested on Windows.
+
 - **ARCHITECTURE describes entity resolution.** A new section covers its three parts: alias-aware matching during extraction, the duplicate detector with reviewed merges, and rename detection across drafts. All deterministic, and an ambiguous identity creates a new entity for a person to review instead of merging on a guess.
 
 - **Three lakes, and two rows for how one looks.** **Water**, a grey-blue lake with deep cyan rings and white entity cards, is the default; **Dark** is the same lake with the lights down and **Light** is it on warm paper. **Entity colour** gives each entity a random department colour, or none. Both rows are in Settings → Interface → Screensaver.
