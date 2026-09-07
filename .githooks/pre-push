@@ -16,6 +16,41 @@ set -e
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
+# Branch protection for main, run before the slower gates so a refused push
+# fails at once. GitHub's own protection needs a paid plan on a private
+# repository, so this stands in for it: main takes no deletion and no
+# rewrite of history it already has. Local, so `--no-verify` goes round it;
+# it guards against the slip, not against intent.
+protected=refs/heads/main
+while read -r _local_ref local_sha remote_ref remote_sha; do
+  [ "$remote_ref" = "$protected" ] || continue
+
+  case "$local_sha" in
+    *[!0]*) ;;
+    *)
+      echo "pre-push: refusing to delete main." >&2
+      exit 1
+      ;;
+  esac
+
+  # An all-zero remote sha is the branch's first push: nothing to rewrite.
+  case "$remote_sha" in *[!0]*) ;; *) continue ;; esac
+
+  if ! git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+    echo "pre-push: main is at a commit this clone does not have." >&2
+    echo "  Run 'git fetch' and look at what is there before pushing." >&2
+    exit 1
+  fi
+
+  if ! git merge-base --is-ancestor "$remote_sha" "$local_sha"; then
+    echo "pre-push: refusing to rewrite pushed history on main." >&2
+    echo "  ${remote_sha} is not an ancestor of what you are pushing, so" >&2
+    echo "  commits already on the remote would go. Rebase onto origin/main," >&2
+    echo "  or push a branch instead." >&2
+    exit 1
+  fi
+done
+
 if [ ! -x .venv/bin/shiplock ]; then
   echo "pre-push: no .venv/bin/shiplock. Run:" >&2
   echo "  python3 -m venv .venv && .venv/bin/pip install -e \".[dev]\"" >&2

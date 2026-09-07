@@ -19,7 +19,7 @@ Every file in the repository and what it does. Directories the application write
 | `pyproject.toml` | Package metadata, dependencies, pytest and ruff configuration. |
 | `shiplock.toml` | Shiplock docs-vs-code release checks: declared docs, version alignment, architecture and manifest coverage, one declaration per dependency, and an expectation in every test. |
 | `.gitignore` | Excludes runtime state, virtual environments, and local tool settings. |
-| `.githooks/pre-push` | Refuses a push whose docs have drifted: ruff, then Shiplock's gate. Set `RIPPLE_PREPUSH_TESTS=1` to run the suite here too. |
+| `.githooks/pre-push` | Refuses a deletion of `main` or a push that would drop commits the remote has, then a push whose docs have drifted: ruff, then Shiplock's gate. Set `RIPPLE_PREPUSH_TESTS=1` to run the suite here too. |
 | `.githooks/commit-msg` | Refuses a commit message carrying an attribution trailer: a co-author line, a generated-by line, or a tool's noreply address. |
 | `.github/dependabot.yml` | Weekly dependency update checks. |
 

@@ -89,7 +89,7 @@ The repository carries its own git hooks, so the docs gate travels with it:
 git config core.hooksPath .githooks
 ```
 
-`pre-push` runs ruff and the Shiplock gate and refuses a push whose docs have drifted from the code. `RIPPLE_PREPUSH_TESTS=1` runs the suite there too, and `git push --no-verify` goes round it. `commit-msg` refuses an attribution trailer: a co-author line, a generated-by line, or a tool's noreply address.
+`pre-push` protects `main` and refuses a push whose docs have drifted from the code. Protection first: no deleting `main`, and no push that would drop commits the remote already has. Then ruff and the Shiplock gate. `RIPPLE_PREPUSH_TESTS=1` runs the suite there too, and `git push --no-verify` goes round all of it, so this guards against the slip rather than against intent. `commit-msg` refuses an attribution trailer: a co-author line, a generated-by line, or a tool's noreply address.
 
 ## Commits
 
