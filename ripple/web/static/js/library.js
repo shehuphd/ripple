@@ -143,11 +143,59 @@ document.querySelectorAll('[data-delete]').forEach((button) => {
   });
 });
 
+/* Search and sort, both over the rows already in the page. The library is
+   one page of scripts, so neither needs a request. */
 const search = document.getElementById('search');
-search.addEventListener('input', () => {
-  const needle = search.value.toLowerCase();
-  document.querySelectorAll('#rows tr').forEach((row) => {
-    row.style.display = row.dataset.title.toLowerCase().includes(needle) ? '' : 'none';
+const libraryBody = document.getElementById('rows');
+const libraryRows = [...document.querySelectorAll('#rows tr')];
+const NUMERIC_COLUMNS = new Set(['pages', 'scenes', 'runtime']);
+let sortKey = null;
+let ascending = true;
+
+function libraryValue(row, key) {
+  return NUMERIC_COLUMNS.has(key)
+    ? Number(row.dataset[key] || 0)
+    : (row.dataset[key] || '').toLowerCase();
+}
+
+function drawLibrary() {
+  const needle = (search.value || '').toLowerCase();
+  if (sortKey) {
+    const ordered = libraryRows.slice().sort((a, b) => {
+      const left = libraryValue(a, sortKey);
+      const right = libraryValue(b, sortKey);
+      if (left === right) return 0;
+      return (left < right ? -1 : 1) * (ascending ? 1 : -1);
+    });
+    // Moving the existing rows keeps one DOM node per script, so a sort
+    // never rebuilds what the page has already parsed.
+    ordered.forEach((row) => libraryBody.appendChild(row));
+  }
+  libraryRows.forEach((row) => {
+    const matches = row.dataset.title.toLowerCase().includes(needle);
+    row.style.display = matches ? '' : 'none';
+  });
+}
+
+search.addEventListener('input', drawLibrary);
+
+document.querySelectorAll('#library-table th[data-sort]').forEach((header) => {
+  header.querySelector('.sortbtn').addEventListener('click', () => {
+    const key = header.dataset.sort;
+    // A second click on the sorted column reverses it. A new column starts
+    // ascending for text and descending for a number, which is what a
+    // reader wants first from each: A to Z, and the longest script.
+    if (sortKey === key) ascending = !ascending;
+    else ascending = !NUMERIC_COLUMNS.has(key);
+    sortKey = key;
+    document.querySelectorAll('#library-table th[data-sort]').forEach((one) => {
+      const on = one === header;
+      one.classList.toggle('sorted', on);
+      one.classList.toggle('asc', on && ascending);
+      one.setAttribute(
+        'aria-sort', on ? (ascending ? 'ascending' : 'descending') : 'none');
+    });
+    drawLibrary();
   });
 });
 

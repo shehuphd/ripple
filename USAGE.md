@@ -27,7 +27,7 @@ On first run the library seeds three bundled demo screenplays, each with its gro
 
 ## The library
 
-The library lists every imported script with its format, page count, scene count, estimated runtime, and import outcome. The sidebar filters to recently opened scripts and to imports that need review.
+The library lists every imported script with its format, page count, scene count, estimated runtime, and import outcome. Runtime is the one-page-one-minute rule every schedule starts from, written as hours and minutes (`2h 51m`, `38m`). Clicking a column header sorts by it and clicking again reverses it; text columns open A to Z and number columns open with the largest first. The search box filters by title, and a sort holds while you search. The sidebar filters to recently opened scripts and to imports that need review.
 
 **New script** starts an empty one to write in Ripple: name it and the reader opens on a blank page whose only control is the scene inserter. A written script behaves like an imported one everywhere downstream.
 

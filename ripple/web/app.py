@@ -497,6 +497,9 @@ def library(
                 "pages": pages,
                 "scenes": scene_counts.get(script.id, 0),
                 "runtime": runtime(pages),
+                # The sort reads minutes, so 38m orders under 2h 51m rather
+                # than beside it alphabetically.
+                "runtime_minutes": pages,
                 "outcome": script.import_status,
                 "outcome_label": OUTCOME_LABELS.get(
                     script.import_status, script.import_status

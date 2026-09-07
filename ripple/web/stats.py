@@ -89,8 +89,17 @@ def page_of(offset_characters: int) -> int:
 
 
 def runtime(pages: int) -> str:
-    """One page, one minute. The oldest estimate in the business."""
-    return f"{pages // 60}:{pages % 60:02d}"
+    """One page, one minute. The oldest estimate in the business.
+
+    Written with its units, since a bare 2:51 reads as either two hours
+    fifty-one or two minutes fifty-one, and both are plausible for a script.
+    """
+    hours, minutes = divmod(max(0, pages), 60)
+    if hours and minutes:
+        return f"{hours}h {minutes}m"
+    if hours:
+        return f"{hours}h"
+    return f"{minutes}m"
 
 
 def eighths(characters: int) -> str:

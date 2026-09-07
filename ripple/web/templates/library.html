@@ -19,14 +19,29 @@
 {% endblock %}
 
 {% block content %}
-<table class="scripts">
+<table class="scripts" id="library-table">
   <thead><tr>
-    <th>Title</th><th>Format</th><th>Pages</th><th>Scenes</th>
-    <th>Runtime</th><th>Import outcome</th><th></th>
+    <th data-sort="title" aria-sort="none">
+      <button type="button" class="sortbtn">Title</button></th>
+    <th data-sort="format" aria-sort="none">
+      <button type="button" class="sortbtn">Format</button></th>
+    <th class="num" data-sort="pages" aria-sort="none">
+      <button type="button" class="sortbtn">Pages</button></th>
+    <th class="num" data-sort="scenes" aria-sort="none">
+      <button type="button" class="sortbtn">Scenes</button></th>
+    <th class="num" data-sort="runtime" aria-sort="none">
+      <button type="button" class="sortbtn"
+              data-tip="One page, one minute">Runtime</button></th>
+    <th data-sort="outcome" aria-sort="none">
+      <button type="button" class="sortbtn">Import outcome</button></th>
+    <th></th>
   </tr></thead>
   <tbody id="rows" data-landing="{{ landing_view }}">
   {% for row in rows %}
-    <tr data-id="{{ row.id }}" data-title="{{ row.title }}">
+    <tr data-id="{{ row.id }}" data-title="{{ row.title }}"
+        data-format="{{ row.format }}" data-pages="{{ row.pages }}"
+        data-scenes="{{ row.scenes }}" data-runtime="{{ row.runtime_minutes }}"
+        data-outcome="{{ row.outcome_label }}">
       <td><a class="title" href="{{ '/scripts/' ~ row.id ~ '/graph' if landing_view == 'graph' else '/scripts/' ~ row.id }}"><span class="ic">▤</span>{{ row.title }}</a></td>
       <td>{{ row.format }}</td>
       <td class="num">{{ row.pages }}</td>
