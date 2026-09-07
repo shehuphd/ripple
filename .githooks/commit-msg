@@ -1,10 +1,20 @@
 #!/bin/sh
-# Refuse any commit whose message carries a co-author trailer.
+# Refuse any commit whose message carries an attribution trailer.
 #
 # The repository sets core.hooksPath to .githooks so the push gate travels
 # with it, which takes this repo out of any global hooks directory. This
-# keeps that guard in force here.
+# keeps that guard in force here, and widens it: a co-author trailer, a
+# generated-by line, or a tool's noreply address all name something other
+# than the person committing, and none of them belong in the history.
 if grep -qiE '^[[:space:]]*co-authored-by:' "$1"; then
   echo "commit refused: co-author trailer in the message" >&2
+  exit 1
+fi
+if grep -qiE '^[[:space:]]*(generated with|🤖 generated)' "$1"; then
+  echo "commit refused: generated-by line in the message" >&2
+  exit 1
+fi
+if grep -qiE 'noreply@anthropic\.com' "$1"; then
+  echo "commit refused: tool attribution address in the message" >&2
   exit 1
 fi

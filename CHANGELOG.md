@@ -4,6 +4,10 @@ All notable changes to Ripple are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- **The commit-message guard covers every attribution trailer.** It refused a co-author line and let a generated-by line or a tool's noreply address through. All three name something other than the person committing, so all three are refused now. The README states the convention the hook enforces half of: an imperative subject, a prose body saying what changed and why it needed to, and no trailers of any kind.
+
 ### Added
 
 - **A lake screensaver for the idle tab.** After five minutes with no keystroke, pointer move or scroll, the tab becomes a dark lake: stones drop at random, each one sends damped concentric ripples outward, and as a wavefront passes a point a production entity surfaces there and fades again. Ctrl with Option and Space opens it from anywhere, including inside the unit editor, and Escape, Space, Enter or that same shortcut restores the view, the scroll position and the focus that was there before. Nothing else takes it down: a click throws a stone, and every other key is left alone, so a brushed mouse or a leaned-on keyboard cannot end a screening mid-drop. It is decorative: no script is read, nothing is written, and no model is called. The idle timer holds off while a dialog, a ripple preview, an edited line or an agent turn is waiting on an answer, and extraction and agent work run behind it untouched. **Settings, Interface, Screensaver** carries four rows: the feature itself, the idle period (2, 5, 10 or 20 minutes, or Never, which keeps the shortcut and drops only the idle trigger), the shortcut with a capture field that refuses a chord the writing surface already answers, and the least time between two thrown stones, which is what keeps a presenter's held-down pointer from crowding the water. Under `prefers-reduced-motion` it holds still: the vignette, the wordmark and one ring set, with nothing that moves.

@@ -75,6 +75,10 @@ git config core.hooksPath .githooks
 
 `pre-push` runs ruff and the Shiplock gate and refuses a push whose docs have drifted from the code. `RIPPLE_PREPUSH_TESTS=1` runs the suite there too, and `git push --no-verify` goes round it. `commit-msg` refuses a co-author trailer.
 
+## Commits
+
+A subject line in the imperative, under about 60 characters, then a blank line and a paragraph or two of prose saying what changed and why it needed to. No trailers of any kind: no co-authors, no attribution, no generated-by lines. The `commit-msg` hook enforces the co-author half of that; the rest is convention.
+
 ## Tests
 
 ```bash
@@ -85,7 +89,7 @@ Test-order randomisation is enabled. A failure that depends on order is a bug in
 
 ## Status
 
-Working: import adapters, the demo corpus, persistence, provider settings, scene-level graph extraction with attributes, the judged ripple preview, the deterministic diff engine, continuity retrieval, the synthesizer, the change-set service with undo, Ask Ripple (a chat over one script: grounded question answering with stored replays and a grounding check, and an agent for change requests that plans from graph coverage, drafts behind a minimal-edit guard and a confidence floor, previews through the judgement pipeline, and applies nothing itself — Confirm is a button), duplicate-entity detection and merges, batch actions across the list pages, a model-call audit with a token budget, a billable-actions ledger, and a fallback model, cancellable and resumable graph builds, and a web application covering the library, reader, ripple preview, graph views, sortable audit tables, and settings.
+Working: import adapters, the demo corpus, persistence, provider settings, scene-level graph extraction with attributes, the judged ripple preview, the deterministic diff engine, continuity retrieval, the synthesizer, the change-set service with undo, Ask Ripple (a chat over one script: grounded question answering with stored replays and a grounding check, and an agent for change requests that plans from graph coverage, drafts behind a minimal-edit guard and a confidence floor, previews through the judgement pipeline, and applies nothing itself — Confirm is a button), duplicate-entity detection and merges, batch actions across the list pages, a model-call audit with a token budget, a billable-actions ledger, and a fallback model, cancellable and resumable graph builds, a web application covering the library, reader, ripple preview, graph views, sortable audit tables, and settings, and a lake screensaver for the idle tab.
 
 Not yet deployed anywhere; local development only.
 
