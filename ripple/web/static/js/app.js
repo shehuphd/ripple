@@ -28,7 +28,39 @@ debugDump.table = (prefix) => {
     : traceRing);
 };
 
-window.ripple = { trace, debug: debugDump };
+/* Settings changes travel to whatever is already open.
+   Every page reads its preferences once, when it loads, so a preference
+   saved afterwards would be ignored by every other open page until someone
+   reloaded it. A save announces itself instead: on this page through an
+   event, and to the app's other tabs through a broadcast channel. Nothing
+   in Ripple needs a reload to pick up a setting. */
+const settingsChannel = (() => {
+  try {
+    return new BroadcastChannel('ripple.settings');
+  } catch (error) {
+    return null;  // No channel in this browser; the same page still hears it.
+  }
+})();
+
+function announceSetting(kind, detail) {
+  const message = { kind, detail };
+  window.dispatchEvent(new CustomEvent('ripple:setting', { detail: message }));
+  if (settingsChannel) settingsChannel.postMessage(message);
+}
+
+function onSetting(kind, handler) {
+  const receive = (message) => {
+    if (message && message.kind === kind) handler(message.detail);
+  };
+  window.addEventListener('ripple:setting', (event) => receive(event.detail));
+  if (settingsChannel) {
+    settingsChannel.addEventListener('message', (event) => receive(event.data));
+  }
+}
+
+window.ripple = {
+  trace, debug: debugDump, announceSetting, onSetting,
+};
 
 /* Shared helpers. */
 

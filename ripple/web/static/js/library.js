@@ -105,14 +105,25 @@ drop.addEventListener('drop', (e) => {
 });
 
 // Where a script opens is a Settings preference; the reader is the default,
-// and the other view stays one click away either way.
-const landing = document.getElementById('rows').dataset.landing;
+// and the other view stays one click away either way. The rows were built
+// against the preference as it stood when the page loaded, so a change made
+// in Settings while this page is open rewrites them where they are.
+const rows = document.getElementById('rows');
+const target = (id) => (rows.dataset.landing === 'graph'
+  ? `/scripts/${id}/graph` : `/scripts/${id}`);
+
 document.querySelectorAll('#rows tr').forEach((row) => {
   row.addEventListener('click', (event) => {
     if (event.target.closest('[data-delete]')) return;
-    window.location = landing === 'graph'
-      ? `/scripts/${row.dataset.id}/graph`
-      : `/scripts/${row.dataset.id}`;
+    window.location = target(row.dataset.id);
+  });
+});
+
+ripple.onSetting('landing', (saved) => {
+  rows.dataset.landing = saved.landing_view;
+  document.querySelectorAll('#rows tr').forEach((row) => {
+    const link = row.querySelector('a.title');
+    if (link) link.href = target(row.dataset.id);
   });
 });
 

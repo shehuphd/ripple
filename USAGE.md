@@ -44,7 +44,7 @@ A rejected import changes nothing. Deleting a script first shows a deletion prev
 
 ## Settings
 
-Open **Settings** from the sidebar. It has three sections: Models, Spend, and Interface.
+Open **Settings** from the sidebar. It has three sections: Models, Spend, and Interface. Every setting applies the moment it is saved, in this page and in any other Ripple tab that is open. Nothing here needs a reload or a restart.
 
 **Models** holds the provider credential and the model choice. Paste a Google AI Studio key and press Validate; the key is checked against the provider's own models endpoint, never against a guessed format, so any key Google issues works. A valid key is stored in `data/secrets.env` (owner-only file permissions), never in the database and never sent back to the browser. Then pick a **main model** and, optionally, a **fallback model**. When the main model refuses for an availability reason (dead on this key, an outage, a rate limit, a timeout), the same call runs once against the fallback; during extraction the fallback also answers when the main model's reply fails validation (malformed, truncated, or naming nothing in a scene with content), so a cheap main model with a stronger fallback is the recommended pairing. A model recorded as unavailable on your key is disabled in the picker until a later call succeeds on it.
 

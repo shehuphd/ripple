@@ -47,6 +47,8 @@ if (openingTab) showTab(openingTab);
    answers a call the main model refused for an availability reason. */
 const modelsCard = document.getElementById('models-card');
 
+let pickersWired = false;
+
 async function loadModelPickers() {
   if (!modelsCard || modelsCard.dataset.configured !== '1') return;
   const main = document.getElementById('main-model');
@@ -72,6 +74,11 @@ async function loadModelPickers() {
   fallback.value = modelsCard.dataset.fallback || '';
   main.disabled = false;
   fallback.disabled = false;
+
+  // Saving a key loads the pickers a second time, and one change listener
+  // per picker is enough: two would save the same choice twice.
+  if (pickersWired) return;
+  pickersWired = true;
 
   main.addEventListener('change', async () => {
     if (!main.value) return;
@@ -115,7 +122,7 @@ document.querySelectorAll('[data-provider].card').forEach((card) => {
   const provider = card.dataset.provider;
   const result = card.querySelector('.result');
   if (!card.querySelector('.key')) return;
-  const configured = card.querySelector('.dot').classList.contains('accepted');
+  let configured = card.querySelector('.dot').classList.contains('accepted');
 
   // An empty field is answered where it happened, with no request and no
   // error text: there is nothing to send and nothing for a provider to judge.
@@ -149,9 +156,22 @@ document.querySelectorAll('[data-provider].card').forEach((card) => {
         code: outcome.error_code || null,
       });
       if (outcome.valid && save) {
-        // Reload so the Models card renders its pickers against the saved key.
+        // The card holds both states, so the saved key fills the pickers
+        // where they stand rather than through a reload.
         toast('Key saved.');
-        setTimeout(() => window.location.reload(), 600);
+        field.value = '';
+        configured = true;
+        card.querySelector('.dot').classList.replace('needs_review', 'accepted');
+        card.querySelector('.forget').classList.remove('hide');
+        result.innerHTML =
+          `<span class="tag ok">valid</span> <span class="muted">
+           Key saved. ${outcome.model_count} text models available.</span>`;
+        if (modelsCard) {
+          modelsCard.dataset.configured = '1';
+          document.getElementById('models-body').classList.remove('hide');
+          document.getElementById('models-empty').classList.add('hide');
+          loadModelPickers();
+        }
       } else if (outcome.valid) {
         result.innerHTML =
           `<span class="tag ok">valid</span> <span class="muted">
@@ -190,7 +210,17 @@ document.querySelectorAll('[data-provider].card').forEach((card) => {
         + 'key again.', 'Forget', { destructive: true }))) return;
       await api(`/api/settings/${provider}`, { method: 'DELETE' });
       ripple.trace('settings.credential_forgotten', { provider });
-      window.location.reload();
+      configured = false;
+      card.querySelector('.dot').classList.replace('accepted', 'needs_review');
+      forget.classList.add('hide');
+      result.innerHTML = '<span class="muted">Key forgotten. Enter one to '
+        + 'build graphs and judge edits again.</span>';
+      if (modelsCard) {
+        modelsCard.dataset.configured = '';
+        document.getElementById('models-body').classList.add('hide');
+        document.getElementById('models-empty').classList.remove('hide');
+      }
+      toast('Key forgotten.');
     });
   }
 });
@@ -225,6 +255,7 @@ document.querySelectorAll('input[name="landing"]').forEach((radio) => {
         method: 'POST', body: form({ landing_view: radio.value }),
       });
       ripple.trace('settings.landing_selected', { view: radio.value });
+      ripple.announceSetting('landing', { landing_view: radio.value });
       result.textContent = radio.value === 'graph'
         ? 'Scripts now open on their production graph.'
         : 'Scripts now open on the script itself.';
@@ -411,8 +442,7 @@ if (saverCard) {
       ripple.trace('settings.screensaver_changed', { setting: key, value });
       // The overlay read its settings when the page loaded, so it is told
       // rather than left to find out on the next reload.
-      window.dispatchEvent(
-        new CustomEvent('ripple:screensaver', { detail: saved }));
+      ripple.announceSetting('screensaver', saved);
       result.textContent = say;
     } catch (error) {
       result.textContent = error.message;

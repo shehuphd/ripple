@@ -4,9 +4,17 @@ All notable changes to Ripple are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Surfacing entities reach for each other.** An entity that comes up looks for another already on the water and a thin line fades in between them, the way the production graph draws a relationship. The line belongs to the shorter-lived half of the pair, so it leaves with whichever of the two fades first rather than hanging from an entity that is no longer there. It is drawn under the ripples in the water's own cool grey, one weight, no colour of its own.
+
+### Changed
+
+- **Every setting applies where it is saved, and in whatever else is open.** A page read its preferences once, when it loaded, so a preference saved afterwards was ignored by every other open page until someone reloaded it, and saving or forgetting a provider key reloaded the Settings page outright to rebuild the Models card. Saves now announce themselves, on the page through an event and to the app's other tabs through a broadcast channel: the screensaver picks up its idle period, shortcut and throttle as they change, and a library page repoints its rows the moment the opening view changes under it. The Models card carries both of its states and swaps between them in place, so a saved key fills the pickers and a forgotten one empties them with no reload anywhere. Nothing in Ripple needs a reload to pick up a setting, so nothing has to say it does.
+
 ### Fixed
 
-- **A changed screensaver setting applies without a reload.** The overlay read its settings once when the page loaded, so a throttle or idle period changed afterwards was ignored by any page already open, including the Settings page itself: setting the stones a second apart carried on gating them at three. Saving a row now tells the overlay in the same page, and opening the screensaver re-reads the settings, so a tab left open in another window runs on what Settings currently says.
+- **A changed screensaver setting applies without a reload.** The overlay read its settings once when the page loaded, so a throttle or idle period changed afterwards was ignored by any page already open, including the Settings page itself: setting the stones a second apart carried on gating them at three. Opening the screensaver re-reads the settings, on top of the announcement above, so a tab left open in another window runs on what Settings currently says.
 
 ### Changed
 

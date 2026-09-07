@@ -137,7 +137,7 @@ Every file in the repository and what it does. Directories the application write
 | `web/static/css/ripple-tokens.css` | Design tokens. |
 | `web/static/css/ripple-fonts.css` | Font faces. |
 | `web/static/css/app.css` | Per-screen styles. |
-| `web/static/js/app.js` | Shared helpers: `api()`, escaping, dialogs, the decision log, and the collapse and drag-resize behaviour every pane uses. |
+| `web/static/js/app.js` | Shared helpers: `api()`, escaping, dialogs, the decision log, the settings announcements that carry a saved preference to every open page, and the collapse and drag-resize behaviour every pane uses. |
 | `web/static/js/library.js` | Library page behaviour. |
 | `web/static/js/reader.js` | Reader editing, drafts, and the preview overlay. |
 | `web/static/js/graph.js` | Both graph views: rendering, selection, zoom, search. |

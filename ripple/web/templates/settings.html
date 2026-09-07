@@ -36,7 +36,8 @@
                  autocomplete="off" spellcheck="false">
           <button class="btn validate">Validate</button>
           <button class="btn pri save">Save</button>
-          {% if status.configured %}<button class="btn danger forget">Forget</button>{% endif %}
+          <button class="btn danger forget{{ '' if status.configured else ' hide' }}"
+                  >Forget</button>
         </div>
         <div class="result tiny" aria-live="polite"></div>
       </div>
@@ -48,7 +49,8 @@
            data-main="{{ selected_model or '' }}"
            data-fallback="{{ fallback_model or '' }}">
         <div class="hd"><h2>Models</h2></div>
-        {% if statuses and statuses[0].configured %}
+        <div id="models-body"
+             class="{{ '' if statuses and statuses[0].configured else 'hide' }}">
         <div class="tiny muted" style="margin-bottom:11px">
           The main model handles every call. When it refuses for an
           availability reason (dead on this key, provider outage, rate
@@ -69,10 +71,10 @@
             · fallback: {{ fallback_model }}{% else %} · no fallback set{% endif %}
           {% else %}No model selected yet. Pick one to build graphs and judge
             edits.{% endif %}</div>
-        {% else %}
-        <div class="empty">Enter your API key above, then pick a main and a
+        </div>
+        <div class="empty {{ 'hide' if statuses and statuses[0].configured }}"
+             id="models-empty">Enter your API key above, then pick a main and a
           fallback model here.</div>
-        {% endif %}
       </div>
     </section>
 
