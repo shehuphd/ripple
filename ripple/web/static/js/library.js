@@ -31,7 +31,27 @@ async function upload(file) {
   importLabel.textContent = `Importing ${file.name}…`;
   result.innerHTML = '';
   try {
-    const body = await api('/api/scripts', { method: 'POST', body: data });
+    let body = await api('/api/scripts', { method: 'POST', body: data });
+
+    /* The same bytes already back a script: nothing was imported, and
+       importing a second copy is the user's call, not a silent default. */
+    if (body.duplicate) {
+      importTrack.hidden = true;
+      importLabel.hidden = true;
+      const again = await confirmDialog(
+        `"${body.duplicate.title}" is already in the library, and this file `
+        + 'is byte-for-byte the same. Import a second copy?',
+        'Import again');
+      if (!again) {
+        result.innerHTML = '<span class="muted">Already in the library; '
+          + 'nothing imported.</span>';
+        return;
+      }
+      importTrack.hidden = false;
+      importLabel.hidden = false;
+      data.append('force', '1');
+      body = await api('/api/scripts', { method: 'POST', body: data });
+    }
     ripple.trace('import.result', {
       outcome: body.outcome,
       scenes: body.scenes,

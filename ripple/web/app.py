@@ -11,6 +11,7 @@ inside request handlers, with no background worker to pay for.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -1797,14 +1798,30 @@ def settings_page(request: Request, session: Session = Depends(get_session)):
 
 @app.post("/api/scripts")
 async def upload_script(
-    file: UploadFile = File(...), session: Session = Depends(get_session)
+    file: UploadFile = File(...),
+    force: str | None = Form(None),
+    session: Session = Depends(get_session),
 ):
     """Import an uploaded screenplay.
 
     A rejection is a 400 with the adapter's stable code, not a 500: an
     unparseable file is an expected outcome the UI has to explain.
+
+    A file whose bytes already back a script in the library is not imported
+    again on the first ask: the reply names the twin and the client asks the
+    user, whose yes comes back as `force`.
     """
     data = await file.read()
+    if not force:
+        digest = hashlib.sha256(data).hexdigest()
+        twin = session.scalars(
+            select(Script)
+            .join(Import, Import.script_id == Script.id)
+            .where(Import.content_hash == digest)
+            .order_by(Import.imported_at.desc())
+        ).first()
+        if twin is not None:
+            return {"duplicate": {"id": str(twin.id), "title": twin.title}}
     result = import_screenplay(data, file.filename or "upload")
     if not result.accepted:
         return JSONResponse(

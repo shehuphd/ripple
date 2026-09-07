@@ -215,6 +215,7 @@ class TestPages:
         uploaded = client.post(
             "/api/scripts",
             files={"file": ("graphless.fountain", night_freight_fountain)},
+            data={"force": "1"},
         ).json()
         graphless = client.get(f"/scripts/{uploaded['id']}").text
         assert 'id="see-ripple"' in graphless
@@ -241,6 +242,7 @@ class TestUnitEndpoints:
         uploaded = client.post(
             "/api/scripts",
             files={"file": ("fresh-upload.fountain", night_freight_fountain)},
+            data={"force": "1"},
         ).json()
         unit_id = _units(client, uploaded["id"])[0]
         payload = client.get(f"/api/units/{unit_id}/requirements").json()
@@ -2279,6 +2281,7 @@ class TestDraftReportRoutes:
         uploaded = client.post(
             "/api/scripts",
             files={"file": ("night-freight-d2.fountain", night_freight_fountain)},
+            data={"force": "1"},
         ).json()
         predecessor = uploaded["draft_candidates"][0]["id"]
         linked = client.post(
@@ -3612,6 +3615,51 @@ class TestGraphDeletion:
         )
         assert outcome.status_code == 200
         assert outcome.json()["cleared"] == 0
+
+
+class TestDuplicateUpload:
+    """A byte-identical re-upload is named, not silently imported twice;
+    a confirmed `force` imports the second copy."""
+
+    SCRIPT = (
+        b"Title: TWIN TEST\n\n"
+        b"INT. HALL - DAY\n\nA door opens.\n\n"
+        b"JUNE\nWho's there?\n\n"
+        b"INT. HALL - NIGHT\n\nIt closes.\n\n"
+        b"JUNE\nJust the wind.\n\n"
+        b"EXT. STREET - DAY\n\nRain.\n\n"
+        b"JUNE\nPerfect.\n"
+    )
+
+    def _upload(self, client, force=False):
+        data = {"force": "1"} if force else {}
+        return client.post(
+            "/api/scripts",
+            files={"file": ("twin.fountain", self.SCRIPT)},
+            data=data,
+        )
+
+    def test_the_same_bytes_come_back_as_a_duplicate_notice(self, client):
+        opening = self._upload(client)
+        assert opening.status_code == 200, opening.text
+        first = opening.json()
+        assert "duplicate" not in first
+
+        second = self._upload(client)
+        assert second.status_code == 200
+        body = second.json()
+        assert body["duplicate"]["title"] == "TWIN TEST"
+        assert body["duplicate"]["id"] == first["id"]
+        # Nothing was imported on the refused ask.
+        page = client.get("/").text
+        assert page.count('data-title="TWIN TEST"') == 1
+
+    def test_force_imports_the_second_copy(self, client):
+        first = self._upload(client).json()
+        forced = self._upload(client, force=True).json()
+        assert "duplicate" not in forced
+        assert forced["id"] != first["id"]
+        assert client.get("/").text.count('data-title="TWIN TEST"') == 2
 
 
 class TestScriptBatchDeletion:

@@ -33,7 +33,7 @@ Each row has a checkbox and a **Select all** control beside the table, which tic
 
 **New script** starts an empty one to write in Ripple: name it and the reader opens on a blank page whose only control is the scene inserter. A written script behaves like an imported one everywhere downstream.
 
-**Import** accepts Fountain, Final Draft XML, PDF, plain text, and stage plays. Detection reads the file's content; the extension only breaks ties between text formats. Dropping a file anywhere on the page imports it too: holding one over the window raises a "Drop to import" veil naming the formats, a file whose extension is not importable is refused with a toast on the spot, and a valid one shows a progress card that keeps the outcome and its warnings once the new row appears. Every import ends in one of four outcomes:
+**Import** accepts Fountain, Final Draft XML, PDF, plain text, and stage plays. Detection reads the file's content; the extension only breaks ties between text formats. Dropping a file anywhere on the page imports it too: holding one over the window raises a "Drop to import" veil naming the formats, a file whose extension is not importable is refused with a toast on the spot, and a valid one shows a progress card that keeps the outcome and its warnings once the new row appears. A file whose bytes are identical to a script already in the library is not imported again silently: Ripple names the existing script and asks whether to import a second copy. Every import ends in one of four outcomes:
 
 | Outcome | Meaning |
 |---|---|
