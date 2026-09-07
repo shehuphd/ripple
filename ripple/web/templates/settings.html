@@ -308,6 +308,27 @@
 
         <div class="setopt">
           <div class="grow">
+            <strong>Fade</strong>
+            <p class="tiny muted">How long the lake takes to arrive, and to
+              leave when you press a key. Instant swaps it in between one
+              frame and the next.</p>
+            <div class="seg" role="group" aria-label="Fade">
+              {% for choice in screensaver_fades %}
+              <button class="segbtn {{ 'on' if choice|float == screensaver.fade_seconds }}"
+                      data-saver="screensaver_fade_seconds" data-value="{{ choice }}"
+                      aria-pressed="{{ 'true' if choice|float == screensaver.fade_seconds
+                        else 'false' }}">
+                {{ 'Instant' if choice == '0' else choice ~ 's' }}</button>
+              {% endfor %}
+            </div>
+          </div>
+          <span class="tiny muted num" id="saver-fade">
+            {{ 'Instant' if screensaver.fade_seconds == 0
+               else '%g'|format(screensaver.fade_seconds) ~ 's' }}</span>
+        </div>
+
+        <div class="setopt">
+          <div class="grow">
             <strong>Entity colour</strong>
             <p class="tiny muted">Nothing on the lake is data, so the hue says
               nothing about what surfaces. Random gives each entity one of the

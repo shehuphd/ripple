@@ -520,6 +520,20 @@ class TestScreensaverSettings:
         with pytest.raises(ValueError):
             set_screensaver_setting(session, "screensaver_colour", "rainbow")
 
+    def test_the_fade_stores_and_refuses(self, session):
+        from ripple.db.repository import (
+            get_screensaver_settings,
+            set_screensaver_setting,
+        )
+
+        assert get_screensaver_settings(session).fade_seconds == 1.0
+        set_screensaver_setting(session, "screensaver_fade_seconds", "0")
+        assert get_screensaver_settings(session).fade_seconds == 0.0
+        set_screensaver_setting(session, "screensaver_fade_seconds", "2")
+        assert get_screensaver_settings(session).fade_seconds == 2.0
+        with pytest.raises(ValueError):
+            set_screensaver_setting(session, "screensaver_fade_seconds", "9")
+
     def test_a_shortcut_needs_two_modifiers(self, session):
         from ripple.db.repository import set_screensaver_setting
 
@@ -558,8 +572,10 @@ class TestScreensaverSettings:
         session.add(UiPreference(key="screensaver_idle_minutes", value="240"))
         session.add(UiPreference(key="screensaver_shortcut", value="q"))
         session.add(UiPreference(key="screensaver_theme", value="neon"))
+        session.add(UiPreference(key="screensaver_fade_seconds", value="30"))
         session.flush()
         settings = get_screensaver_settings(session)
         assert settings.idle_minutes == "5"
         assert settings.shortcut == "ctrl+alt+Space"
         assert settings.theme == "water"
+        assert settings.fade_seconds == 1.0

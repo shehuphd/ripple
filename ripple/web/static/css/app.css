@@ -1009,8 +1009,12 @@ section.omitted .sh .omit-tag,section.omitted .sh .sctl{text-decoration:none}
    The one surface in Ripple that is not flat: the vignette gives the water
    somewhere to recede to. */
 .saver{position:fixed;inset:0;z-index:200;overflow:hidden;
-  --saver-plain:#7C8A93;
+  --saver-plain:#7C8A93;--saver-fade:0ms;
+  opacity:0;transition:opacity var(--saver-fade) ease;
   background:radial-gradient(ellipse at 50% 45%,#0B0D0F 0%,#060708 100%)}
+/* The lake arrives and leaves on this class. With the fade set to Instant
+   the duration is zero and the transition does nothing. */
+.saver.up{opacity:1}
 
 /* The paper look: the same lake on warm paper, the rings darkened to the
    accent and a warm slate, the entities on white cards with their department
@@ -1084,6 +1088,7 @@ section.omitted .sh .omit-tag,section.omitted .sh .sctl{text-decoration:none}
 /* Under reduced motion the lake holds still: one ring set, the wordmark and
    the hint, nothing that moves. */
 @media (prefers-reduced-motion:reduce){
+  .saver{transition:none}
   .saver-rings i{animation:none;opacity:.5;transform:scale(1)}
   .saver-entity{animation:none}
 }

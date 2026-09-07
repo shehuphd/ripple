@@ -164,9 +164,24 @@ class Screensaver {
       .catch(() => { /* Keep the settings in hand. */ });
   }
 
+  /* The fade the settings ask for, in milliseconds, and never so long that
+     a keypress leaves the lake hanging about. */
+  fade() {
+    const seconds = Number(this.settings.fade_seconds);
+    if (this.reduced.matches || !Number.isFinite(seconds)) return 0;
+    return Math.max(0, Math.min(2, seconds)) * 1000;
+  }
+
   show() {
     if (this.open || !this.settings.enabled) return;
     this.refresh();
+    // A lake still fading out is gone the moment a new one opens, so the
+    // two never overlap.
+    if (this.leaving) {
+      clearTimeout(this.leaving.timer);
+      this.leaving.node.remove();
+      this.leaving = null;
+    }
     this.open = true;
     this.returnFocus = document.activeElement;
     this.lastThrow = 0;
@@ -190,7 +205,16 @@ class Screensaver {
         <span>Click to drop a stone</span><span><kbd>Esc</kbd> Exit</span>
       </div>`;
     root.style.cursor = `url("${saverCursor(this.look)}") 13 13, default`;
+    const fade = this.fade();
+    root.style.setProperty('--saver-fade', `${fade}ms`);
     document.body.appendChild(root);
+    // Reading a layout value flushes the transparent state to the style
+    // system, so the class that follows transitions from it rather than
+    // arriving at full opacity. A frame callback would do the same, but not
+    // in a background tab, where it never fires and the overlay would take
+    // the keyboard while staying invisible.
+    void root.offsetHeight;
+    root.classList.add('up');
 
     // The overlay itself is hidden from the accessibility tree, so the one
     // thing a screen reader needs to hear lives outside it.
@@ -265,7 +289,23 @@ class Screensaver {
     }
     this.nodes.forEach((node) => clearTimeout(node.timer));
     this.nodes = [];
-    if (this.root) this.root.remove();
+    // The overlay leaves on the same fade it arrived on, with the loop
+    // already stopped, so what fades is the last frame rather than a lake
+    // still drawing itself while it goes.
+    const fade = this.fade();
+    const node = this.root;
+    if (node && fade) {
+      node.classList.remove('up');
+      this.leaving = {
+        node,
+        timer: setTimeout(() => {
+          node.remove();
+          this.leaving = null;
+        }, fade),
+      };
+    } else if (node) {
+      node.remove();
+    }
     if (this.spoken) this.spoken.remove();
     this.root = null;
     ripple.trace('screensaver.closed', {});

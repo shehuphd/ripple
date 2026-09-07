@@ -65,6 +65,7 @@ from ripple.db.repository import (
     AGENT_TOOL_CEILINGS,
     LANDING_VIEWS,
     SCREENSAVER_COLOURS,
+    SCREENSAVER_FADE_SECONDS,
     SCREENSAVER_IDLE_MINUTES,
     SCREENSAVER_THEMES,
     SCREENSAVER_THROTTLE_SECONDS,
@@ -1786,6 +1787,7 @@ def settings_page(request: Request, session: Session = Depends(get_session)):
             "throttle_seconds": SCREENSAVER_THROTTLE_SECONDS,
             "screensaver_themes": SCREENSAVER_THEMES,
             "screensaver_colours": SCREENSAVER_COLOURS,
+            "screensaver_fades": SCREENSAVER_FADE_SECONDS,
         },
     )
 

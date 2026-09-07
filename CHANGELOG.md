@@ -18,6 +18,8 @@ All notable changes to Ripple are documented here.
 
 ### Changed
 
+- **The lake fades in and out.** It used to appear and vanish between frames. **Fade** in Settings → Interface → Screensaver sets the length: Instant, 0.5s, 1s (the default), or 2s. Reduced motion skips it.
+
 - **The library sorts, and its runtimes carry units.** A bare `2:51` read as either two hours fifty-one or two minutes fifty-one; it is `2h 51m` now. Every column header sorts, a second click reverses it, and runtime sorts on minutes. Sorting and search both run over the rows already in the page.
 
 - **The banned-word gate covers more words, and commit messages.** Shiplock's sweep gains this repo's extra words, listed in `shiplock.toml`, and the docs are reworded to match. The `commit-msg` hook runs the same list, so a banned word is refused at the commit.

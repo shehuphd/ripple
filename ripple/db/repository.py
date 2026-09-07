@@ -555,6 +555,9 @@ SCREENSAVER_THEMES = ("water", "dark", "light")
 # hue carries nothing: random draws one of the department colours per entity,
 # none leaves every chip in the water's own grey.
 SCREENSAVER_COLOURS = ("random", "none")
+# How long the lake takes to arrive and to leave. Instant is the old
+# behaviour, where the overlay appeared between one frame and the next.
+SCREENSAVER_FADE_SECONDS = ("0", "0.5", "1", "2")
 SCREENSAVER_THROTTLE_SECONDS = ("1", "2", "3", "4", "5")
 SCREENSAVER_DEFAULTS = {
     "screensaver_enabled": "on",
@@ -563,6 +566,7 @@ SCREENSAVER_DEFAULTS = {
     "screensaver_throttle_seconds": "3",
     "screensaver_theme": "water",
     "screensaver_colour": "random",
+    "screensaver_fade_seconds": "1",
 }
 
 # A chord, as the browser reports it: modifiers in a fixed order, then one
@@ -583,6 +587,7 @@ class ScreensaverSettings:
     throttle_seconds: int = 3
     theme: str = "water"
     colour: str = "random"
+    fade_seconds: float = 1.0
 
 
 def get_screensaver_settings(session: Session) -> ScreensaverSettings:
@@ -612,6 +617,9 @@ def get_screensaver_settings(session: Session) -> ScreensaverSettings:
     colour = value("screensaver_colour")
     if colour not in SCREENSAVER_COLOURS:
         colour = SCREENSAVER_DEFAULTS["screensaver_colour"]
+    fade = value("screensaver_fade_seconds")
+    if fade not in SCREENSAVER_FADE_SECONDS:
+        fade = SCREENSAVER_DEFAULTS["screensaver_fade_seconds"]
     return ScreensaverSettings(
         enabled=value("screensaver_enabled") == "on",
         idle_minutes=idle,
@@ -619,6 +627,7 @@ def get_screensaver_settings(session: Session) -> ScreensaverSettings:
         throttle_seconds=int(throttle),
         theme=theme,
         colour=colour,
+        fade_seconds=float(fade),
     )
 
 
@@ -639,6 +648,10 @@ def set_screensaver_setting(session: Session, key: str, value: str) -> None:
         if value not in SCREENSAVER_THEMES:
             allowed = ", ".join(SCREENSAVER_THEMES)
             raise ValueError(f"the screensaver look must be one of {allowed}")
+    elif key == "screensaver_fade_seconds":
+        if value not in SCREENSAVER_FADE_SECONDS:
+            allowed = ", ".join(SCREENSAVER_FADE_SECONDS)
+            raise ValueError(f"the fade must be one of {allowed} seconds")
     elif key == "screensaver_colour":
         if value not in SCREENSAVER_COLOURS:
             allowed = ", ".join(SCREENSAVER_COLOURS)

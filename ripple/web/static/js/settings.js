@@ -470,14 +470,16 @@ if (saverCard) {
       const idle = key === 'screensaver_idle_minutes';
       const look = key === 'screensaver_theme';
       const hue = key === 'screensaver_colour';
+      const fade = key === 'screensaver_fade_seconds';
       if (!await saveSaver(key, value)) return;
       button.closest('.seg').querySelectorAll('.segbtn').forEach((one) => {
         const on = one === button;
         one.classList.toggle('on', on);
         one.setAttribute('aria-pressed', on ? 'true' : 'false');
       });
+      const named = { idle, theme: look, colour: hue, fade };
       const readout = document.getElementById(
-        `saver-${idle ? 'idle' : look ? 'theme' : hue ? 'colour' : 'throttle'}`);
+        `saver-${Object.keys(named).find((one) => named[one]) || 'throttle'}`);
       if (readout) readout.textContent = button.textContent.trim();
     });
   });
