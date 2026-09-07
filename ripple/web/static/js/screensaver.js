@@ -17,7 +17,8 @@ const SAVER = {
   maxNodes: 90,        // hard cap; a throttled tab would otherwise leak DOM
   autoMin: 3400,
   autoMax: 6600,
-  edgeFade: 300,       // ms a connecting line takes to arrive
+  edgeFade: 500,       // ms a connecting line takes to arrive
+  edgeAlpha: 0.15,     // the line at its fullest: present, never drawn on
   chipRise: 8,         // px from a node's anchor up to the middle of its chip
 };
 
@@ -433,14 +434,19 @@ class Screensaver {
 
   /* Surfacing entities reach for each other the way the graph's do: a new
      one picks another that is already up and a thin line arrives between
-     them. The line belongs to the shorter-lived half of the pair, so it
-     leaves with whichever of the two fades first rather than hanging from
-     an entity that is no longer there. */
+     them. One line each, so an entity is joined to a single other and never
+     becomes a hub: a partner that is already paired is passed over. The
+     line belongs to the shorter-lived half of the pair, so it leaves with
+     whichever of the two fades first rather than hanging from an entity
+     that is no longer there. */
   connect(entry) {
     const now = performance.now();
-    const reachable = this.nodes.filter((one) => one.endsAt - now > 700);
+    const reachable = this.nodes.filter(
+      (one) => !one.linked && one.endsAt - now > 700);
     if (!reachable.length) return;
     const other = reachable[Math.floor(Math.random() * reachable.length)];
+    entry.linked = true;
+    other.linked = true;
     const end = Math.min(entry.endsAt, other.endsAt);
     this.edges.push({
       a: entry,
@@ -456,11 +462,14 @@ class Screensaver {
   drawEdges(now) {
     this.edges = this.edges.filter((edge) => now < edge.end);
     const context = this.context;
+    // Eased at both ends, so the line arrives and leaves the way the
+    // entities either side of it do rather than switching on and off.
+    const ease = (t) => t * t * (3 - 2 * t);
     for (const edge of this.edges) {
-      const arriving = Math.min(1, (now - edge.born) / SAVER.edgeFade);
+      const arriving = ease(Math.min(1, (now - edge.born) / SAVER.edgeFade));
       const leaving = now < edge.dims
-        ? 1 : Math.max(0, (edge.end - now) / (edge.end - edge.dims));
-      const alpha = arriving * leaving * 0.3;
+        ? 1 : ease(Math.max(0, (edge.end - now) / (edge.end - edge.dims)));
+      const alpha = arriving * leaving * SAVER.edgeAlpha;
       if (alpha < 0.01) continue;
       context.beginPath();
       context.moveTo(edge.a.x, edge.a.y);

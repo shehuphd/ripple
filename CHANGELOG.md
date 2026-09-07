@@ -8,7 +8,7 @@ All notable changes to Ripple are documented here.
 
 - **The README opens with the first ten minutes.** Someone landing on the repository had to read a paragraph of what Ripple is and then work out where to start. It now walks the first session in order: press the shortcut and watch the lake, which says what the name means before any prose does; open one of the seeded screenplays or import your own; add a key and pick a model; build the graph; change a line and see the ripple; then where to read what it found. USAGE gained a section on the screensaver, and the architecture and file manifests name it and the preference announcements alongside the surfaces they belong to.
 
-- **Surfacing entities reach for each other.** An entity that comes up looks for another already on the water and a thin line fades in between them, the way the production graph draws a relationship. The line belongs to the shorter-lived half of the pair, so it leaves with whichever of the two fades first rather than hanging from an entity that is no longer there. It is drawn under the ripples in the water's own cool grey, one weight, no colour of its own.
+- **Surfacing entities reach for each other.** An entity that comes up looks for another already on the water and a thin line fades in between them, the way the production graph draws a relationship. Each entity takes one line and no more, so a partner already paired is passed over and nothing becomes a hub. The line eases in over half a second and eases out again with the shorter-lived half of the pair, rather than hanging from an entity that is no longer there. It is drawn under the ripples in the water's own cool grey at a tenth of their weight, no colour of its own.
 
 ### Changed
 
