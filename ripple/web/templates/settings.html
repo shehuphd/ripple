@@ -288,6 +288,44 @@
 
         <div class="setopt">
           <div class="grow">
+            <strong>Look</strong>
+            <p class="tiny muted">Dark is the lake with the lights down. Water
+              is the daylight one: a grey-blue lake on paper, with the rings
+              in deep cyan and the entities on white cards.</p>
+            <div class="seg" role="group" aria-label="Screensaver look">
+              {% for choice in screensaver_themes %}
+              <button class="segbtn {{ 'on' if choice == screensaver.theme }}"
+                      data-saver="screensaver_theme" data-value="{{ choice }}"
+                      aria-pressed="{{ 'true' if choice == screensaver.theme
+                        else 'false' }}">{{ choice|capitalize }}</button>
+              {% endfor %}
+            </div>
+          </div>
+          <span class="tiny muted" id="saver-theme">
+            {{ screensaver.theme|capitalize }}</span>
+        </div>
+
+        <div class="setopt">
+          <div class="grow">
+            <strong>Entity colour</strong>
+            <p class="tiny muted">Nothing on the lake is data, so the hue says
+              nothing about what surfaces. Random gives each entity one of the
+              department colours; None leaves them in the water's own grey.</p>
+            <div class="seg" role="group" aria-label="Entity colour">
+              {% for choice in screensaver_colours %}
+              <button class="segbtn {{ 'on' if choice == screensaver.colour }}"
+                      data-saver="screensaver_colour" data-value="{{ choice }}"
+                      aria-pressed="{{ 'true' if choice == screensaver.colour
+                        else 'false' }}">{{ choice|capitalize }}</button>
+              {% endfor %}
+            </div>
+          </div>
+          <span class="tiny muted" id="saver-colour">
+            {{ screensaver.colour|capitalize }}</span>
+        </div>
+
+        <div class="setopt">
+          <div class="grow">
             <strong>Open it now</strong>
             <p class="tiny muted">Press the shortcut from anywhere in Ripple,
               including inside the unit editor.</p>

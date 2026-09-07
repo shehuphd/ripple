@@ -6,9 +6,13 @@ All notable changes to Ripple are documented here.
 
 ### Added
 
+- **A daylight lake, and two rows that say how it looks.** The screensaver had one look, dark, which suits a room with the lights down and little else. **Water** is the second: a grey-blue lake on paper, the rings in deep cyan under a white sheen, the entities on white cards with dark labels, and a pale pebble for the cursor. **Entity colour** decides what the chips do with hue: nothing on the lake is data, so the colour was never carrying anything, and Random gives each entity one of the department colours while None leaves them all in the water's own grey. Both are in Settings, Interface, Screensaver, and both apply to a lake that is already open.
+
 - **The README opens with the first ten minutes.** Someone landing on the repository had to read a paragraph of what Ripple is and then work out where to start. It now walks the first session in order: press the shortcut and watch the lake, which says what the name means before any prose does; open one of the seeded screenplays or import your own; add a key and pick a model; build the graph; change a line and see the ripple; then where to read what it found. USAGE gained a section on the screensaver, and the architecture and file manifests name it and the preference announcements alongside the surfaces they belong to.
 
 ### Changed
+
+- **A saved screensaver row stops explaining itself.** Each row already shows its value beside it, so the sentence underneath the card repeating the choice in other words was noise on every click. The line is silent on a save now and speaks only for what the rows cannot show: a refusal, and the shortcut capture's guidance.
 
 - **Every setting applies where it is saved, and in whatever else is open.** A page read its preferences once, when it loaded, so a preference saved afterwards was ignored by every other open page until someone reloaded it, and saving or forgetting a provider key reloaded the Settings page outright to rebuild the Models card. Saves now announce themselves, on the page through an event and to the app's other tabs through a broadcast channel: the screensaver picks up its idle period, shortcut and throttle as they change, and a library page repoints its rows the moment the opening view changes under it. The Models card carries both of its states and swaps between them in place, so a saved key fills the pickers and a forgotten one empties them with no reload anywhere. Nothing in Ripple needs a reload to pick up a setting, so nothing has to say it does.
 

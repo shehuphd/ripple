@@ -434,7 +434,10 @@ const saverCard = document.getElementById('screensaver-card');
 if (saverCard) {
   const result = document.getElementById('saver-result');
 
-  async function saveSaver(key, value, say) {
+  /* A saved row says what it is worth in the row itself, so a sentence
+     underneath repeating it is noise. The line is kept for what the rows
+     cannot show: a refusal, and the shortcut capture's guidance. */
+  async function saveSaver(key, value) {
     try {
       const saved = await api('/api/settings/screensaver', {
         method: 'POST', body: form({ key, value }),
@@ -443,7 +446,7 @@ if (saverCard) {
       // The overlay read its settings when the page loaded, so it is told
       // rather than left to find out on the next reload.
       ripple.announceSetting('screensaver', saved);
-      result.textContent = say;
+      result.textContent = '';
     } catch (error) {
       result.textContent = error.message;
       return false;
@@ -454,10 +457,7 @@ if (saverCard) {
   saverCard.querySelectorAll('.switch[data-saver]').forEach((toggle) => {
     toggle.addEventListener('click', async () => {
       const next = toggle.classList.contains('on') ? 'off' : 'on';
-      const say = next === 'on'
-        ? 'The screensaver opens on idle and on the shortcut.'
-        : 'The screensaver is off, shortcut included.';
-      if (!await saveSaver(toggle.dataset.saver, next, say)) return;
+      if (!await saveSaver(toggle.dataset.saver, next)) return;
       toggle.classList.toggle('on', next === 'on');
       toggle.setAttribute('aria-checked', next === 'on' ? 'true' : 'false');
     });
@@ -468,19 +468,16 @@ if (saverCard) {
       const key = button.dataset.saver;
       const value = button.dataset.value;
       const idle = key === 'screensaver_idle_minutes';
-      const say = idle
-        ? (value === 'never'
-          ? 'Idle no longer opens the screensaver. The shortcut still does.'
-          : `The screensaver opens after ${value} minutes of no input.`)
-        : `A stone can be thrown once every ${value} seconds.`;
-      if (!await saveSaver(key, value, say)) return;
+      const look = key === 'screensaver_theme';
+      const hue = key === 'screensaver_colour';
+      if (!await saveSaver(key, value)) return;
       button.closest('.seg').querySelectorAll('.segbtn').forEach((one) => {
         const on = one === button;
         one.classList.toggle('on', on);
         one.setAttribute('aria-pressed', on ? 'true' : 'false');
       });
       const readout = document.getElementById(
-        idle ? 'saver-idle' : 'saver-throttle');
+        `saver-${idle ? 'idle' : look ? 'theme' : hue ? 'colour' : 'throttle'}`);
       if (readout) readout.textContent = button.textContent.trim();
     });
   });
@@ -553,8 +550,7 @@ if (saverCard) {
       window.removeEventListener('keydown', capture, true);
       rebind.classList.remove('on');
       rebind.textContent = 'Change';
-      if (await saveSaver('screensaver_shortcut', next,
-        'Shortcut saved. It opens the screensaver from anywhere in Ripple.')) {
+      if (await saveSaver('screensaver_shortcut', next)) {
         saverCard.dataset.shortcut = next;
       }
       paintChord(saverCard.dataset.shortcut);

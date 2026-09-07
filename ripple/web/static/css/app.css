@@ -1000,7 +1000,21 @@ section.omitted .sh .omit-tag,section.omitted .sh .sctl{text-decoration:none}
    The one surface in Ripple that is not flat: the vignette gives the water
    somewhere to recede to. */
 .saver{position:fixed;inset:0;z-index:200;overflow:hidden;
+  --saver-plain:#7C8A93;
   background:radial-gradient(ellipse at 50% 45%,#0B0D0F 0%,#060708 100%)}
+
+/* The daylight look: a grey-blue lake on paper, the rings in deep cyan and
+   the entities on white cards. The dark one stays the default. */
+.saver-water{--saver-plain:#5C6A73;
+  background:radial-gradient(ellipse at 50% 42%,#CBD7DD 0%,#B0C0C9 56%,#98A9B4 100%)}
+.saver-water .saver-word{color:#151B20}
+.saver-water .saver-rings i{border-color:#17758E}
+.saver-water .saver-hint{color:#3E484F}
+.saver-water .saver-hint kbd{border-color:rgba(21,27,32,.28);color:#2A3238}
+.saver-water .saver-chip{background:rgba(255,255,255,.82);
+  color:color-mix(in srgb,var(--hue) 74%,#151B20);
+  box-shadow:inset 0 0 0 1px rgba(21,27,32,.10)}
+.saver-water .saver-name{color:#2A3238}
 .saver:focus{outline:none}
 .saver-lake{position:absolute;inset:0;width:100%;height:100%;display:block}
 .saver-entities{position:absolute;inset:0;pointer-events:none}

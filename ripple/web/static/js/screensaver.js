@@ -19,13 +19,34 @@ const SAVER = {
   autoMax: 6600,
 };
 
-// Ten department hues, matching the graph's. The square behind each glyph is
-// mixed from the same hue rather than given its own value, so a token change
-// carries here without a second edit.
-const SAVER_HUE = {
-  cast: '--cast', transportation: '--transport', prop: '--props',
-  set_design: '--set', wardrobe: '--wardrobe', makeup: '--wardrobe',
-  sound: '--sound', vfx: '--set', stunt: '--red', location: '--ac',
+// The department hues, as the graph uses them. Nothing on the lake is data,
+// so a chip draws one of these at random rather than the one its type would
+// have; with colour off it takes the water's own grey instead. The square
+// behind each glyph is mixed from the hue rather than given its own value,
+// so a token change carries here without a second edit.
+const SAVER_HUES = [
+  '--cast', '--transport', '--props', '--set', '--wardrobe', '--sound',
+  '--ac', '--red',
+];
+
+/* Two looks. Dark is the lake with the lights down; water is the daylight
+   one, a grey-blue lake on paper. The rings are canvas rather than CSS, so
+   their colours live here and the chrome's live in the stylesheet. */
+const SAVER_WATER = {
+  dark: {
+    lead: '111,203,224',
+    glow: '47,168,199',
+    trail: '163,190,198',
+    splash: '214,240,246',
+    pebble: ['#3A4046', '#6E7A82', '#565F67'],
+  },
+  water: {
+    lead: '23,117,142',
+    glow: '31,140,168',
+    trail: '250,253,255',
+    splash: '255,255,255',
+    pebble: ['#8C9AA4', '#2A3238', '#B4C0C8'],
+  },
 };
 
 // 24-unit Lucide-shaped glyphs, stroked not filled. Inlined rather than
@@ -72,12 +93,14 @@ const SAVER_ENTITIES = [
 
 /* A 26px pebble, so the cursor over the lake is the thing being thrown.
    Hotspot centred, with the system pointer as the fallback. */
-const SAVER_CURSOR =
-  'data:image/svg+xml;utf8,' + encodeURIComponent(
+function saverCursor(theme) {
+  const [fill, stroke, sheen] = SAVER_WATER[theme].pebble;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26">'
-    + '<ellipse cx="13" cy="13" rx="8.5" ry="7" fill="#3A4046" stroke="#6E7A82"'
+    + `<ellipse cx="13" cy="13" rx="8.5" ry="7" fill="${fill}" stroke="${stroke}"`
     + ' stroke-width="1.2"/><ellipse cx="10.5" cy="11" rx="3" ry="2.1"'
-    + ' fill="#565F67"/></svg>');
+    + ` fill="${sheen}"/></svg>`);
+}
 
 function saverShuffled() {
   const bag = SAVER_ENTITIES.slice();
@@ -144,7 +167,8 @@ class Screensaver {
     this.taken = [];
 
     const root = document.createElement('div');
-    root.className = 'saver';
+    this.look = SAVER_WATER[this.settings.theme] ? this.settings.theme : 'dark';
+    root.className = `saver saver-${this.look}`;
     root.tabIndex = -1;
     root.setAttribute('aria-hidden', 'true');
     root.innerHTML = `
@@ -157,7 +181,7 @@ class Screensaver {
       <div class="saver-hint">
         <span>Click to drop a stone</span><span><kbd>Esc</kbd> Exit</span>
       </div>`;
-    root.style.cursor = `url("${SAVER_CURSOR}") 13 13, default`;
+    root.style.cursor = `url("${saverCursor(this.look)}") 13 13, default`;
     document.body.appendChild(root);
 
     // The overlay itself is hidden from the accessibility tree, so the one
@@ -259,6 +283,7 @@ class Screensaver {
   paintStill() {
     const { width, height } = this.box;
     if (width < 2) return;
+    const water = SAVER_WATER[this.look || 'dark'];
     const context = this.context;
     context.clearRect(0, 0, width, height);
     const x = width / 2;
@@ -268,7 +293,8 @@ class Screensaver {
       context.beginPath();
       context.arc(x, y, r, 0, Math.PI * 2);
       context.lineWidth = k === 0 ? 1.5 : 1.1;
-      context.strokeStyle = `rgba(111,203,224,${0.3 * Math.exp(-0.3 * k)})`;
+      context.strokeStyle =
+        `rgba(${water.lead},${0.3 * Math.exp(-0.3 * k)})`;
       context.stroke();
     }
   }
@@ -383,7 +409,9 @@ class Screensaver {
     this.taken.push({ x: at.x, y: at.y });
     const arrival = (at.dist / SAVER.speed) * 1000;
     const [name, type] = this.nextEntity();
-    const hue = `var(${SAVER_HUE[type] || '--t3'})`;
+    const hue = this.settings.colour === 'none'
+      ? 'var(--saver-plain)'
+      : `var(${SAVER_HUES[Math.floor(Math.random() * SAVER_HUES.length)]})`;
 
     setTimeout(() => {
       if (!this.open || !this.layer) return;
@@ -443,6 +471,7 @@ class Screensaver {
     }
 
     const context = this.context;
+    const water = SAVER_WATER[this.look || 'dark'];
     context.clearRect(0, 0, width, height);
     this.drops = this.drops.filter((drop) => now - drop.at < drop.life);
 
@@ -460,7 +489,7 @@ class Screensaver {
         context.arc(drop.x, drop.y, rk, 0, Math.PI * 2);
         if (k === 0) {
           context.lineWidth = 1.5;
-          context.strokeStyle = `rgba(111,203,224,${damp * 0.95})`;
+          context.strokeStyle = `rgba(${water.lead},${damp * 0.95})`;
           context.stroke();
           // A second, quieter ring just behind the front, so the leading
           // edge reads as water rather than as a drawn circle.
@@ -468,14 +497,14 @@ class Screensaver {
             context.beginPath();
             context.arc(drop.x, drop.y, rk - 3.5, 0, Math.PI * 2);
             context.lineWidth = 1;
-            context.strokeStyle = `rgba(47,168,199,${damp * 0.34})`;
+            context.strokeStyle = `rgba(${water.glow},${damp * 0.34})`;
             context.stroke();
           }
         } else {
           context.lineWidth = 1.1;
           context.strokeStyle = k < 2
-            ? `rgba(111,203,224,${damp * 0.5})`
-            : `rgba(163,190,198,${damp * 0.5})`;
+            ? `rgba(${water.lead},${damp * 0.5})`
+            : `rgba(${water.trail},${damp * 0.5})`;
           context.stroke();
         }
       }
@@ -485,7 +514,7 @@ class Screensaver {
         const f = 1 - age / 500;
         context.beginPath();
         context.arc(drop.x, drop.y, 2 + 3 * f, 0, Math.PI * 2);
-        context.fillStyle = `rgba(214,240,246,${0.72 * f})`;
+        context.fillStyle = `rgba(${water.splash},${0.72 * f})`;
         context.fill();
       }
     }

@@ -482,12 +482,21 @@ def set_agent_setting(session: Session, key: str, value: str) -> None:
 # shortcut-only screensaver; the throttle is the least number of seconds
 # between two thrown stones, which caps how much the lake can be crowded.
 SCREENSAVER_IDLE_MINUTES = ("2", "5", "10", "20", "never")
+# The lake's two looks. Dark is the idle state for a room with the lights
+# down; water is the daylight one, a grey-blue lake on paper.
+SCREENSAVER_THEMES = ("dark", "water")
+# What colour an entity's chip takes. The screensaver shows no data, so the
+# hue carries nothing: random draws one of the department colours per entity,
+# none leaves every chip in the water's own grey.
+SCREENSAVER_COLOURS = ("random", "none")
 SCREENSAVER_THROTTLE_SECONDS = ("1", "2", "3", "4", "5")
 SCREENSAVER_DEFAULTS = {
     "screensaver_enabled": "on",
     "screensaver_idle_minutes": "5",
     "screensaver_shortcut": "ctrl+alt+Space",
     "screensaver_throttle_seconds": "3",
+    "screensaver_theme": "dark",
+    "screensaver_colour": "random",
 }
 
 # A chord, as the browser reports it: modifiers in a fixed order, then one
@@ -506,6 +515,8 @@ class ScreensaverSettings:
     idle_minutes: str = "5"
     shortcut: str = "ctrl+alt+Space"
     throttle_seconds: int = 3
+    theme: str = "dark"
+    colour: str = "random"
 
 
 def get_screensaver_settings(session: Session) -> ScreensaverSettings:
@@ -529,11 +540,19 @@ def get_screensaver_settings(session: Session) -> ScreensaverSettings:
     shortcut = value("screensaver_shortcut")
     if not _CHORD.match(shortcut):
         shortcut = SCREENSAVER_DEFAULTS["screensaver_shortcut"]
+    theme = value("screensaver_theme")
+    if theme not in SCREENSAVER_THEMES:
+        theme = SCREENSAVER_DEFAULTS["screensaver_theme"]
+    colour = value("screensaver_colour")
+    if colour not in SCREENSAVER_COLOURS:
+        colour = SCREENSAVER_DEFAULTS["screensaver_colour"]
     return ScreensaverSettings(
         enabled=value("screensaver_enabled") == "on",
         idle_minutes=idle,
         shortcut=shortcut,
         throttle_seconds=int(throttle),
+        theme=theme,
+        colour=colour,
     )
 
 
@@ -550,6 +569,14 @@ def set_screensaver_setting(session: Session, key: str, value: str) -> None:
         if value not in SCREENSAVER_THROTTLE_SECONDS:
             allowed = ", ".join(SCREENSAVER_THROTTLE_SECONDS)
             raise ValueError(f"the throttle must be one of {allowed} seconds")
+    elif key == "screensaver_theme":
+        if value not in SCREENSAVER_THEMES:
+            allowed = ", ".join(SCREENSAVER_THEMES)
+            raise ValueError(f"the screensaver look must be one of {allowed}")
+    elif key == "screensaver_colour":
+        if value not in SCREENSAVER_COLOURS:
+            allowed = ", ".join(SCREENSAVER_COLOURS)
+            raise ValueError(f"the entity colour must be one of {allowed}")
     elif key == "screensaver_shortcut":
         if not _CHORD.match(value):
             raise ValueError(
