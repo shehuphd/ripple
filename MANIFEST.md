@@ -143,6 +143,7 @@ Every file in the repository and what it does. Directories the application write
 | `web/static/js/graph.js` | Both graph views: rendering, selection, zoom, search. |
 | `web/static/js/ask.js` | Grounded query page behaviour: asking, stored replays, Markdown export, the grounding tag. |
 | `web/static/js/settings.js` | Settings page behaviour. |
+| `web/static/js/screensaver.js` | The lake screensaver: the idle timer, the ripple simulation, and the entities that surface on each wavefront. |
 | `web/static/ripple-mark.svg` | The product mark. |
 
 ## Tests (`tests/`)

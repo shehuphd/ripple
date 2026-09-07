@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
@@ -476,6 +477,96 @@ def set_agent_setting(session: Session, key: str, value: str) -> None:
     session.flush()
 
 
+# The lake screensaver. Decorative, per user, and stored beside the other
+# interface preferences. The idle period is minutes, or "never" for a
+# shortcut-only screensaver; the throttle is the least number of seconds
+# between two thrown stones, which caps how much the lake can be crowded.
+SCREENSAVER_IDLE_MINUTES = ("2", "5", "10", "20", "never")
+SCREENSAVER_THROTTLE_SECONDS = ("1", "2", "3", "4", "5")
+SCREENSAVER_DEFAULTS = {
+    "screensaver_enabled": "on",
+    "screensaver_idle_minutes": "5",
+    "screensaver_shortcut": "ctrl+alt+Space",
+    "screensaver_throttle_seconds": "3",
+}
+
+# A chord, as the browser reports it: modifiers in a fixed order, then one
+# key. A bare key or a lone modifier is refused where the chord is set, so a
+# single keystroke can never take the app over.
+_CHORD = re.compile(
+    r"^(?:(?:ctrl|alt|shift|meta)\+){2,3}[A-Za-z0-9]\w*$"
+)
+
+
+@dataclass(frozen=True)
+class ScreensaverSettings:
+    """The screensaver preferences, with the defaults already applied."""
+
+    enabled: bool = True
+    idle_minutes: str = "5"
+    shortcut: str = "ctrl+alt+Space"
+    throttle_seconds: int = 3
+
+
+def get_screensaver_settings(session: Session) -> ScreensaverSettings:
+    """The stored screensaver preferences; a missing row means the default."""
+    stored = {
+        row.key: row.value
+        for row in session.scalars(
+            select(UiPreference).where(UiPreference.key.in_(SCREENSAVER_DEFAULTS))
+        )
+    }
+
+    def value(key: str) -> str:
+        return stored.get(key, SCREENSAVER_DEFAULTS[key])
+
+    idle = value("screensaver_idle_minutes")
+    if idle not in SCREENSAVER_IDLE_MINUTES:
+        idle = SCREENSAVER_DEFAULTS["screensaver_idle_minutes"]
+    throttle = value("screensaver_throttle_seconds")
+    if throttle not in SCREENSAVER_THROTTLE_SECONDS:
+        throttle = SCREENSAVER_DEFAULTS["screensaver_throttle_seconds"]
+    shortcut = value("screensaver_shortcut")
+    if not _CHORD.match(shortcut):
+        shortcut = SCREENSAVER_DEFAULTS["screensaver_shortcut"]
+    return ScreensaverSettings(
+        enabled=value("screensaver_enabled") == "on",
+        idle_minutes=idle,
+        shortcut=shortcut,
+        throttle_seconds=int(throttle),
+    )
+
+
+def set_screensaver_setting(session: Session, key: str, value: str) -> None:
+    """Persist one screensaver preference, refusing a key or value it does
+    not know."""
+    if key not in SCREENSAVER_DEFAULTS:
+        raise ValueError(f"no screensaver setting named {key!r}")
+    if key == "screensaver_idle_minutes":
+        if value not in SCREENSAVER_IDLE_MINUTES:
+            allowed = ", ".join(SCREENSAVER_IDLE_MINUTES)
+            raise ValueError(f"the idle period must be one of {allowed}")
+    elif key == "screensaver_throttle_seconds":
+        if value not in SCREENSAVER_THROTTLE_SECONDS:
+            allowed = ", ".join(SCREENSAVER_THROTTLE_SECONDS)
+            raise ValueError(f"the throttle must be one of {allowed} seconds")
+    elif key == "screensaver_shortcut":
+        if not _CHORD.match(value):
+            raise ValueError(
+                "a shortcut needs at least two modifiers and one key, "
+                "so an ordinary keystroke cannot open the screensaver"
+            )
+    elif value not in ("on", "off"):
+        raise ValueError(f"{key} is on or off, not {value!r}")
+
+    row = session.get(UiPreference, key)
+    if row is None:
+        session.add(UiPreference(key=key, value=value))
+    else:
+        row.value = value
+    session.flush()
+
+
 def _dead_model_key(provider_id: str, model_id: str) -> str:
     """A fixed-length row key: model identifiers can exceed the key column."""
     digest = hashlib.sha256(f"{provider_id}\x00{model_id}".encode()).hexdigest()[:16]
@@ -519,6 +610,7 @@ def unavailable_models(session: Session, provider_id: str) -> set[str]:
 __all__ = [
     "AgentSettings",
     "DeletionCounts",
+    "ScreensaverSettings",
     "clear_all_graphs",
     "clear_model_unavailable",
     "delete_all_scripts",
@@ -528,6 +620,7 @@ __all__ = [
     "get_agent_settings",
     "get_fallback_model",
     "get_landing_view",
+    "get_screensaver_settings",
     "graph_labels",
     "mark_model_unavailable",
     "persist_import",
@@ -535,5 +628,6 @@ __all__ = [
     "set_agent_setting",
     "set_fallback_model",
     "set_landing_view",
+    "set_screensaver_setting",
     "unavailable_models",
 ]

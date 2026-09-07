@@ -393,3 +393,138 @@ if (agentCard) {
     });
   }
 }
+
+/* The lake screensaver.
+   Every row saves the moment it changes, like the rest of this pane. The
+   shortcut row is the one that needs more than a click: it captures the next
+   chord pressed, and refuses a chord that would take a key the writing
+   surface already answers. */
+const saverCard = document.getElementById('screensaver-card');
+if (saverCard) {
+  const result = document.getElementById('saver-result');
+
+  async function saveSaver(key, value, say) {
+    try {
+      await api('/api/settings/screensaver', {
+        method: 'POST', body: form({ key, value }),
+      });
+      ripple.trace('settings.screensaver_changed', { setting: key, value });
+      result.textContent = say;
+    } catch (error) {
+      result.textContent = error.message;
+      return false;
+    }
+    return true;
+  }
+
+  saverCard.querySelectorAll('.switch[data-saver]').forEach((toggle) => {
+    toggle.addEventListener('click', async () => {
+      const next = toggle.classList.contains('on') ? 'off' : 'on';
+      const say = next === 'on'
+        ? 'The screensaver opens on idle and on the shortcut.'
+        : 'The screensaver is off, shortcut included.';
+      if (!await saveSaver(toggle.dataset.saver, next, say)) return;
+      toggle.classList.toggle('on', next === 'on');
+      toggle.setAttribute('aria-checked', next === 'on' ? 'true' : 'false');
+    });
+  });
+
+  saverCard.querySelectorAll('.segbtn[data-saver]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const key = button.dataset.saver;
+      const value = button.dataset.value;
+      const idle = key === 'screensaver_idle_minutes';
+      const say = idle
+        ? (value === 'never'
+          ? 'Idle no longer opens the screensaver. The shortcut still does.'
+          : `The screensaver opens after ${value} minutes of no input.`)
+        : `A stone can be thrown once every ${value} seconds.`;
+      if (!await saveSaver(key, value, say)) return;
+      button.closest('.seg').querySelectorAll('.segbtn').forEach((one) => {
+        const on = one === button;
+        one.classList.toggle('on', on);
+        one.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      const readout = document.getElementById(
+        idle ? 'saver-idle' : 'saver-throttle');
+      if (readout) readout.textContent = button.textContent.trim();
+    });
+  });
+
+  /* What each chord already does, so a rebind can say which one it clashes
+     with rather than silently shadowing it. Only chords of two modifiers or
+     more can be entered here, so only those are listed. Modifiers are put in
+     one fixed order on both sides of the comparison: written the way a
+     person says them, Cmd+Shift+Z would never match what the browser
+     reports. */
+  const MOD_ORDER = ['ctrl', 'alt', 'shift', 'meta'];
+  const MOD_LABEL = {
+    ctrl: 'Ctrl', alt: 'Opt', shift: '⇧', meta: '⌘',
+  };
+
+  function chordOf(mods, code) {
+    return [...MOD_ORDER.filter((one) => mods.includes(one)), code].join('+');
+  }
+
+  const TAKEN = {};
+  [
+    [['meta', 'shift'], 'KeyZ', 'Redo'],
+    [['ctrl', 'shift'], 'KeyZ', 'Redo'],
+    [['meta', 'shift'], 'ArrowUp', 'Jump to the first line'],
+    [['meta', 'shift'], 'ArrowDown', 'Jump to the last line'],
+  ].forEach(([mods, code, action]) => { TAKEN[chordOf(mods, code)] = action; });
+  const chord = document.getElementById('saver-chord');
+  const rebind = document.getElementById('saver-rebind');
+
+  function paintChord(value) {
+    const parts = value.split('+');
+    const key = parts.pop();
+    chord.innerHTML = parts.map((one) =>
+      `<kbd>${esc(MOD_LABEL[one] || one)}</kbd>`).join('')
+      + `<kbd>${esc(key.replace(/^Key|^Digit/, ''))}</kbd>`;
+  }
+  paintChord(saverCard.dataset.shortcut);
+
+  rebind.addEventListener('click', () => {
+    if (rebind.classList.contains('on')) return;
+    rebind.classList.add('on');
+    rebind.textContent = 'Press a chord';
+    chord.textContent = 'Listening…';
+
+    const stop = () => {
+      rebind.classList.remove('on');
+      rebind.textContent = 'Change';
+      window.removeEventListener('keydown', capture, true);
+      paintChord(saverCard.dataset.shortcut);
+    };
+
+    async function capture(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === 'Escape') { stop(); return; }
+      const mods = MOD_ORDER.filter((one) => event[`${one}Key`]);
+      // A modifier held on its own is the first half of a chord, not a
+      // chord, so listening continues rather than rejecting it.
+      if (['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) return;
+      if (mods.length < 2) {
+        result.textContent = 'A shortcut needs at least two modifiers and a '
+          + 'key, or an ordinary keystroke would open the screensaver.';
+        return;
+      }
+      const next = chordOf(mods, event.code);
+      if (TAKEN[next]) {
+        result.textContent = `That shortcut is already used by ${TAKEN[next]}.`;
+        return;
+      }
+      window.removeEventListener('keydown', capture, true);
+      rebind.classList.remove('on');
+      rebind.textContent = 'Change';
+      if (await saveSaver('screensaver_shortcut', next,
+        'Shortcut saved. It opens the screensaver from anywhere in Ripple.')) {
+        saverCard.dataset.shortcut = next;
+      }
+      paintChord(saverCard.dataset.shortcut);
+    }
+    window.addEventListener('keydown', capture, true);
+  });
+}

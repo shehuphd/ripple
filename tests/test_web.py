@@ -3525,3 +3525,35 @@ class TestAuthoring:
 
         result = import_screenplay(response.text.encode(), "again.fountain")
         assert result.accepted, result.rejection_message
+
+
+class TestScreensaverRoutes:
+    """The overlay reads its configuration on every page, so the read has to
+    answer before any preference has been stored, and the write has to refuse
+    a value the overlay could not honour."""
+
+    def test_the_defaults_answer_before_anything_is_stored(self, client):
+        body = client.get("/api/settings/screensaver").json()
+        assert body["enabled"] is True
+        assert body["idle_minutes"] == "5"
+        assert body["throttle_seconds"] == 3
+
+    def test_a_choice_is_stored_and_read_back(self, client):
+        saved = client.post(
+            "/api/settings/screensaver",
+            data={"key": "screensaver_idle_minutes", "value": "20"},
+        )
+        assert saved.status_code == 200
+        assert saved.json()["idle_minutes"] == "20"
+        assert client.get("/api/settings/screensaver").json()[
+            "idle_minutes"] == "20"
+
+    def test_a_value_the_overlay_cannot_honour_is_refused(self, client):
+        refused = client.post(
+            "/api/settings/screensaver",
+            data={"key": "screensaver_shortcut", "value": "Space"},
+        )
+        assert refused.status_code == 400
+        assert "two modifiers" in refused.json()["detail"]
+        assert client.get("/api/settings/screensaver").json()[
+            "shortcut"] == "ctrl+alt+Space"

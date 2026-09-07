@@ -449,3 +449,97 @@ class TestAgentSettings:
         session.add(UiPreference(key="agent_tool_ceiling", value="9999"))
         session.flush()
         assert get_agent_settings(session).tool_ceiling == 12
+
+
+class TestScreensaverSettings:
+    """The screensaver is decorative, so what the tests protect is the
+    stored configuration: a bad row cannot uncap the idle timer, and no
+    single keystroke can be bound to the takeover."""
+
+    @pytest.fixture
+    def session(self):
+        engine = create_db_engine("sqlite+pysqlite:///:memory:")
+        create_all(engine)
+        instance = session_factory(engine)()
+        yield instance
+        instance.close()
+
+    def test_the_defaults_apply_with_no_rows_stored(self, session):
+        from ripple.db.repository import get_screensaver_settings
+
+        settings = get_screensaver_settings(session)
+        assert settings.enabled is True
+        assert settings.idle_minutes == "5"
+        assert settings.shortcut == "ctrl+alt+Space"
+        assert settings.throttle_seconds == 3
+
+    def test_a_stored_choice_survives_a_new_session(self, session):
+        from ripple.db.repository import (
+            get_screensaver_settings,
+            set_screensaver_setting,
+        )
+
+        set_screensaver_setting(session, "screensaver_idle_minutes", "20")
+        set_screensaver_setting(session, "screensaver_throttle_seconds", "5")
+        set_screensaver_setting(session, "screensaver_enabled", "off")
+        session.commit()
+        settings = get_screensaver_settings(session)
+        assert settings.idle_minutes == "20"
+        assert settings.throttle_seconds == 5
+        assert settings.enabled is False
+
+    def test_never_is_an_idle_period(self, session):
+        """It keeps the shortcut and disables only the idle trigger, so it is
+        a stored value rather than the same thing as switching the feature
+        off."""
+        from ripple.db.repository import (
+            get_screensaver_settings,
+            set_screensaver_setting,
+        )
+
+        set_screensaver_setting(session, "screensaver_idle_minutes", "never")
+        settings = get_screensaver_settings(session)
+        assert settings.idle_minutes == "never"
+        assert settings.enabled is True
+
+    def test_a_shortcut_needs_two_modifiers(self, session):
+        from ripple.db.repository import set_screensaver_setting
+
+        with pytest.raises(ValueError):
+            set_screensaver_setting(session, "screensaver_shortcut", "Space")
+        with pytest.raises(ValueError):
+            set_screensaver_setting(
+                session, "screensaver_shortcut", "ctrl+Space"
+            )
+        set_screensaver_setting(
+            session, "screensaver_shortcut", "ctrl+shift+KeyL"
+        )
+
+    def test_an_unknown_setting_or_value_is_refused(self, session):
+        from ripple.db.repository import set_screensaver_setting
+
+        with pytest.raises(ValueError):
+            set_screensaver_setting(session, "screensaver_sound", "on")
+        with pytest.raises(ValueError):
+            set_screensaver_setting(session, "screensaver_enabled", "maybe")
+        with pytest.raises(ValueError):
+            set_screensaver_setting(session, "screensaver_idle_minutes", "7")
+        with pytest.raises(ValueError):
+            set_screensaver_setting(
+                session, "screensaver_throttle_seconds", "30"
+            )
+
+    def test_a_row_written_out_of_range_falls_back_to_the_default(
+        self, session
+    ):
+        """A row from an older build, or written by hand, cannot leave the
+        idle timer or the throttle at a value the UI cannot show."""
+        from ripple.db.models import UiPreference
+        from ripple.db.repository import get_screensaver_settings
+
+        session.add(UiPreference(key="screensaver_idle_minutes", value="240"))
+        session.add(UiPreference(key="screensaver_shortcut", value="q"))
+        session.flush()
+        settings = get_screensaver_settings(session)
+        assert settings.idle_minutes == "5"
+        assert settings.shortcut == "ctrl+alt+Space"

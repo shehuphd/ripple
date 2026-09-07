@@ -248,6 +248,74 @@
         <div class="result tiny" aria-live="polite" id="agent-result"></div>
       </div>
 
+      <h3 class="setgroup">Screensaver</h3>
+      <div class="card" id="screensaver-card"
+           data-shortcut="{{ screensaver.shortcut }}">
+        <div class="setopt">
+          <div class="grow">
+            <strong>Lake screensaver</strong>
+            <p class="tiny muted">Takes over the tab after a period of no
+              input. Stones drop at random and production entities surface as
+              each ripple reaches them.</p>
+          </div>
+          <button class="switch {{ 'on' if screensaver.enabled }}"
+                  data-saver="screensaver_enabled" role="switch"
+                  aria-checked="{{ 'true' if screensaver.enabled else 'false' }}"
+                  aria-label="Lake screensaver"><i></i></button>
+        </div>
+
+        <div class="setopt">
+          <div class="grow">
+            <strong>Start after</strong>
+            <p class="tiny muted">Counted from the last keystroke, pointer move
+              or scroll. Extraction and agent turns keep running behind it.</p>
+            <div class="seg" role="group" aria-label="Start after">
+              {% for choice in idle_minutes %}
+              <button class="segbtn {{ 'on' if choice == screensaver.idle_minutes }}"
+                      data-saver="screensaver_idle_minutes" data-value="{{ choice }}"
+                      aria-pressed="{{ 'true' if choice == screensaver.idle_minutes
+                        else 'false' }}">
+                {{ 'Never' if choice == 'never' else choice ~ ' min' }}</button>
+              {% endfor %}
+            </div>
+          </div>
+          <span class="tiny muted num" id="saver-idle">{{ 'Never'
+            if screensaver.idle_minutes == 'never'
+            else screensaver.idle_minutes ~ ' min' }}</span>
+        </div>
+
+        <div class="setopt">
+          <div class="grow">
+            <strong>Open it now</strong>
+            <p class="tiny muted">Press the shortcut from anywhere in Ripple,
+              including inside the unit editor.</p>
+          </div>
+          <span class="chord" id="saver-chord" aria-live="polite"></span>
+          <button class="btn" id="saver-rebind">Change</button>
+        </div>
+
+        <div class="setopt">
+          <div class="grow">
+            <strong>Minimum time between thrown stones</strong>
+            <p class="tiny muted">Clicks inside this window are ignored.
+              Shorter intervals put more ripples and entities on screen at
+              once, which costs frame rate on older machines.</p>
+            <div class="seg" role="group"
+                 aria-label="Minimum time between thrown stones">
+              {% for choice in throttle_seconds %}
+              <button class="segbtn {{ 'on' if choice|int == screensaver.throttle_seconds }}"
+                      data-saver="screensaver_throttle_seconds" data-value="{{ choice }}"
+                      aria-pressed="{{ 'true' if choice|int == screensaver.throttle_seconds
+                        else 'false' }}">{{ choice }}s</button>
+              {% endfor %}
+            </div>
+          </div>
+          <span class="tiny muted num" id="saver-throttle">
+            {{ screensaver.throttle_seconds }}s</span>
+        </div>
+        <div class="result tiny" aria-live="polite" id="saver-result"></div>
+      </div>
+
       <h3 class="setgroup">Reader</h3>
       <div class="card" id="landing-card">
         <div class="hd"><h2>Opening a script</h2></div>

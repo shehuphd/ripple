@@ -63,15 +63,19 @@ from ripple.db.repository import (
     AGENT_CONFIDENCE_FLOORS,
     AGENT_TOOL_CEILINGS,
     LANDING_VIEWS,
+    SCREENSAVER_IDLE_MINUTES,
+    SCREENSAVER_THROTTLE_SECONDS,
     clear_all_graphs,
     delete_script,
     deletion_preview,
     get_agent_settings,
     get_landing_view,
+    get_screensaver_settings,
     graph_labels,
     persist_import,
     set_agent_setting,
     set_landing_view,
+    set_screensaver_setting,
     unavailable_models,
 )
 from ripple.db.session import create_all, create_db_engine, session_factory
@@ -1344,6 +1348,26 @@ def choose_agent_setting(
     return get_agent_settings(session).__dict__
 
 
+@app.get("/api/settings/screensaver")
+def read_screensaver_settings(session: Session = Depends(get_session)):
+    """The screensaver preferences, read by the overlay on every page."""
+    return get_screensaver_settings(session).__dict__
+
+
+@app.post("/api/settings/screensaver")
+def choose_screensaver_setting(
+    key: str = Form(...),
+    value: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    """Persist one screensaver preference."""
+    try:
+        set_screensaver_setting(session, key, value)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from None
+    return get_screensaver_settings(session).__dict__
+
+
 @app.post("/api/settings/landing")
 def choose_landing_view(
     landing_view: str = Form(...),
@@ -1638,6 +1662,9 @@ def settings_page(request: Request, session: Session = Depends(get_session)):
             "agent": get_agent_settings(session),
             "tool_ceilings": AGENT_TOOL_CEILINGS,
             "confidence_floors": AGENT_CONFIDENCE_FLOORS,
+            "screensaver": get_screensaver_settings(session),
+            "idle_minutes": SCREENSAVER_IDLE_MINUTES,
+            "throttle_seconds": SCREENSAVER_THROTTLE_SECONDS,
         },
     )
 

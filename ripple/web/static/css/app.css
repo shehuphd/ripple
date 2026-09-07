@@ -995,3 +995,64 @@ section.omitted .sh .omit-tag,section.omitted .sh .sctl{text-decoration:none}
 .draft-new{font-size:10.5px;letter-spacing:.08em;color:#2fa8c7;
   border:.5px solid rgba(47,168,199,.55);border-radius:5px;padding:1px 6px;
   font-weight:600;align-self:center;white-space:nowrap}
+
+/* The lake screensaver. A full-tab idle takeover, above every other layer.
+   The one surface in Ripple that is not flat: the vignette gives the water
+   somewhere to recede to. */
+.saver{position:fixed;inset:0;z-index:200;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 45%,#0B0D0F 0%,#060708 100%)}
+.saver:focus{outline:none}
+.saver-lake{position:absolute;inset:0;width:100%;height:100%;display:block}
+.saver-entities{position:absolute;inset:0;pointer-events:none}
+.saver-said{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+
+.saver-mark{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  display:flex;align-items:center;gap:14px;pointer-events:none}
+.saver-word{font-family:var(--sf);font-size:26px;font-weight:500;color:#C9C4BC;
+  letter-spacing:.01em}
+.saver-rings{position:relative;width:20px;height:20px;display:block}
+.saver-rings i{position:absolute;inset:0;border-radius:50%;
+  border:1px solid var(--ac-d);opacity:0;transform:scale(.18);
+  animation:saver-ring 3.2s ease-out infinite}
+.saver-rings i:nth-child(2){animation-delay:1.06s}
+.saver-rings i:nth-child(3){animation-delay:2.12s}
+@keyframes saver-ring{
+  0%{transform:scale(.18);opacity:0}
+  22%{opacity:.85}
+  100%{transform:scale(1);opacity:0}}
+
+.saver-hint{position:absolute;left:0;right:0;bottom:26px;display:flex;
+  justify-content:center;gap:22px;pointer-events:none;white-space:nowrap;
+  font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--t4)}
+.saver-hint kbd{font-family:var(--sf);border:.5px solid var(--bd2);border-radius:3px;
+  padding:1px 4px;margin-right:5px;color:var(--t3)}
+
+.saver-entity{position:absolute;transform:translate(-50%,-50%);display:flex;
+  flex-direction:column;align-items:center;gap:7px;width:190px;
+  animation:saver-surface 2600ms ease-out forwards}
+.saver-chip{width:32px;height:32px;border-radius:4px;display:grid;place-items:center;
+  color:var(--hue);background:color-mix(in srgb,var(--hue) 12%,transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--hue) 34%,transparent)}
+.saver-chip svg{width:15px;height:15px}
+.saver-name{font-size:10px;font-weight:500;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--t3);text-align:center}
+@keyframes saver-surface{
+  0%{opacity:0;transform:translate(-50%,-50%) scale(.94)}
+  16%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  62%{opacity:1;
+    transform:translate(calc(-50% + var(--dx) * .62),calc(-50% + var(--dy) * .62)) scale(1)}
+  100%{opacity:0;
+    transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(1)}}
+
+/* Under reduced motion the lake holds still: one ring set, the wordmark and
+   the hint, nothing that moves. */
+@media (prefers-reduced-motion:reduce){
+  .saver-rings i{animation:none;opacity:.5;transform:scale(1)}
+  .saver-entity{animation:none}
+}
+
+/* The screensaver shortcut, shown as the chord it is. */
+.chord{display:inline-flex;gap:3px;align-items:center}
+.chord kbd{font-family:var(--sf);font-size:11px;border:.5px solid var(--bd2);
+  border-radius:4px;padding:2px 6px;color:var(--t2);background:var(--raised)}
+#saver-rebind.on{color:var(--ac);border-color:var(--ac-d)}
