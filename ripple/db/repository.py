@@ -482,9 +482,10 @@ def set_agent_setting(session: Session, key: str, value: str) -> None:
 # shortcut-only screensaver; the throttle is the least number of seconds
 # between two thrown stones, which caps how much the lake can be crowded.
 SCREENSAVER_IDLE_MINUTES = ("2", "5", "10", "20", "never")
-# The lake's three looks. Dark is the idle state for a room with the lights
-# down; light is the same lake on warm paper; water is the grey-blue one.
-SCREENSAVER_THEMES = ("dark", "light", "water")
+# The lake's three looks. Water, the grey-blue one, is the default; dark is
+# the idle state for a room with the lights down, and light is the same lake
+# on warm paper.
+SCREENSAVER_THEMES = ("water", "dark", "light")
 # What colour an entity's chip takes. The screensaver shows no data, so the
 # hue carries nothing: random draws one of the department colours per entity,
 # none leaves every chip in the water's own grey.
@@ -495,7 +496,7 @@ SCREENSAVER_DEFAULTS = {
     "screensaver_idle_minutes": "5",
     "screensaver_shortcut": "ctrl+alt+Space",
     "screensaver_throttle_seconds": "3",
-    "screensaver_theme": "dark",
+    "screensaver_theme": "water",
     "screensaver_colour": "random",
 }
 
@@ -515,7 +516,7 @@ class ScreensaverSettings:
     idle_minutes: str = "5"
     shortcut: str = "ctrl+alt+Space"
     throttle_seconds: int = 3
-    theme: str = "dark"
+    theme: str = "water"
     colour: str = "random"
 
 

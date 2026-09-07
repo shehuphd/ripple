@@ -508,12 +508,12 @@ class TestScreensaverSettings:
             set_screensaver_setting,
         )
 
-        assert get_screensaver_settings(session).theme == "dark"
+        assert get_screensaver_settings(session).theme == "water"
         assert get_screensaver_settings(session).colour == "random"
-        set_screensaver_setting(session, "screensaver_theme", "water")
+        set_screensaver_setting(session, "screensaver_theme", "dark")
         set_screensaver_setting(session, "screensaver_colour", "none")
         settings = get_screensaver_settings(session)
-        assert settings.theme == "water"
+        assert settings.theme == "dark"
         assert settings.colour == "none"
         with pytest.raises(ValueError):
             set_screensaver_setting(session, "screensaver_theme", "neon")
@@ -562,4 +562,4 @@ class TestScreensaverSettings:
         settings = get_screensaver_settings(session)
         assert settings.idle_minutes == "5"
         assert settings.shortcut == "ctrl+alt+Space"
-        assert settings.theme == "dark"
+        assert settings.theme == "water"

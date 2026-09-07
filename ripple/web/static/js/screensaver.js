@@ -1,5 +1,5 @@
 /* The lake screensaver.
-   A full-tab idle takeover: the viewport becomes a dark lake, stones drop,
+   A full-tab idle takeover: the viewport becomes a lake, stones drop,
    and as each wavefront passes a point a production entity surfaces there.
    It is decorative. It reads no script, writes nothing, and calls no model.
 
@@ -29,10 +29,10 @@ const SAVER_HUES = [
   '--ac', '--red',
 ];
 
-/* Three looks. Dark is the lake with the lights down, light is the same
-   lake on warm paper, and water is the grey-blue one. The rings are canvas
-   rather than CSS, so their colours live here and the chrome's live in the
-   stylesheet. */
+/* Three looks. Water, the grey-blue lake, is the default; dark is the same
+   lake with the lights down and light is it on warm paper. The rings are
+   canvas rather than CSS, so their colours live here and the chrome's live
+   in the stylesheet. */
 const SAVER_WATER = {
   dark: {
     lead: '111,203,224',
@@ -175,7 +175,7 @@ class Screensaver {
     this.taken = [];
 
     const root = document.createElement('div');
-    this.look = SAVER_WATER[this.settings.theme] ? this.settings.theme : 'dark';
+    this.look = SAVER_WATER[this.settings.theme] ? this.settings.theme : 'water';
     root.className = `saver saver-${this.look}`;
     root.tabIndex = -1;
     root.setAttribute('aria-hidden', 'true');
@@ -291,7 +291,7 @@ class Screensaver {
   paintStill() {
     const { width, height } = this.box;
     if (width < 2) return;
-    const water = SAVER_WATER[this.look || 'dark'];
+    const water = SAVER_WATER[this.look || 'water'];
     const context = this.context;
     context.clearRect(0, 0, width, height);
     const x = width / 2;
@@ -479,7 +479,7 @@ class Screensaver {
     }
 
     const context = this.context;
-    const water = SAVER_WATER[this.look || 'dark'];
+    const water = SAVER_WATER[this.look || 'water'];
     context.clearRect(0, 0, width, height);
     this.drops = this.drops.filter((drop) => now - drop.at < drop.life);
 

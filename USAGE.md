@@ -56,11 +56,11 @@ Under the cap, **Billable actions** lists what has been billed, one row per acti
 
 ## The screensaver
 
-After five minutes with no keystroke, pointer move or scroll, the tab becomes a dark lake. Stones drop at random, each one sending damped rings outward, and as a wavefront reaches a point a production entity surfaces there and fades again. `Ctrl+Opt+Space` opens it at once from anywhere in Ripple, the unit editor included.
+After five minutes with no keystroke, pointer move or scroll, the tab becomes a lake. Stones drop at random, each one sending damped rings outward, and as a wavefront reaches a point a production entity surfaces there and fades again. `Ctrl+Opt+Space` opens it at once from anywhere in Ripple, the unit editor included.
 
 Escape, Space, Enter, or the shortcut closes it and puts you back where you were, with the same scroll position and the same focus. Nothing else does: a click throws another stone, and every other key is ignored, so a brushed mouse cannot end a screening. Under `prefers-reduced-motion` it holds still, showing the wordmark and one ring set with nothing that moves.
 
-The lake has three looks. **Dark** is the default, for a room with the lights down. **Light** is the same lake on warm paper, with the rings darkened to the accent and a warm slate. **Water** is the daylight one: a grey-blue lake, deep cyan rings under a white sheen, and entities on white cards. **Entity colour** decides what the chips do with hue, and since nothing on the lake is data the colour carries nothing either way: Random gives each entity one of the department colours, None leaves them in the water's own grey.
+The lake has three looks. **Water** is the default: a grey-blue lake, deep cyan rings under a white sheen, and entities on white cards. **Dark** is the same lake with the lights down, and **Light** is it on warm paper, the rings darkened to the accent and a warm slate. **Entity colour** decides what the chips do with hue, and since nothing on the lake is data the colour carries nothing either way: Random gives each entity one of the department colours, None leaves them in the water's own grey.
 
 It is decorative. It reads no script, changes nothing, and calls no model, and the idle timer holds off while a dialog, a ripple preview, an edited line, an agent turn, or a running build is waiting on you. Extraction and agent turns carry on behind it, and closing it restarts nothing. Every row that governs it is in Settings, Interface, Screensaver.
 
