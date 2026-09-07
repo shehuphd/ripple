@@ -4,6 +4,10 @@ All notable changes to Ripple are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A changed screensaver setting applies without a reload.** The overlay read its settings once when the page loaded, so a throttle or idle period changed afterwards was ignored by any page already open, including the Settings page itself: setting the stones a second apart carried on gating them at three. Saving a row now tells the overlay in the same page, and opening the screensaver re-reads the settings, so a tab left open in another window runs on what Settings currently says.
+
 ### Changed
 
 - **The commit-message guard covers every attribution trailer.** It refused a co-author line and let a generated-by line or a tool's noreply address through. All three name something other than the person committing, so all three are refused now. The README states the convention the hook enforces half of: one imperative line, no body, and no trailers of any kind. What a change was for belongs in this file, where it is read, rather than in a message that needs a git command to reach.

@@ -405,10 +405,14 @@ if (saverCard) {
 
   async function saveSaver(key, value, say) {
     try {
-      await api('/api/settings/screensaver', {
+      const saved = await api('/api/settings/screensaver', {
         method: 'POST', body: form({ key, value }),
       });
       ripple.trace('settings.screensaver_changed', { setting: key, value });
+      // The overlay read its settings when the page loaded, so it is told
+      // rather than left to find out on the next reload.
+      window.dispatchEvent(
+        new CustomEvent('ripple:screensaver', { detail: saved }));
       result.textContent = say;
     } catch (error) {
       result.textContent = error.message;

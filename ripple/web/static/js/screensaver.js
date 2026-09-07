@@ -122,8 +122,20 @@ class Screensaver {
     return this.bag.pop();
   }
 
+  /* The settings were read when the page loaded, and a page open in another
+     tab while they changed still holds the old ones. Re-reading them here
+     costs one request per opening and means the lake always runs on what
+     Settings currently says. */
+  refresh() {
+    fetch('/api/settings/screensaver')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((settings) => { if (settings) Object.assign(this.settings, settings); })
+      .catch(() => { /* Keep the settings in hand. */ });
+  }
+
   show() {
     if (this.open || !this.settings.enabled) return;
+    this.refresh();
     this.open = true;
     this.returnFocus = document.activeElement;
     this.lastThrow = 0;
@@ -502,6 +514,11 @@ function setUpScreensaver(settings) {
   function busy() {
     return document.querySelector(HOLDING) !== null;
   }
+
+  // A change made on this page reaches the lake without a reload.
+  window.addEventListener('ripple:screensaver', (event) => {
+    Object.assign(settings, event.detail);
+  });
 
   ['keydown', 'pointermove', 'pointerdown', 'wheel', 'scroll'].forEach((name) =>
     window.addEventListener(name, () => { idleAt = Date.now(); },
