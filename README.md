@@ -77,7 +77,7 @@ git config core.hooksPath .githooks
 
 ## Commits
 
-A subject line in the imperative, under about 60 characters, then a blank line and a paragraph or two of prose saying what changed and why it needed to. No trailers of any kind: no co-authors, no attribution, no generated-by lines. The `commit-msg` hook enforces the co-author half of that; the rest is convention.
+One line, imperative, under about 60 characters. No body: the reasoning and the detail go in `CHANGELOG.md`, where they are read. No trailers of any kind either, so no co-authors, no attribution, no generated-by lines. The `commit-msg` hook enforces the trailer half of that; the rest is convention.
 
 ## Tests
 

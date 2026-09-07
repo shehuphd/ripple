@@ -6,7 +6,7 @@ All notable changes to Ripple are documented here.
 
 ### Changed
 
-- **The commit-message guard covers every attribution trailer.** It refused a co-author line and let a generated-by line or a tool's noreply address through. All three name something other than the person committing, so all three are refused now. The README states the convention the hook enforces half of: an imperative subject, a prose body saying what changed and why it needed to, and no trailers of any kind.
+- **The commit-message guard covers every attribution trailer.** It refused a co-author line and let a generated-by line or a tool's noreply address through. All three name something other than the person committing, so all three are refused now. The README states the convention the hook enforces half of: one imperative line, no body, and no trailers of any kind. What a change was for belongs in this file, where it is read, rather than in a message that needs a git command to reach.
 
 ### Added
 
