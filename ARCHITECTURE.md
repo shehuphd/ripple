@@ -128,7 +128,7 @@ You upload a screenplay and Ripple reads it into a web of who and what each scen
 
 ### Entity resolution
 
-Extraction runs one scene per call, and a scene knows nothing of the scenes before it, so the same object arrives under different surfaces: MAYA and Maya, "the sedan" and "Blue sedan", LUBOV and LUBOV ANDREYEVNA. Deciding which of those are one entity is a mechanism in its own right, and it is deterministic end to end: no learned matcher, no embedding similarity, no probabilistic threshold. Its governing rule is that ambiguity refuses to merge, so an uncertain identity forks a new entity and reaches a person rather than being guessed at.
+Extraction runs one scene per call, and a scene knows nothing of the scenes before it, so the same object arrives under different surfaces: MAYA and Maya, "the sedan" and "Blue sedan", LUBOV and LUBOV ANDREYEVNA. Three deterministic parts decide which surfaces are one entity; there is no learned matcher, no embedding similarity, and no probabilistic threshold. When the evidence is ambiguous, the resolver creates a new entity and leaves the decision to a person instead of merging on a guess.
 
 | Where | What resolves | How |
 |---|---|---|

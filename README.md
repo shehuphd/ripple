@@ -33,7 +33,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/python -
 
 **Open a script.** Three screenplays are already in the library, each with its graph built, so there is something to work on before you configure anything. Drop a Fountain, Final Draft, PDF, or plain-text file on the library to import your own, or press **New script** and write one in the page.
 
-**Add a key.** Settings, Models: paste a Google AI Studio key, press Validate, then pick a main model. The key is checked against the provider's own models endpoint and stored in a local owner-only file, never in the database. Everything that does not call a model, importing, reading, writing, exporting, the diff engine, works without this step.
+**Add a key.** Settings → Models: paste a Google AI Studio key, press Validate, then pick a main model. The key is checked against the provider's own models endpoint and stored in a local owner-only file, never in the database. Everything that does not call a model, importing, reading, writing, exporting, the diff engine, works without this step.
 
 **Build the graph.** Open a script and press **Build graph**. Ripple reads one scene per call and writes what it finds: the cast, props, locations, wardrobe, and vehicles a production has to move, each assertion citing the line it came from. A scene commits on its own, so a build can be stopped, resumed, or left to run while you read.
 
