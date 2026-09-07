@@ -32,6 +32,8 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **Sortable headers now carry no tooltip.**
+
 - **An unnumbered script's scenes count from 1 in the graph.** A script with no numbered scenes labels them by position (`Sc 1`, `Sc 2`) instead of all `Sc —`. A script with some printed numbers keeps the dash for the unnumbered ones, so a counted label never collides with a printed one.
 
 - **The import-review banner lays out correctly.** Heading over warnings, button top right; its wrapper no longer inherits the centred `grow` row.

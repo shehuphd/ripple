@@ -56,8 +56,7 @@
        {% if column.key != 'actions' %}data-sort="{{ column.key }}"
        aria-sort="{{ page.direction(column) }}"{% endif %}>
       {% if column.key == 'actions' %}{{ column.label }}
-      {% else %}<a class="sortbtn" href="{{ page.sort_url(column) }}"
-           data-tip="{{ 'Reverse the order' if sorted else 'Sort by ' ~ column.label|lower }}">{{ column.label }}</a>
+      {% else %}<a class="sortbtn" href="{{ page.sort_url(column) }}">{{ column.label }}</a>
       {% endif %}</th>
     {% endfor %}
   </tr></thead>

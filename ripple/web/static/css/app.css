@@ -280,8 +280,10 @@ table.listtable td.checkcol{padding-right:0}
   text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
 .sortbtn:hover{color:var(--t1)}
 th.sorted .sortbtn{color:var(--t1)}
-th.sorted .sortbtn::after{content:"\2193";font-size:10px}
-th.sorted.asc .sortbtn::after{content:"\2191"}
+/* The arrow is ::before ordered last, not ::after: the tooltip renders
+   through ::after, and the sorted column must keep both. */
+th.sorted .sortbtn::before{content:"\2193";font-size:10px;order:1}
+th.sorted.asc .sortbtn::before{content:"\2191"}
 .spend-foot{display:flex;align-items:center;gap:12px;margin-top:11px}
 .spend-pager{margin-left:auto;display:flex;gap:7px}
 #pager-size{padding:4px 7px;margin-left:6px}
