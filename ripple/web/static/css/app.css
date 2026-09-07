@@ -244,6 +244,9 @@ table.listtable .tag{margin:0;overflow-wrap:normal;white-space:nowrap}
 table.listtable .acts{display:flex;flex-wrap:wrap;gap:8px}
 table.listtable col.checkcol{width:34px}
 table.listtable td.checkcol{padding-right:0}
+/* The library lays out from content rather than a colgroup, so its
+   checkbox column takes the width on the header cell. */
+#library-table .checkcol{width:34px;padding-right:0}
 .listtable-wrap{margin-bottom:6px}
 /* Settings: a group heading above a card of options, each option a label
    and its control on one row. */
@@ -878,16 +881,18 @@ table.scripts .title .ic{color:var(--t4);font-size:13px}
 .item .r{margin-left:auto;color:var(--t4);font-variant-numeric:tabular-nums;
   flex:0 0 auto}
 
-.batch-head{display:flex;align-items:center;padding:2px 2px 9px}
+/* The min-height is the row's height with the batch controls showing, so
+   a selection appearing in it never pushes the table down. */
+.batch-head{display:flex;align-items:center;padding:2px 2px 9px;
+  min-height:35px;box-sizing:border-box}
 .batch-all{display:inline-flex;align-items:center;gap:7px;font-size:12px;
   color:var(--t3);cursor:pointer}
 .row-check,.batch-all input{accent-color:var(--ac);width:15px;height:15px;
   cursor:pointer}
 .item .row-check{flex:0 0 auto;position:relative;top:2px}
-.batch-bar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
-  display:flex;align-items:center;gap:9px;padding:9px 13px;background:var(--raised);
-  border:.5px solid var(--bd2);border-radius:10px;
-  box-shadow:0 14px 34px rgba(0,0,0,.5);z-index:55}
+/* The bar rides beside the Select all control it answers, in the same
+   head row, rather than floating over the foot of the page. */
+.batch-bar{display:flex;align-items:center;gap:9px;margin-left:16px}
 .batch-count{font-size:12px;color:var(--t3);font-variant-numeric:tabular-nums}
 .batch-spacer{width:14px}
 .btn.danger{color:var(--red);border-color:#3a2523}

@@ -6,6 +6,8 @@ All notable changes to Ripple are documented here.
 
 ### Added
 
+- **The library batch-deletes scripts.** A checkbox per row, **Select all** over the rows the search shows, and **Delete selected scripts**, removing the chosen scripts whole behind a confirm. New: `POST /api/scripts/batch/delete`. Every list's batch controls also move beside Select all instead of floating at the foot of the page.
+
 - **Graphs are a list, and one can be deleted without its script.** The sidebar gains **Graphs**: one row per built graph with status, counts, model, and build time. Rows batch-select, and **Delete selected graphs** removes the graph and everything under it while the script stays, ready to rebuild. New: `GET /graphs`, `POST /api/graphs/batch/delete`.
 
 - **A Windows launcher.** `launch.bat` mirrors `launch.command`: stops any running instance, builds or repairs `.venv`, picks a free port from 8420, and opens a browser once the server answers. `--test` runs the suite. Untested on Windows.

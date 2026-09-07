@@ -3612,3 +3612,42 @@ class TestGraphDeletion:
         )
         assert outcome.status_code == 200
         assert outcome.json()["cleared"] == 0
+
+
+class TestScriptBatchDeletion:
+    """The library deletes several scripts at once, whole: the scripts,
+    their scenes, and their graphs all go, and the other scripts stay."""
+
+    def test_deleting_two_scripts_keeps_the_rest(self, client):
+        import json
+        import re
+
+        page = client.get("/").text
+        ids = re.findall(r'data-id="([0-9a-f-]{36})"', page)
+        assert len(ids) >= 3, "the seeded corpus should hold several scripts"
+        targets, survivor = ids[:2], ids[2]
+
+        outcome = client.post(
+            "/api/scripts/batch/delete", data={"ids": json.dumps(targets)}
+        )
+        assert outcome.status_code == 200
+        body = outcome.json()
+        assert body["deleted"] == 2
+        assert body["scenes"] > 0
+
+        remaining = re.findall(r'data-id="([0-9a-f-]{36})"', client.get("/").text)
+        for target in targets:
+            assert target not in remaining
+            assert client.get(f"/scripts/{target}").status_code == 404
+        assert survivor in remaining
+
+    def test_a_missing_script_is_skipped_rather_than_fatal(self, client):
+        import json
+        import uuid
+
+        outcome = client.post(
+            "/api/scripts/batch/delete",
+            data={"ids": json.dumps([str(uuid.uuid4())])},
+        )
+        assert outcome.status_code == 200
+        assert outcome.json()["deleted"] == 0

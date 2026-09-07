@@ -38,6 +38,16 @@
 <div class="batch-head">
   <label class="batch-all"><input type="checkbox" id="batch-all">
     Select all on this page</label>
+  <div class="batch-bar hide" id="batch-bar" role="region" aria-label="Batch actions">
+    <span class="batch-count" id="batch-count">0 selected</span>
+    <button class="btn sm" id="batch-clear">Clear</button>
+    <span class="batch-spacer"></span>
+    {% for a in batch_actions %}
+    <button class="btn sm{{ ' danger' if a.danger }}" data-batch-kind="{{ a.kind }}"
+            data-batch-url="{{ a.url }}"{% if a.confirm %} data-batch-confirm="1"{% endif %}>
+      {{ a.label }}</button>
+    {% endfor %}
+  </div>
 </div>
 {% endif %}
 <div class="tscroll listtable-wrap">
@@ -116,18 +126,6 @@
   {% else %}<span class="btn sm" id="pager-next" aria-disabled="true"
     data-tip="This is the last page">Next ›</span>{% endif %}
 </nav>
-{% if batch_actions %}
-<div class="batch-bar hide" id="batch-bar" role="region" aria-label="Batch actions">
-  <span class="batch-count" id="batch-count">0 selected</span>
-  <button class="btn sm" id="batch-clear">Clear</button>
-  <span class="batch-spacer"></span>
-  {% for a in batch_actions %}
-  <button class="btn sm{{ ' danger' if a.danger }}" data-batch-kind="{{ a.kind }}"
-          data-batch-url="{{ a.url }}"{% if a.confirm %} data-batch-confirm="1"{% endif %}>
-    {{ a.label }}</button>
-  {% endfor %}
-</div>
-{% endif %}
 {% else %}
 <div class="empty">{{ empty }}</div>
 {% endif %}

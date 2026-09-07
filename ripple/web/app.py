@@ -1952,6 +1952,28 @@ def preview_deletion(script_id: str, session: Session = Depends(get_session)):
     return deletion_preview(session, _uuid(script_id)).__dict__
 
 
+@app.post("/api/scripts/batch/delete")
+def batch_delete_scripts(ids: str = Form(...), session: Session = Depends(get_session)):
+    """Delete several scripts and everything under them."""
+    deleted = 0
+    scenes = entities = assertions = 0
+    for raw in _batch_ids(ids):
+        script = session.get(Script, _uuid(raw))
+        if script is None:
+            continue
+        counts = delete_script(session, script.id)
+        scenes += counts.scenes
+        entities += counts.entities
+        assertions += counts.assertions
+        deleted += 1
+    return {
+        "deleted": deleted,
+        "scenes": scenes,
+        "entities": entities,
+        "assertions": assertions,
+    }
+
+
 @app.post("/api/graphs/batch/delete")
 def batch_delete_graphs(ids: str = Form(...), session: Session = Depends(get_session)):
     """Delete several scripts' graphs, keeping the scripts themselves."""

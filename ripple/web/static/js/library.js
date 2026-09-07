@@ -115,6 +115,7 @@ const target = (id) => (rows.dataset.landing === 'graph'
 document.querySelectorAll('#rows tr').forEach((row) => {
   row.addEventListener('click', (event) => {
     if (event.target.closest('[data-delete]')) return;
+    if (event.target.closest('.checkcol')) return;
     window.location = target(row.dataset.id);
   });
 });
@@ -174,7 +175,11 @@ function drawLibrary() {
   libraryRows.forEach((row) => {
     const matches = row.dataset.title.toLowerCase().includes(needle);
     row.style.display = matches ? '' : 'none';
+    // A row the search hides leaves the selection: a batch must never act
+    // on a row the person can no longer see is ticked.
+    if (!matches) row.querySelector('.row-check').checked = false;
   });
+  refreshBatch();
 }
 
 search.addEventListener('input', drawLibrary);
@@ -198,6 +203,65 @@ document.querySelectorAll('#library-table th[data-sort]').forEach((header) => {
     drawLibrary();
   });
 });
+
+/* Batch selection. Checkboxes drive a floating bar whose one action deletes
+   the selected scripts wholesale. "Select all" ticks the rows the search
+   shows, and a row the search hides drops out of the selection. */
+const batchBar = document.getElementById('batch-bar');
+const batchAll = document.getElementById('batch-all');
+const batchCount = document.getElementById('batch-count');
+const checkOf = (row) => row.querySelector('.row-check');
+const selectedRows = () => libraryRows.filter((row) => checkOf(row).checked);
+const visibleRows = () => libraryRows.filter((row) => row.style.display !== 'none');
+
+function refreshBatch() {
+  if (!batchBar) return;
+  const chosen = selectedRows();
+  batchCount.textContent = `${chosen.length} selected`;
+  batchBar.classList.toggle('hide', chosen.length === 0);
+  const shown = visibleRows();
+  batchAll.checked = shown.length > 0 && shown.every((row) => checkOf(row).checked);
+  batchAll.indeterminate = chosen.length > 0 && !batchAll.checked;
+}
+
+if (batchBar) {
+  libraryRows.forEach((row) => checkOf(row).addEventListener('change', refreshBatch));
+
+  batchAll.addEventListener('change', () => {
+    const on = batchAll.checked;
+    visibleRows().forEach((row) => { checkOf(row).checked = on; });
+    refreshBatch();
+  });
+
+  document.getElementById('batch-clear').addEventListener('click', () => {
+    libraryRows.forEach((row) => { checkOf(row).checked = false; });
+    refreshBatch();
+  });
+
+  document.getElementById('batch-delete').addEventListener('click', async () => {
+    const chosen = selectedRows();
+    if (!chosen.length) return;
+    const scenes = chosen.reduce(
+      (sum, row) => sum + (Number(row.dataset.scenes) || 0), 0);
+    const ok = await confirmDialog(
+      `Delete ${chosen.length} selected script(s)? This permanently removes `
+      + `their ${scenes} scene(s) with every entity, assertion, and record `
+      + 'built on them, and cannot be undone.',
+      'Delete selected scripts', { destructive: true });
+    if (!ok) return;
+    const ids = chosen.map((row) => row.dataset.id);
+    ripple.trace('scripts.batch_deleted', { scripts: ids.length });
+    try {
+      await api('/api/scripts/batch/delete', {
+        method: 'POST', body: form({ ids: JSON.stringify(ids) }),
+      });
+    } catch (error) {
+      toast(error.message, true);
+      return;
+    }
+    window.location.reload();
+  });
+}
 
 /* The alignment review screen: pairs the aligner suspects but refuses to
    make alone. Each suggestion is a checkbox; unticked means both scenes are

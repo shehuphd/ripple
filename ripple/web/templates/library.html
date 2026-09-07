@@ -19,8 +19,21 @@
 {% endblock %}
 
 {% block content %}
+{% if rows %}
+<div class="batch-head">
+  <label class="batch-all"><input type="checkbox" id="batch-all">
+    Select all</label>
+  <div class="batch-bar hide" id="batch-bar" role="region" aria-label="Batch actions">
+    <span class="batch-count" id="batch-count">0 selected</span>
+    <button class="btn sm" id="batch-clear">Clear</button>
+    <span class="batch-spacer"></span>
+    <button class="btn sm danger" id="batch-delete">Delete selected scripts</button>
+  </div>
+</div>
+{% endif %}
 <table class="scripts" id="library-table">
   <thead><tr>
+    <th class="checkcol"></th>
     <th data-sort="title" aria-sort="none">
       <button type="button" class="sortbtn">Title</button></th>
     <th data-sort="format" aria-sort="none">
@@ -42,6 +55,8 @@
         data-format="{{ row.format }}" data-pages="{{ row.pages }}"
         data-scenes="{{ row.scenes }}" data-runtime="{{ row.runtime_minutes }}"
         data-outcome="{{ row.outcome_label }}">
+      <td class="checkcol">
+        <input type="checkbox" class="row-check" aria-label="Select this row"></td>
       <td><a class="title" href="{{ '/scripts/' ~ row.id ~ '/graph' if landing_view == 'graph' else '/scripts/' ~ row.id }}"><span class="ic">▤</span>{{ row.title }}</a></td>
       <td>{{ row.format }}</td>
       <td class="num">{{ row.pages }}</td>
