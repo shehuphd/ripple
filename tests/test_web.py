@@ -225,6 +225,20 @@ class TestPages:
         assert 'class="btn gleam"' in graphless
         assert 'aria-disabled="true"' in graphless
 
+    def test_the_library_marks_which_scripts_have_a_graph(
+        self, client, night_freight_fountain
+    ):
+        """Two same-titled rows can differ only in whether a graph exists, so
+        the title glyph says which is which."""
+        client.post(
+            "/api/scripts",
+            files={"file": ("graphless.fountain", night_freight_fountain)},
+            data={"force": "1"},
+        )
+        page = client.get("/").text
+        assert 'data-tip="Graph built"' in page  # the seeded corpus
+        assert 'data-tip="No graph yet"' in page  # the fresh copy
+
     def test_settings_lists_the_provider(self, client):
         body = client.get("/settings").text
         assert "google" in body

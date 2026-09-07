@@ -484,6 +484,14 @@ def library(
         ).all()
     )
     page_counts = pages_by_script(session, ids)
+    graphed = {
+        script_id
+        for (script_id,) in session.execute(
+            select(Assertion.script_id)
+            .where(Assertion.script_id.in_(ids))
+            .group_by(Assertion.script_id)
+        ).all()
+    }
 
     rows = []
     for script in scripts:
@@ -493,6 +501,7 @@ def library(
             {
                 "id": str(script.id),
                 "title": script.title,
+                "has_graph": script.id in graphed,
                 "format": FORMAT_LABELS.get(
                     record.detected_format if record else "", "Unknown"
                 ),

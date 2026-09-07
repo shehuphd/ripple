@@ -57,7 +57,8 @@
         data-outcome="{{ row.outcome_label }}">
       <td class="checkcol">
         <input type="checkbox" class="row-check" aria-label="Select this row"></td>
-      <td><a class="title" href="{{ '/scripts/' ~ row.id ~ '/graph' if landing_view == 'graph' else '/scripts/' ~ row.id }}"><span class="ic">▤</span>{{ row.title }}</a></td>
+      <td><a class="title" href="{{ '/scripts/' ~ row.id ~ '/graph' if landing_view == 'graph' else '/scripts/' ~ row.id }}"><span class="ic{{ ' graphed' if row.has_graph }}"
+        data-tip="{{ 'Graph built' if row.has_graph else 'No graph yet' }}">{{ '◍' if row.has_graph else '▤' }}</span>{{ row.title }}</a></td>
       <td>{{ row.format }}</td>
       <td class="num">{{ row.pages }}</td>
       <td class="num">{{ row.scenes }}</td>

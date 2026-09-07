@@ -20,6 +20,8 @@ All notable changes to Ripple are documented here.
 
 ### Changed
 
+- **A library row says whether its script has a graph.** The glyph beside the title was decoration; it is now the graph mark in accent when a graph exists and the plain script mark when not, each with a tooltip. Two same-titled copies, one analysed and one not, read apart at a glance.
+
 - **A byte-identical re-upload asks before importing twice.** Every upload's SHA-256 is already recorded; a file whose bytes match a script still in the library now comes back as a named duplicate instead of a silent second copy, and a dialog asks whether to import it anyway. Declining imports nothing.
 
 - **The whole library is the import drop target.** The drop card is gone: holding a file over the window raises a "Drop to import" veil naming the formats, and dropping imports it, with **New script** and **Import script** in the toolbar as before. A file whose extension is not importable is refused with a toast, and a valid one shows a progress card, the file's name over a moving bar, that keeps the outcome and warnings after the reload.

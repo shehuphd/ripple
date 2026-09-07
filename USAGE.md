@@ -27,7 +27,7 @@ On first run the library seeds three bundled demo screenplays, each with its gro
 
 ## The library
 
-The library lists every imported script with its format, page count, scene count, estimated runtime, and import outcome. Runtime is the one-page-one-minute rule every schedule starts from, written as hours and minutes (`2h 51m`, `38m`). Clicking a column header sorts by it and clicking again reverses it; text columns open A to Z and number columns open with the largest first. The search box filters by title, and a sort holds while you search. The sidebar filters to recently opened scripts and to imports that need review.
+The library lists every imported script with its format, page count, scene count, estimated runtime, and import outcome. The glyph beside a title says whether the script has a graph: the accent-coloured graph mark when one is built, the plain script mark when not, with a tooltip saying the same. Runtime is the one-page-one-minute rule every schedule starts from, written as hours and minutes (`2h 51m`, `38m`). Clicking a column header sorts by it and clicking again reverses it; text columns open A to Z and number columns open with the largest first. The search box filters by title, and a sort holds while you search. The sidebar filters to recently opened scripts and to imports that need review.
 
 Each row has a checkbox and a **Select all** control beside the table, which ticks the rows the search shows; the controls next to it name the count and offer **Delete selected scripts**, which removes the chosen scripts whole, scenes, graphs, and history included, behind a confirm. A row's own **Delete** button does the same for one script, with a count of what goes.
 

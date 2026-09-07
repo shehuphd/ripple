@@ -298,6 +298,9 @@ th.sorted.asc .sortbtn::before{content:"\2191"}
 table.scripts .title{font-family:var(--serif);font-size:17px;display:flex;
   align-items:center;gap:11px}
 table.scripts .title .ic{color:var(--t4);font-size:13px}
+/* The title's glyph says whether a graph exists: the Graphs icon in accent
+   when one is built, the plain script glyph otherwise. */
+table.scripts .title .ic.graphed{color:var(--ac)}
 
 /* The library imports by drag and drop over the whole window. While a file
    is held over it, a full-page veil says where it will go; pointer events
