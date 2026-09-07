@@ -56,7 +56,7 @@ Under the cap, **Billable actions** lists what has been billed, one row per acti
 
 ## The screensaver
 
-After five minutes with no keystroke, pointer move or scroll, the tab becomes a dark lake. Stones drop at random, each one sending damped rings outward, and as a wavefront reaches a point a production entity surfaces there and fades again; an entity that comes up while another is on the water is joined to it by one faint line, which fades in with it and leaves with whichever of the two fades first. `Ctrl+Opt+Space` opens it at once from anywhere in Ripple, the unit editor included.
+After five minutes with no keystroke, pointer move or scroll, the tab becomes a dark lake. Stones drop at random, each one sending damped rings outward, and as a wavefront reaches a point a production entity surfaces there and fades again. `Ctrl+Opt+Space` opens it at once from anywhere in Ripple, the unit editor included.
 
 Escape, Space, Enter, or the shortcut closes it and puts you back where you were, with the same scroll position and the same focus. Nothing else does: a click throws another stone, and every other key is ignored, so a brushed mouse cannot end a screening. Under `prefers-reduced-motion` it holds still, showing the wordmark and one ring set with nothing that moves.
 
