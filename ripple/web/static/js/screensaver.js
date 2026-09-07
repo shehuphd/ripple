@@ -29,9 +29,10 @@ const SAVER_HUES = [
   '--ac', '--red',
 ];
 
-/* Two looks. Dark is the lake with the lights down; water is the daylight
-   one, a grey-blue lake on paper. The rings are canvas rather than CSS, so
-   their colours live here and the chrome's live in the stylesheet. */
+/* Three looks. Dark is the lake with the lights down, light is the same
+   lake on warm paper, and water is the grey-blue one. The rings are canvas
+   rather than CSS, so their colours live here and the chrome's live in the
+   stylesheet. */
 const SAVER_WATER = {
   dark: {
     lead: '111,203,224',
@@ -39,6 +40,13 @@ const SAVER_WATER = {
     trail: '163,190,198',
     splash: '214,240,246',
     pebble: ['#3A4046', '#6E7A82', '#565F67'],
+  },
+  light: {
+    lead: '27,125,151',
+    glow: '47,168,199',
+    trail: '124,119,110',
+    splash: '92,88,80',
+    pebble: ['#C9C4BC', '#5C5850', '#EDE9E3'],
   },
   water: {
     lead: '23,117,142',

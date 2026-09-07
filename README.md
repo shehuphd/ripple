@@ -29,7 +29,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/python -
 
 ## The first ten minutes
 
-**See what the name means.** With the app open, press `Ctrl` `Opt` `Space`. The tab becomes a dark lake: stones drop, ripples spread, and as each wavefront passes a point a production entity surfaces there. That is the idea the tool is built on, drawn rather than explained. Escape brings the app back where you left it, down to the scroll position.
+**See what the name means.** With the app open, press `Ctrl` `Opt` `Space`. The tab becomes a dark lake: stones drop, ripples spread, and as each wavefront passes a point a production entity surfaces there. Settings holds three looks for it: dark, warm paper, and grey-blue water. That is the idea the tool is built on, drawn rather than explained. Escape brings the app back where you left it, down to the scroll position.
 
 **Open a script.** Three screenplays are already in the library, each with its graph built, so there is something to work on before you configure anything. Drop a Fountain, Final Draft, PDF, or plain-text file on the library to import your own, or press **New script** and write one in the page.
 

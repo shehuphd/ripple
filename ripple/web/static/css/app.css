@@ -1003,6 +1003,20 @@ section.omitted .sh .omit-tag,section.omitted .sh .sctl{text-decoration:none}
   --saver-plain:#7C8A93;
   background:radial-gradient(ellipse at 50% 45%,#0B0D0F 0%,#060708 100%)}
 
+/* The paper look: the same lake on warm paper, the rings darkened to the
+   accent and a warm slate, the entities on white cards with their department
+   colour on the border. */
+.saver-light{--saver-plain:#7C776E;
+  background:radial-gradient(ellipse at 50% 45%,#FBFAF8 0%,#F1EDE6 58%,#E7E2D9 100%)}
+.saver-light .saver-word{color:#1B1A18}
+.saver-light .saver-rings i{border-color:#1B7D97}
+.saver-light .saver-hint{color:#7C776E}
+.saver-light .saver-hint kbd{border-color:rgba(27,26,24,.22);color:#5C5850}
+.saver-light .saver-chip{background:#FFFFFF;
+  color:color-mix(in srgb,var(--hue) 70%,#1B1A18);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--hue) 38%,#E2DFDA)}
+.saver-light .saver-name{color:#5C5850}
+
 /* The daylight look: a grey-blue lake on paper, the rings in deep cyan and
    the entities on white cards. The dark one stays the default. */
 .saver-water{--saver-plain:#5C6A73;
