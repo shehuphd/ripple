@@ -170,8 +170,7 @@ class Screensaver {
     window.addEventListener('resize', this.onResize);
     window.addEventListener('load', this.onResize);
 
-    this.onLeave = (event) => this.hide(event);
-    root.addEventListener('pointerdown', this.onLeave);
+    this.onLeave = (event) => this.maybeLeave(event);
     window.addEventListener('keydown', this.onLeave, true);
     root.focus({ preventScroll: true });
     ripple.trace('screensaver.opened', { reduced: this.reduced.matches });
@@ -192,13 +191,25 @@ class Screensaver {
     this.resume();
   }
 
-  hide(event) {
+  /* Four ways out, and no others: Escape, Space, Enter, or the shortcut that
+     opened it. A click throws a stone instead, and every other key is left
+     alone, so leaning on the keyboard or brushing the mouse in a screening
+     room does not take the lake down mid-drop. */
+  maybeLeave(event) {
     if (!this.open) return;
-    if (event && event.type === 'keydown') {
-      // The chord that opens it must not also close it on the way out.
-      if (['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) return;
-      event.preventDefault();
-    }
+    const mods = ['ctrl', 'alt', 'shift', 'meta']
+      .filter((one) => event[`${one}Key`]);
+    const chord = [...mods, event.code].join('+');
+    const way = ['Escape', 'Space', 'Enter', 'NumpadEnter'].includes(event.code)
+      && !mods.length;
+    if (!way && chord !== this.settings.shortcut) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.hide();
+  }
+
+  hide() {
+    if (!this.open) return;
     this.open = false;
     this.pause();
     if (this.observer) this.observer.disconnect();
