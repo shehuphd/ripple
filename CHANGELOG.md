@@ -46,6 +46,8 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **The plan card stops leaking its own instructions.** A covered scene the plan left out was added back carrying the model-facing words "Not covered by the plan. Say what changes here, or that nothing does.", counted in the changing tally, and rode into drafting as an instruction. The added row now reads "No change planned.", counts as unchanged, and drafts nothing; the push to decide those scenes goes to the model alone, told to restate the plan if any of them should change.
+
 - **Sortable headers now carry no tooltip.**
 
 - **An unnumbered script's scenes count from 1 in the graph.** A script with no numbered scenes labels them by position (`Sc 1`, `Sc 2`) instead of all `Sc —`. A script with some printed numbers keeps the dash for the unnumbered ones, so a counted label never collides with a printed one.

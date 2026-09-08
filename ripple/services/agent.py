@@ -1340,12 +1340,13 @@ def _tool_plan(
             {
                 "scene": number,
                 "known": True,
-                "change": (
-                    "Not covered by the plan. Say what changes here, or that "
-                    "nothing does."
-                ),
+                # The safe reading of an omission: the plan names no change
+                # here, so none is drafted. This text renders to the user;
+                # the push to decide is in the tool result's note, which
+                # only the model reads.
+                "change": "No change planned.",
                 "citation": predicate,
-                "needs_change": True,
+                "needs_change": False,
             }
         )
 
@@ -1368,8 +1369,18 @@ def _tool_plan(
             "added_from_coverage": added,
             "unknown_scenes": unknown,
             "note": (
-                "The plan is shown to the user, who decides whether drafting "
-                "starts. Say what you intend and stop."
+                (
+                    f"Scene(s) {', '.join(added)} cite the affected entities "
+                    "but your plan does not mention them, so each was added "
+                    "as 'No change planned.' and will not be drafted. Look "
+                    "at every one of them: if the request reaches it, "
+                    "restate the whole plan with state_plan now, deciding "
+                    "each scene. "
+                    if added
+                    else ""
+                )
+                + "The plan is shown to the user, who decides whether "
+                "drafting starts. Say what you intend and stop."
             ),
         },
         ok=not unknown,

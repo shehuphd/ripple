@@ -342,6 +342,19 @@ class TestThePlanStage:
         assert planned.payload["added_from_coverage"]
         assert turn.plan
         assert all(row["change"] for row in turn.plan)
+        # The row renders to the user, so an added one carries the safe
+        # default in user-facing words, never an instruction to the model,
+        # and does not count as a change nobody asked for.
+        added = [
+            row for row in turn.plan
+            if row["scene"] in planned.payload["added_from_coverage"]
+        ]
+        assert added
+        for row in added:
+            assert row["change"] == "No change planned."
+            assert row["needs_change"] is False
+        # The push to decide those scenes goes to the model alone.
+        assert "restate the whole plan" in planned.payload["note"]
 
 
 class TestTheConfidenceFloor:
