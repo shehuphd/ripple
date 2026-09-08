@@ -92,8 +92,8 @@ MAX_ATTEMPTS = 2
 # stage-play act the model spends 5-8k tokens thinking before it writes, so
 # the ceiling leaves room for both.
 MAX_OUTPUT_TOKENS = 24576
-# How many units one call reads. A screenplay scene sits well under this and
-# is read in a single call, as before. A stage play's act runs to hundreds of
+# How many units one call reads. A screenplay scene falls well under this
+# and is read in a single call, as before. A stage play's act runs to hundreds of
 # units, and asking for all of them at once returned a summary of the act: 42
 # assertions off 1,546 units of Arms and the Man, with whole stretches
 # unread. The window is sized to the longest stretch the model covers line by
