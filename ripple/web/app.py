@@ -109,7 +109,7 @@ from ripple.services import renames as renames_service
 from ripple.services import scenes as scenes_service
 from ripple.services.changeset import InvalidOperation
 from ripple.services.preview import PreviewFailed, PreviewRefused, PreviewResult
-from ripple.services.retrieval import build_packet
+from ripple.services.retrieval import PRESENCE_PREDICATES, build_packet, fold
 from ripple.services.settings import SettingsService
 from ripple.services.synthesizer import (
     answer_question,
@@ -3539,7 +3539,6 @@ def grounded_answer(session: Session, script: Script, question: str) -> dict:
     packet = build_packet(session, script, question)
     matched = packet.assertions
     facts = packet.facts
-    terms = [t for t in question.split() if len(t) > 3]
 
     # The Ask path runs through Google's google-genai SDK, not KeyCall's HTTP
     # path: a Google SDK generation on every asked question.
@@ -3548,7 +3547,11 @@ def grounded_answer(session: Session, script: Script, question: str) -> dict:
     ensure_tracing()
     with ActionTrace.start(action="graph.query", kind="query") as query_trace:
         query_trace.input(
-            {"question": question, "terms": len(terms), "matched": len(matched)}
+            {
+                "question": question,
+                "scoped": packet.matched_by_keyword,
+                "matched": len(matched),
+            }
         )
         answer = answer_question(
             question,
@@ -3578,20 +3581,41 @@ def grounded_answer(session: Session, script: Script, question: str) -> dict:
     session.add(record)
     session.flush()
 
+    # The shown evidence prefers substantive lines. A presence edge (appears_in,
+    # occurs_at), and any edge cited to a bare speaker cue (a lone all-caps
+    # name), reads as noise as evidence: it names who is in a scene, not the
+    # fact asked about. Those are held back unless the question is about who
+    # appears where, or nothing else is grounding the answer. The grounding
+    # count still reflects every scoped assertion; this only orders the six
+    # units the card displays.
+    asks_presence = any(
+        marker in fold(question)
+        for marker in ("appear", "which scene", "what scene", "in scene")
+    )
+
+    def _is_cue(text: str) -> bool:
+        stripped = (text or "").strip()
+        return bool(stripped) and " " not in stripped and stripped.isupper()
+
     seen: set[str] = set()
-    cited = []
+    substantive: list[dict] = []
+    held_back: list[dict] = []
     for item in matched:
         if item["unit_id"] in seen:
             continue
         seen.add(item["unit_id"])
-        cited.append(
-            {
-                "scene": item["scene"],
-                "scene_heading": item["scene_heading"],
-                "unit_id": item["unit_id"],
-                "text": item["unit_text"],
-            }
-        )
+        entry = {
+            "scene": item["scene"],
+            "scene_heading": item["scene_heading"],
+            "unit_id": item["unit_id"],
+            "text": item["unit_text"],
+        }
+        presence = item["predicate"] in PRESENCE_PREDICATES and not asks_presence
+        if presence or _is_cue(item["unit_text"]):
+            held_back.append(entry)
+        else:
+            substantive.append(entry)
+    cited = substantive or held_back
 
     grounded_names = {item["subject"] for item in matched} | {
         item["object"] for item in matched

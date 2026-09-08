@@ -852,6 +852,88 @@ class TestAskTheGraph:
         subjects = " ".join(a["subject"] for a in captured["assertions"])
         assert "Béla" in subjects, "accent-less 'Bela' did not retrieve 'Béla'"
 
+    def test_a_query_verb_does_not_match_a_predicate_it_only_contains(self):
+        """The bug behind the cast-cue flood: "appear" is a question verb, so it
+        used to substring-match the appears_in predicate on every cast cue and
+        drag the whole appearance graph in as evidence. Matching is on whole
+        words now, and "appear" is a stopword besides."""
+        from ripple.services.retrieval import _content_terms, _edge_words
+
+        assert "appears" in _edge_words("DENNIS appears_in Sc 4")
+        assert "appear" not in _edge_words("DENNIS appears_in Sc 4")
+        terms = _content_terms("what scenes does the young woman appear in?")
+        assert "appear" not in terms and "scenes" not in terms and "does" not in terms
+        assert "young" in terms and "woman" in terms
+
+    @staticmethod
+    def _cast_with_a_substantive_edge(session, script):
+        """A cast entity that carries at least one non-presence edge, so scoping
+        has something to return and the evidence has a substantive line to
+        prefer. Returns the entity and the ids of every edge touching it."""
+        from sqlalchemy import select
+
+        from ripple.db.models import Assertion, Entity
+        from ripple.services.retrieval import PRESENCE_PREDICATES
+
+        for entity in session.scalars(
+            select(Entity)
+            .where(Entity.script_id == script.id, Entity.entity_type == "cast")
+            .order_by(Entity.canonical_name)
+        ):
+            touches = (
+                (Assertion.subject_entity_id == entity.id)
+                | (Assertion.object_entity_id == entity.id)
+            )
+            edges = session.scalars(
+                select(Assertion).where(
+                    Assertion.script_id == script.id,
+                    Assertion.active.is_(True),
+                    touches,
+                )
+            ).all()
+            if any(e.predicate not in PRESENCE_PREDICATES for e in edges):
+                return entity, {str(e.id) for e in edges}
+        raise AssertionError("no cast entity with a substantive edge in the corpus")
+
+    def test_a_named_entity_scopes_the_packet_to_its_own_edges(self, client):
+        """A question naming an entity is scoped to that entity's edges, so the
+        evidence is about the thing asked after, not a graph-wide keyword sweep."""
+        from ripple.db.models import Script
+        from ripple.services.retrieval import build_packet
+
+        script_id = _first_script(client)
+        with web._sessions() as session:
+            script = session.get(Script, web._uuid(script_id))
+            entity, touching = self._cast_with_a_substantive_edge(session, script)
+            packet = build_packet(session, script, f"Who is {entity.canonical_name}?")
+            assert packet.matched_by_keyword, "a named entity should scope the packet"
+            assert packet.assertions, "the entity has edges the scope should carry"
+            ids = {a["id"] for a in packet.assertions}
+            assert ids <= touching, "the scope pulled in an edge not about the entity"
+
+    def test_the_evidence_sample_prefers_substantive_lines(self, client):
+        """A presence cue (appears_in) is cited to a bare speaker name, so the
+        evidence card prefers a substantive line unless the question is about
+        appearances."""
+        from ripple.db.models import Script
+        from ripple.web import app as web_app
+
+        script_id = _first_script(client)
+        with web._sessions() as session:
+            script = session.get(Script, web._uuid(script_id))
+            entity, _ = self._cast_with_a_substantive_edge(session, script)
+            body = web_app.grounded_answer(
+                session, script, f"Who is {entity.canonical_name}?"
+            )
+        # Nothing shown is a bare speaker-cue line (a single all-caps token),
+        # since substantive lines were available and preferred.
+        assert body["cited_units"], "a scoped entity answer should cite evidence"
+        for unit in body["cited_units"]:
+            text = (unit["text"] or "").strip()
+            assert not (text.isupper() and " " not in text), (
+                f"a bare cue leaked into the evidence: {text!r}"
+            )
+
     def test_the_question_is_logged_for_audit(self, client):
         from sqlalchemy import select
 
