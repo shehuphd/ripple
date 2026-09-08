@@ -64,6 +64,8 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **A launcher rebuilds a virtual environment whose pip has stopped answering.** An interrupted upgrade, a moved interpreter, or a half-synced folder leaves a `.venv` whose python runs and whose pip does not, and both launchers went on to install into it and failed with a stack trace. They check pip first now and rebuild the environment when it cannot answer, once per run, so a machine that cannot build a working one says so instead of looping.
+
 - **The docs match the code again.** A Shiplock semantic audit against 1.0.0 found 22 disagreements across all five doc surfaces, most of them older than the release: ARCHITECTURE denied that `launch.bat` exists, named a `fixture.py` that does not, counted four adapters where five are registered, and described neither the second provider registry nor Ask Ripple's agent; the README's format list omitted stage plays; MANIFEST counted 22 tables against 25; USAGE listed three run states against four. Each is corrected, and windowed reads gained the tests they lacked.
 
 - **A curly apostrophe no longer makes a second entity.** Name normalization folded accents but left the typographic quotes and dashes alone, so a printed play's “lady’s bedchamber” and the straight-quoted form a person types in the reader were two locations past the unique index, and duplicate detection missed the pair because it compares the same unfolded keys. Those forms fold now, so the pair resolves to one entity as it is written. Entities already stored under the older key are merged from the Entities page.

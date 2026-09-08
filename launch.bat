@@ -69,12 +69,54 @@ call %SYSTEM_PYTHON% -m venv "%VENV%"
 
 :deps
 echo Installing dependencies...
-"%PYTHON%" -m pip install --quiet --upgrade pip
+
+rem A virtual environment can survive its own pip: an interrupted upgrade, a
+rem moved Python, or a half-synced folder leaves one that answers no command.
+rem The launcher rebuilds it rather than printing a stack trace at someone who
+rem only wanted to open the app. Rebuilt at most once per run, so a machine
+rem that cannot build a working environment says so instead of looping.
+"%PYTHON%" -m pip --version >nul 2>nul
+if errorlevel 1 goto repair_venv
+
+:install
+"%PYTHON%" -m ensurepip --upgrade >nul 2>nul
+"%PYTHON%" -m pip install --quiet --upgrade pip setuptools wheel
+if errorlevel 1 (
+  if defined REPAIRED (
+    echo Pip is still broken after rebuilding the virtual environment; the 1>&2
+    echo messages above say why. 1>&2
+    exit /b 1
+  )
+  echo Pip is unusable. Rebuilding the virtual environment...
+  goto repair_venv
+)
+
 "%PYTHON%" -m pip install --quiet -e ".[dev]"
 if errorlevel 1 (
   echo The install failed; the messages above say why. 1>&2
   exit /b 1
 )
+
+goto continue
+
+:repair_venv
+if defined REPAIRED (
+  echo The virtual environment could not be repaired. 1>&2
+  exit /b 1
+)
+set "REPAIRED=1"
+echo.
+echo Repairing the virtual environment...
+if exist "%VENV%" rmdir /s /q "%VENV%"
+call %SYSTEM_PYTHON% -m venv "%VENV%"
+if errorlevel 1 (
+  echo Failed to recreate the virtual environment. 1>&2
+  exit /b 1
+)
+set "PYTHON=%VENV%\Scripts\python.exe"
+goto install
+
+:continue
 
 if "%~1"=="--test" (
   echo Running the test suite...

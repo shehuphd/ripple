@@ -82,8 +82,7 @@ meets_floor() {
 # and working elsewhere (a pyenv install, a python.org framework build), and
 # a launcher that trusts PATH's python3 alone refuses machines that can run
 # the app.
-if ! meets_floor "$PYTHON"; then
-  SYSTEM_PYTHON=""
+system_python() {
   for candidate in \
     python3.13 python3.12 python3.11 python3 \
     /opt/homebrew/bin/python3.13 /opt/homebrew/bin/python3.12 \
@@ -91,21 +90,40 @@ if ! meets_floor "$PYTHON"; then
     /usr/local/bin/python3 \
     /Library/Frameworks/Python.framework/Versions/*/bin/python3; do
     if meets_floor "$candidate"; then
-      SYSTEM_PYTHON="$candidate"
-      break
+      printf '%s' "$candidate"
+      return 0
     fi
   done
-  if [ -z "$SYSTEM_PYTHON" ]; then
-    echo "No Python 3.11 or newer was found on this machine." >&2
-    echo "python3 here answers as: $(python3 -V 2>&1 || true)" >&2
-    echo "Install a newer Python from https://www.python.org/downloads/ and" >&2
-    echo "run this script again." >&2
+  echo "No Python 3.11 or newer was found on this machine." >&2
+  echo "python3 here answers as: $(python3 -V 2>&1 || true)" >&2
+  echo "Install a newer Python from https://www.python.org/downloads/ and" >&2
+  echo "run this script again." >&2
+  return 1
+}
+
+# A virtual environment can survive its own pip: an interrupted upgrade, a
+# moved interpreter, or a half-synced folder leaves one whose python runs and
+# whose pip answers nothing. Rebuilding it beats printing a stack trace at
+# someone who only wanted to open the app. Once per run, so a machine that
+# cannot build a working environment says so instead of looping.
+REPAIRED=""
+build_venv() {
+  local reason="$1"
+  if [ -n "$REPAIRED" ]; then
+    echo "The virtual environment could not be repaired." >&2
     exit 1
   fi
-  echo "Creating the virtual environment with $SYSTEM_PYTHON..."
+  REPAIRED=1
+  local interpreter
+  interpreter="$(system_python)" || exit 1
+  echo "$reason with $interpreter..."
   rm -rf "$VENV"
-  "$SYSTEM_PYTHON" -m venv "$VENV"
+  "$interpreter" -m venv "$VENV"
   "$PYTHON" -m ensurepip --upgrade >/dev/null 2>&1 || true
+}
+
+if ! meets_floor "$PYTHON"; then
+  build_venv "Creating the virtual environment"
 fi
 
 # Keep sync clients away from compiled extensions and the credential file.
@@ -121,7 +139,13 @@ if command -v xattr >/dev/null 2>&1; then
 fi
 
 echo "Installing dependencies..."
-"$PYTHON" -m pip install --quiet --upgrade pip
+if ! "$PYTHON" -m pip --version >/dev/null 2>&1; then
+  build_venv "Pip is unusable. Rebuilding the virtual environment"
+fi
+if ! "$PYTHON" -m pip install --quiet --upgrade pip setuptools wheel; then
+  build_venv "Pip could not be upgraded. Rebuilding the virtual environment"
+  "$PYTHON" -m pip install --quiet --upgrade pip setuptools wheel
+fi
 "$PYTHON" -m pip install --quiet -e ".[dev]"
 
 if [ "${1:-}" = "--test" ]; then

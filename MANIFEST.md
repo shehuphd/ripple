@@ -14,7 +14,7 @@ Every file in the repository and what it does. Directories the application write
 | `CHANGELOG.md` | Release history, newest first. |
 | `MANIFEST.md` | This file. |
 | `LICENSE` | AGPL-3.0. |
-| `launch.command` | macOS launcher: stops any running instance, builds or repairs the venv, starts the server, opens a browser. `--test` runs the suite instead. |
+| `launch.command` | macOS launcher: stops any running instance, builds the venv or rebuilds it when its pip cannot answer, starts the server, opens a browser. `--test` runs the suite instead. |
 | `launch.bat` | Windows launcher: the same behaviour through the py launcher, netstat, and PowerShell. |
 | `.replit` | Replit configuration: runs uvicorn directly on `0.0.0.0`, skipping the desktop launchers' venv, port scan, and browser. |
 | `pyproject.toml` | Package metadata, dependencies, pytest and ruff configuration. |

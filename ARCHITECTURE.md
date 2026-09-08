@@ -162,7 +162,7 @@ The database never holds a credential: `AppConfiguration` stores only the select
 
 ## Deployment and infrastructure
 
-Local development runs through `launch.command`, which terminates any Ripple server already running (a stale instance is never reused), verifies Python 3.11+, creates or repairs `.venv`, marks the virtual environment and `data/` as ignored by Dropbox sync, installs the app in editable mode, and starts `uvicorn` on the first free port from 8420. A port held by another Ripple instance is taken over; a port held by anything else is skipped. `launch.command` and `launch.bat` cover macOS and Windows; `launch.sh` doesn't exist.
+Local development runs through `launch.command`, which terminates any Ripple server already running (a stale instance is never reused), verifies Python 3.11+, creates `.venv` or rebuilds it once when its pip cannot answer, marks the virtual environment and `data/` as ignored by Dropbox sync, installs the app in editable mode, and starts `uvicorn` on the first free port from 8420. A port held by another Ripple instance is taken over; a port held by anything else is skipped. `launch.command` and `launch.bat` cover macOS and Windows; `launch.sh` doesn't exist.
 
 The deployment target is Replit Starter Autoscale, which supplies `DATABASE_URL` (PostgreSQL) and holds provider credentials in Replit Secrets. The application hasn't been deployed there yet.
 

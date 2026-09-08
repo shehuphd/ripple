@@ -19,7 +19,7 @@ The full manual is [USAGE.md](https://github.com/shehuphd/ripple/blob/main/USAGE
 
 On Windows, run `launch.bat` instead; it does the same things.
 
-This stops any Ripple server already running, creates `.venv`, installs the package, picks a free port, starts the server, and opens a browser. The library seeds the three bundled screenplays on first run, so there is something to read immediately. Run `./launch.command --test` to run the test suite instead.
+This stops any Ripple server already running, creates `.venv` or rebuilds it when its pip has stopped answering, installs the package, picks a free port, starts the server, and opens a browser. The library seeds the three bundled screenplays on first run, so there is something to read immediately. Run `./launch.command --test` to run the test suite instead.
 
 To build a graph, add a provider key in Settings and choose a model. Nothing else needs a credential: import, the reader, the diff engine, and the deterministic continuity findings all work without one.
 
