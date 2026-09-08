@@ -382,6 +382,7 @@ class _Seeder:
             subject_entity_id=subject_id if subject_kind == "entity" else None,
             subject_scene_id=subject_id if subject_kind == "scene" else None,
             predicate=predicate,
+            manner="on_stage" if predicate == "appears_in" else None,
             object_kind=object_kind,
             object_entity_id=object_id if object_kind == "entity" else None,
             object_scene_id=object_id if object_kind == "scene" else None,

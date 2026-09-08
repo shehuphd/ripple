@@ -74,11 +74,23 @@ const seeRipple = document.getElementById('see-ripple');
 const crumb = document.getElementById('crumb');
 const preview = document.getElementById('preview');
 
+/* How a cast member is present, shown beside an appears_in edge. on_stage is
+   the plain default and stays unlabelled; the marked cases are the ones worth
+   calling out. */
+const MANNER_LABEL = { referenced: 'referenced', depicted: 'depicted' };
+
+function mannerTag(edge) {
+  const manner = edge.manner;
+  if (!manner || manner === 'on_stage' || !MANNER_LABEL[manner]) return '';
+  return `<span class="manner" data-tip="How this cast member is present in the scene"
+    >${MANNER_LABEL[manner]}</span>`;
+}
+
 function edgeRow(edge, cls, sign) {
   return `<div class="edge ${cls || ''}">
     ${sign ? `<span class="sign">${sign}</span>` : ''}
     <span>${esc(edge.subject)}</span>
-    <span class="p">${esc(edge.predicate).replace(/_/g, ' ')}</span>
+    <span class="p">${esc(edge.predicate).replace(/_/g, ' ')}</span>${mannerTag(edge)}
     <span>${esc(edge.object)}</span>
     <span class="c" tabindex="0"
       data-tip="Confidence: the model's certainty this fact is stated, from 0 to 1"
@@ -93,7 +105,7 @@ function verdictRow(edge, cls, sign, tag) {
   return `<div class="edge ${cls}">
     <span class="sign">${sign}</span>
     <span>${esc(edge.subject)}</span>
-    <span class="p">${esc(edge.predicate).replace(/_/g, ' ')}</span>
+    <span class="p">${esc(edge.predicate).replace(/_/g, ' ')}</span>${mannerTag(edge)}
     <span>${esc(edge.object)}</span>
     <span class="verdict ${cls}">${tag}</span></div>`;
 }

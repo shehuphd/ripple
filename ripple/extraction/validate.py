@@ -16,7 +16,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
-from ripple.db.models import ENTITY_TYPES
+from ripple.db.models import APPEARANCE_MANNERS, ENTITY_TYPES
 from ripple.db.naming import normalize_key
 from ripple.extraction.prompt import MINIMUM_CONFIDENCE
 from ripple.graph.predicates import SignatureError, validate_edge
@@ -176,6 +176,8 @@ class ValidatedAssertion:
     confidence: float
     evidence_start: int | None = None
     evidence_end: int | None = None
+    #: For an appears_in edge, how the cast member is present; None otherwise.
+    manner: str | None = None
 
 
 @dataclass
@@ -483,7 +485,21 @@ def _validate_assertion(
         confidence=confidence,
         evidence_start=start,
         evidence_end=end,
+        manner=_appearance_manner(predicate, item.get("manner")),
     )
+
+
+def _appearance_manner(predicate: str, raw: object) -> str | None:
+    """The presence qualifier for an appears_in edge, else None.
+
+    A manner on any other predicate is discarded, not an error: the model
+    sometimes tags an edge that carries no presence. An appears_in edge with a
+    missing or unrecognized manner defaults to on_stage, the plain case, rather
+    than dropping the edge over a label.
+    """
+    if predicate != "appears_in":
+        return None
+    return raw if raw in APPEARANCE_MANNERS else "on_stage"
 
 
 def _evidence_span(

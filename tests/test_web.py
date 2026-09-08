@@ -1113,6 +1113,24 @@ class TestAnswerPacket:
         answer = answer_question("How many scenes?", [])
         assert "accepted graph" in answer.answer
 
+    def test_an_appearance_edge_spells_out_its_manner_for_the_model(self):
+        """The model answering a question sees how a cast member is present, so
+        it can say "shown in a photograph" rather than a bare "appears"."""
+        from ripple.services.synthesizer import _edge_phrase
+
+        depicted = {
+            "subject": "young woman", "predicate": "appears_in",
+            "object": "Sc 11", "manner": "depicted",
+        }
+        on_stage = {**depicted, "manner": "on_stage"}
+        carries = {
+            "subject": "Fola", "predicate": "carries",
+            "object": "red ledger", "manner": None,
+        }
+        assert "photograph" in _edge_phrase(depicted)
+        assert _edge_phrase(on_stage) == "young woman appears_in Sc 11 (on stage)"
+        assert _edge_phrase(carries) == "Fola carries red ledger"
+
     def test_the_query_prompt_passes_over_out_of_scope_parts_in_silence(self):
         """An out-of-scope part gets no answer and no announced refusal: a
         decline per probe is noise, and it tells a prober what landed."""

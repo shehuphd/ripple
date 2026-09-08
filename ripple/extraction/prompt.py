@@ -13,7 +13,7 @@ import hashlib
 import json
 from typing import Any
 
-from ripple.db.models import ENTITY_TYPES, PREDICATES
+from ripple.db.models import APPEARANCE_MANNERS, ENTITY_TYPES, PREDICATES
 from ripple.graph.predicates import SIGNATURES
 
 PROMPT_VERSION = "extract.v5"
@@ -78,6 +78,10 @@ OUTPUT_SCHEMA: dict[str, Any] = {
                     "s": {"type": "string"},
                     "p": {"type": "string", "enum": list(PREDICATES)},
                     "o": {"type": "string"},
+                    "manner": {
+                        "type": "string",
+                        "enum": list(APPEARANCE_MANNERS),
+                    },
                     "unit": {"type": "string"},
                     "start": {
                         "type": "integer",
@@ -164,6 +168,18 @@ Rules for assertions:
 - Every assertion cites the unit that supports it.
 - establishes marks the first staged introduction of an entity. Use it only
   when this scene introduces the entity.
+- appears_in records a cast member's presence in the scene, and carries a
+  manner saying how they are present:
+  - on_stage: physically in the scene's action.
+  - referenced: named or spoken of, but not present (talked about, off-stage,
+    remembered).
+  - depicted: present only inside something in the scene, a photograph, a
+    recording, a letter, a song, a painting, never in the flesh.
+  Report appears_in only for a cast member the recorded-entities list does not
+  already cover as a speaker, or whose presence differs from a speaking one:
+  a character named but absent (referenced), or one shown only in a photograph
+  or recording (depicted). A speaking character is already on stage and
+  recorded; do not restate them. Always set manner on an appears_in edge.
 - conf is between {MINIMUM_CONFIDENCE} and 1. If you would go lower, omit
   the assertion instead.
 - Omit anything you cannot support with text in this scene. Cut speculation,
@@ -191,8 +207,10 @@ Already-recorded entities:
   with one exception: to attach attrs or aliases to one, emit an entity
   object with that id; its type and name are fixed and restated values are
   ignored.
-- Do not report appears_in for a listed cast member or occurs_at for the
-  listed location. Those edges are already recorded.
+- A listed cast member's on-stage, speaking presence and the listed location
+  are already recorded; do not restate them with appears_in or occurs_at. You
+  may still report appears_in for a listed entity when its presence in this
+  scene is referenced or depicted rather than on stage.
 """
 
 

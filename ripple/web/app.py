@@ -2180,6 +2180,7 @@ def unit_graph(
                 "source": str(subject),
                 "target": str(obj),
                 "predicate": assertion.predicate,
+                "manner": assertion.manner,
                 "confidence": round(assertion.confidence, 2),
                 "removed": not assertion.active,
             }
@@ -2326,6 +2327,7 @@ def script_graph(
                 "source": subject,
                 "target": obj,
                 "predicate": assertion.predicate,
+                "manner": assertion.manner,
                 "confidence": round(assertion.confidence, 2),
                 "removed": False,
             }
@@ -4008,6 +4010,7 @@ def _assertion_payload(assertion: Assertion, labels: dict[Any, str]) -> dict[str
         "id": str(assertion.id),
         "subject": labels.get(subject, "?"),
         "predicate": assertion.predicate,
+        "manner": assertion.manner,
         "object": labels.get(obj, "?"),
         "confidence": assertion.confidence,
         "evidence_start": assertion.evidence_start,
@@ -4021,6 +4024,7 @@ def _edge_payload(edge: Edge) -> dict[str, Any]:
         "predicate": edge.predicate,
         "object": edge.display_object or edge.obj.label,
         "confidence": round(edge.confidence, 2),
+        "manner": edge.manner,
     }
 
 

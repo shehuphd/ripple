@@ -383,6 +383,27 @@ def _edge(edge: Any) -> dict[str, Any]:
     }
 
 
+_MANNER_PHRASE = {
+    "on_stage": "on stage",
+    "referenced": "named but not present",
+    "depicted": "shown only in a photograph, recording, or the like",
+}
+
+
+def _edge_phrase(assertion: dict[str, Any]) -> str:
+    """The edge as a phrase, with an appears_in edge's manner spelled out.
+
+    The manner is what separates a character on stage from one merely named or
+    one seen only in a photograph, so the answer can say which without the
+    reader having to know the graph's own vocabulary.
+    """
+    edge = f"{assertion['subject']} {assertion['predicate']} {assertion['object']}"
+    manner = assertion.get("manner")
+    if assertion.get("predicate") == "appears_in" and manner in _MANNER_PHRASE:
+        return f"{edge} ({_MANNER_PHRASE[manner]})"
+    return edge
+
+
 def answer_question(
     question: str,
     assertions: list[dict[str, Any]],
@@ -436,7 +457,7 @@ def answer_question(
                 # has headings, and scene identity cannot depend on numbering.
                 "scene": a.get("scene"),
                 "scene_heading": a.get("scene_heading"),
-                "edge": f"{a['subject']} {a['predicate']} {a['object']}",
+                "edge": _edge_phrase(a),
                 "unit_text": fence(a.get("unit_text", "")),
                 "confidence": a.get("confidence"),
             }

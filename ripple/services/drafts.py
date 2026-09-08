@@ -299,6 +299,7 @@ def _carry_graph(
                     scene_map[row.subject_scene_id] if row.subject_scene_id else None
                 ),
                 predicate=row.predicate,
+                manner=row.manner,
                 object_kind=row.object_kind,
                 object_entity_id=(
                     mapped_entity(row.object_entity_id)

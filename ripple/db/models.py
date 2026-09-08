@@ -103,6 +103,11 @@ PREDICATES = (
     "interacts_with",
     "establishes",
 )
+#: How a cast member is present in a scene, qualifying an appears_in edge.
+#: on_stage: physically in the scene's action. referenced: named or spoken of
+#: but not present. depicted: present only inside a photograph, recording,
+#: letter, or song, not in the flesh. NULL on every non-appearance edge.
+APPEARANCE_MANNERS = ("on_stage", "referenced", "depicted")
 NODE_KINDS = ("entity", "scene")
 PROVENANCE = ("model", "user", "accepted_change", "system")
 IMPORT_OUTCOMES = ("accepted", "accepted_with_warnings", "needs_review", "rejected")
@@ -549,6 +554,16 @@ class Assertion(Base):
             "confidence >= 0 AND confidence <= 1", name="ck_assertion_confidence_range"
         ),
         CheckConstraint(
+            "manner IS NULL OR manner IN ('on_stage', 'referenced', 'depicted')",
+            name="ck_assertion_manner",
+        ),
+        # The qualifier belongs to appearance alone; no other predicate carries
+        # a manner, so a stray one is a bug, not data.
+        CheckConstraint(
+            "manner IS NULL OR predicate = 'appears_in'",
+            name="ck_assertion_manner_scope",
+        ),
+        CheckConstraint(
             "evidence_start IS NULL OR evidence_start >= 0",
             name="ck_assertion_evidence_non_negative",
         ),
@@ -586,6 +601,8 @@ class Assertion(Base):
         ForeignKey("scenes.id", ondelete="CASCADE")
     )
     predicate: Mapped[str] = mapped_column(String(32))
+    # Only an appears_in edge sets this; see APPEARANCE_MANNERS.
+    manner: Mapped[str | None] = mapped_column(String(16))
     object_kind: Mapped[str] = mapped_column(String(16))
     object_entity_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("entities.id", ondelete="CASCADE")

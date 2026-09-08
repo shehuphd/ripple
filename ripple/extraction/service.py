@@ -833,6 +833,9 @@ def _write_rule_assertion(
         subject_entity_id=None if scene_first else entity.id,
         subject_scene_id=job.scene_id if scene_first else None,
         predicate=rule_entity.predicate,
+        # A dialogue cue is the plainest presence there is: the character is on
+        # stage and speaking. Location edges carry no manner.
+        manner="on_stage" if rule_entity.predicate == "appears_in" else None,
         object_kind="entity" if scene_first else "scene",
         object_entity_id=entity.id if scene_first else None,
         object_scene_id=None if scene_first else job.scene_id,
@@ -887,6 +890,7 @@ def _write_assertion(
         subject_entity_id=subject_id if proposed.subject_kind == "entity" else None,
         subject_scene_id=subject_id if proposed.subject_kind == "scene" else None,
         predicate=proposed.predicate,
+        manner=proposed.manner,
         object_kind=proposed.object_kind,
         object_entity_id=object_id if proposed.object_kind == "entity" else None,
         object_scene_id=object_id if proposed.object_kind == "scene" else None,

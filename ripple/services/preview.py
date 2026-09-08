@@ -1358,6 +1358,7 @@ def _edges_from_verdicts(
                 source_unit_id=assertion.source_unit_id,
                 display_subject=subject_label,
                 display_object=object_label,
+                manner=assertion.manner,
             )
         )
     return accepted, proposed
@@ -1560,6 +1561,7 @@ def _edge_from_row(session: Session, row: Assertion, labels: dict[Any, str]) -> 
         assertion_id=str(row.id),
         display_subject=labels.get(row.subject_entity_id or row.subject_scene_id, ""),
         display_object=labels.get(row.object_entity_id or row.object_scene_id, ""),
+        manner=row.manner,
     )
 
 
@@ -1587,6 +1589,7 @@ def _edge_from_payload(payload: dict[str, Any]) -> Edge:
         assertion_id=payload.get("assertion_id"),
         display_subject=payload.get("display_subject", ""),
         display_object=payload.get("display_object", ""),
+        manner=payload.get("manner"),
     )
 
 

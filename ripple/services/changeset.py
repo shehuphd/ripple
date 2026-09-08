@@ -662,6 +662,7 @@ def _add_from_payload(
         subject_entity_id=(subject_id if payload["subject_kind"] == "entity" else None),
         subject_scene_id=subject_id if payload["subject_kind"] == "scene" else None,
         predicate=payload["predicate"],
+        manner=payload.get("manner") if payload["predicate"] == "appears_in" else None,
         object_kind=payload["object_kind"],
         object_entity_id=object_id if payload["object_kind"] == "entity" else None,
         object_scene_id=object_id if payload["object_kind"] == "scene" else None,

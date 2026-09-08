@@ -333,6 +333,69 @@ class TestOutputValidation:
         assert report.entities == []
         assert "unreferenced" in report.rejection_codes
 
+    def test_an_appearance_manner_rides_the_edge(self):
+        """A cast member shown only in a photograph is present in a depicted
+        manner, and that qualifier survives validation onto the edge."""
+        report = validate_response(
+            _reply(
+                entities=[{"id": "e1", "type": "cast", "name": "Rosa", "conf": 0.9}],
+                assertions=[
+                    {
+                        "s": "e1",
+                        "p": "appears_in",
+                        "o": "scene",
+                        "manner": "depicted",
+                        "unit": "u1",
+                        "conf": 0.9,
+                    }
+                ],
+            ),
+            {"u1"},
+        )
+        assert [a.manner for a in report.assertions] == ["depicted"]
+
+    def test_an_appearance_without_a_manner_defaults_to_on_stage(self):
+        report = validate_response(
+            _reply(
+                entities=[{"id": "e1", "type": "cast", "name": "Rosa", "conf": 0.9}],
+                assertions=[
+                    {"s": "e1", "p": "appears_in", "o": "scene",
+                     "unit": "u1", "conf": 0.9},
+                ],
+            ),
+            {"u1"},
+        )
+        assert report.assertions[0].manner == "on_stage"
+
+    def test_an_unknown_manner_falls_back_rather_than_dropping_the_edge(self):
+        report = validate_response(
+            _reply(
+                entities=[{"id": "e1", "type": "cast", "name": "Rosa", "conf": 0.9}],
+                assertions=[
+                    {"s": "e1", "p": "appears_in", "o": "scene",
+                     "manner": "lurking", "unit": "u1", "conf": 0.9},
+                ],
+            ),
+            {"u1"},
+        )
+        assert report.assertions[0].manner == "on_stage"
+
+    def test_a_manner_on_a_non_appearance_edge_is_discarded(self):
+        report = validate_response(
+            _reply(
+                entities=[
+                    {"id": "e1", "type": "cast", "name": "Rosa", "conf": 0.9},
+                    {"id": "e2", "type": "prop", "name": "red ledger", "conf": 0.9},
+                ],
+                assertions=[
+                    {"s": "e1", "p": "carries", "o": "e2", "manner": "depicted",
+                     "unit": "u1", "conf": 0.9},
+                ],
+            ),
+            {"u1"},
+        )
+        assert [a.manner for a in report.assertions] == [None]
+
 
 class TestClaiming:
     def test_a_scene_cannot_be_claimed_twice(self, session, script):

@@ -183,6 +183,71 @@ class TestVocabularies:
             session.flush()
 
 
+class TestAppearanceManner:
+    def test_an_appears_in_edge_carries_a_manner(self, session):
+        script = _script(session)
+        scene = _scene(session, script)
+        unit = _unit(session, scene)
+        entity = _entity(session, script)
+        row = Assertion(
+            script_id=script.id,
+            subject_kind="entity",
+            subject_entity_id=entity.id,
+            predicate="appears_in",
+            manner="depicted",
+            object_kind="scene",
+            object_scene_id=scene.id,
+            source_unit_id=unit.id,
+            confidence=0.9,
+        )
+        session.add(row)
+        session.flush()
+        session.refresh(row)
+        assert row.manner == "depicted"
+
+    def test_an_unknown_manner_is_rejected(self, session):
+        script = _script(session)
+        scene = _scene(session, script)
+        unit = _unit(session, scene)
+        entity = _entity(session, script)
+        session.add(
+            Assertion(
+                script_id=script.id,
+                subject_kind="entity",
+                subject_entity_id=entity.id,
+                predicate="appears_in",
+                manner="lurking",
+                object_kind="scene",
+                object_scene_id=scene.id,
+                source_unit_id=unit.id,
+                confidence=0.9,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.flush()
+
+    def test_a_manner_on_a_non_appearance_edge_is_rejected(self, session):
+        script = _script(session)
+        scene = _scene(session, script)
+        unit = _unit(session, scene)
+        entity = _entity(session, script)
+        session.add(
+            Assertion(
+                script_id=script.id,
+                subject_kind="entity",
+                subject_entity_id=entity.id,
+                predicate="carries",
+                manner="on_stage",
+                object_kind="scene",
+                object_scene_id=scene.id,
+                source_unit_id=unit.id,
+                confidence=0.9,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.flush()
+
+
 class TestNumericRanges:
     @pytest.mark.parametrize("confidence", [-0.1, 1.5])
     def test_confidence_outside_zero_to_one_is_rejected(self, session, confidence):

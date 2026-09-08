@@ -6,6 +6,8 @@ All notable changes to Ripple are documented here.
 
 ### Added
 
+- **An appearance records how a cast member is present.** An `appears_in` edge now carries a manner: on stage (physically in the action), referenced (named or spoken of but not present), or depicted (present only inside a photograph, recording, letter, or song). A speaking cue is on stage; the model tags the rest as it reads the scene. The reader and the graph label the referenced and depicted cases, and Ask Ripple can say a character is shown in a photograph rather than a flat "appears" or a false "does not appear". Rebuild a graph to capture the manner on a script read before this.
+
 - **The reader toolbar opens Ask Ripple on its script.** An **Ask Ripple** button beside View graph opens the chat already pointed at the script being read.
 
 - **An ambiguous change request asks before it plans.** "Add a new love interest" decides nothing about how far she reaches, so Ripple now puts that to you: one question with pressable options sized from the script's own scene and act counts, closed by a fixed "Decide for me". A press is the answer and planning continues from it, with the reply box as the write-in. A routine or fully specified change never asks.

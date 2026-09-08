@@ -68,6 +68,8 @@ class Edge:
     assertion_id: str | None = None
     display_subject: str = ""
     display_object: str = ""
+    #: For an appears_in edge, how the cast member is present; None otherwise.
+    manner: str | None = None
 
     @property
     def identity(self) -> tuple[str, str, str, str, str]:
@@ -147,6 +149,7 @@ def normalise_edge(edge: Edge) -> Edge:
         assertion_id=edge.assertion_id,
         display_subject=edge.display_object,
         display_object=edge.display_subject,
+        manner=edge.manner,
     )
 
 
@@ -284,4 +287,5 @@ def _payload(edge: Edge) -> dict[str, Any]:
         "assertion_id": edge.assertion_id,
         "display_subject": edge.display_subject,
         "display_object": edge.display_object,
+        "manner": edge.manner,
     }

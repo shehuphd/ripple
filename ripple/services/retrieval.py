@@ -175,6 +175,7 @@ def build_packet(session: Session, script: Script, question: str) -> QueryPacket
             "unit_id": str(row.source_unit_id),
             "unit_text": unit_text.get(row.source_unit_id, ""),
             "confidence": row.confidence,
+            "manner": row.manner,
         }
         mapped.append(item)
         if named and (subject_id in named or object_id in named):

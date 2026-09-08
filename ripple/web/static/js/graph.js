@@ -502,7 +502,11 @@ function draw(canvas, data, onSelect, linkFilter, onDrawn, attempt) {
       label.setAttribute('y', cy - 3);
       label.setAttribute('text-anchor', 'middle');
       label.setAttribute('class', `elabel ${family}`);
-      label.textContent = link.predicate.replace(/_/g, ' ');
+      // A marked appearance (referenced, depicted) says so on the edge; a plain
+      // on-stage appearance reads as the unqualified predicate.
+      const marked = link.manner && link.manner !== 'on_stage';
+      label.textContent = link.predicate.replace(/_/g, ' ')
+        + (marked ? ` · ${link.manner}` : '');
       svg.appendChild(label);
     });
   }
@@ -729,7 +733,8 @@ if (canvas) {
     const byId = Object.fromEntries(state.data.nodes.map((n) => [n.id, n]));
     const rows = edges.map((l) => {
       const other = l.source === node.id ? byId[l.target] : byId[l.source];
-      return `<div class="kv"><span class="mono tiny">${esc(l.predicate).replace(/_/g, ' ')}</span>
+      const marked = l.manner && l.manner !== 'on_stage' ? ` · ${esc(l.manner)}` : '';
+      return `<div class="kv"><span class="mono tiny">${esc(l.predicate).replace(/_/g, ' ')}${marked}</span>
         <span>${esc(other ? other.label : '?')} · <span class="c" tabindex="0"
           data-tip="Confidence: the model's certainty this fact is stated, from 0 to 1"
           aria-label="Confidence ${esc(l.confidence)}, from 0 to 1"
@@ -910,7 +915,8 @@ if (scriptCanvas) {
     const byId = Object.fromEntries(state.data.nodes.map((n) => [n.id, n]));
     const rows = edges.map((l) => {
       const other = l.source === node.id ? byId[l.target] : byId[l.source];
-      return `<div class="kv"><span class="mono tiny">${esc(l.predicate).replace(/_/g, ' ')}</span>
+      const marked = l.manner && l.manner !== 'on_stage' ? ` · ${esc(l.manner)}` : '';
+      return `<div class="kv"><span class="mono tiny">${esc(l.predicate).replace(/_/g, ' ')}${marked}</span>
         <span>${esc(other ? other.label : '?')} · <span class="c" tabindex="0"
           data-tip="Confidence: the model's certainty this fact is stated, from 0 to 1"
           aria-label="Confidence ${esc(l.confidence)}, from 0 to 1"

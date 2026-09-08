@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from ripple.db.models import ENTITY_TYPES, PREDICATES
+from ripple.db.models import APPEARANCE_MANNERS, ENTITY_TYPES, PREDICATES
 from ripple.extraction.prompt import MINIMUM_CONFIDENCE, RULES
 from ripple.extraction.validate import (
     MalformedResponse,
@@ -106,6 +106,7 @@ JUDGE_SCHEMA: dict[str, Any] = {
                     "s": {"type": "string"},
                     "p": {"type": "string", "enum": list(PREDICATES)},
                     "o": {"type": "string"},
+                    "manner": {"type": "string", "enum": list(APPEARANCE_MANNERS)},
                     "unit": {"type": "string"},
                     "start": {
                         "type": "integer",
