@@ -1,6 +1,6 @@
 [project]
 name = "ripple"
-version = "0.1.0"
+version = "1.0.0"
 description = "Script graph agents for production impact analysis"
 requires-python = ">=3.11"
 dependencies = [
