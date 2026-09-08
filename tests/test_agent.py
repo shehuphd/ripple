@@ -357,6 +357,110 @@ class TestThePlanStage:
         assert "restate the whole plan" in planned.payload["note"]
 
 
+class TestAskingTheUser:
+    """An ambiguous request comes back as a question with pressable options;
+    the turn ends on it and the answer arrives as the next message."""
+
+    def _ask(self, world, calls, ceiling=6):
+        from ripple.services.agent import PLAN_STAGE
+
+        world["provider"].script_turns(calls)
+        return run_turn(
+            world["session"],
+            world["script"],
+            "Add a new love interest to the story.",
+            world["provider"],
+            MODEL,
+            AgentSettings(tool_ceiling=ceiling),
+            stage=PLAN_STAGE,
+        )
+
+    def test_the_tool_exists_only_while_planning(self):
+        from ripple.services.agent import DRAFT_STAGE, PLAN_STAGE
+
+        planning = {t["name"] for t in tool_declarations(AgentSettings(), PLAN_STAGE)}
+        drafting = {t["name"] for t in tool_declarations(AgentSettings(), DRAFT_STAGE)}
+        assert "ask_user" in planning
+        assert "ask_user" not in drafting
+
+    def test_a_question_ends_the_turn_and_carries_its_options(self, world):
+        turn = self._ask(
+            world,
+            [
+                AgentReply(
+                    text="",
+                    tool_calls=[
+                        ToolCall(
+                            "ask_user",
+                            {
+                                "question": "How involved should she be?",
+                                "options": [
+                                    "Lightly: two or three scenes",
+                                    "A thread through act one",
+                                    # A model-written defer option is dropped:
+                                    # the canonical one is appended in code.
+                                    "Leave the scope and placement to you",
+                                ],
+                            },
+                        )
+                    ],
+                )
+            ],
+        )
+        assert turn.reply == "How involved should she be?"
+        assert turn.question == {
+            "text": "How involved should she be?",
+            "options": [
+                "Lightly: two or three scenes",
+                "A thread through act one",
+                "Decide for me",
+            ],
+        }
+        # The question is the whole turn: no plan, no Go ahead to render.
+        assert not turn.plan
+        assert turn.tools[-1].name == "ask_user"
+
+    def test_a_question_without_options_is_refused(self, world):
+        turn = self._ask(
+            world,
+            [
+                AgentReply(
+                    text="",
+                    tool_calls=[
+                        ToolCall("ask_user", {"question": "Thoughts?", "options": []})
+                    ],
+                ),
+                AgentReply(text="Planning without asking."),
+            ],
+        )
+        assert turn.tools[0].ok is False
+        assert turn.question is None
+        assert turn.reply == "Planning without asking."
+
+    def test_a_plan_in_the_same_breath_supersedes_the_question(self, world):
+        turn = self._ask(
+            world,
+            [
+                AgentReply(
+                    text="",
+                    tool_calls=[
+                        ToolCall(
+                            "ask_user",
+                            {"question": "Sure?", "options": ["Yes", "No"]},
+                        ),
+                        ToolCall(
+                            "state_plan",
+                            {"rows": [{"scene": "1", "change": "Add her."}]},
+                        ),
+                    ],
+                ),
+                AgentReply(text="Plan stated."),
+            ],
+        )
+        assert turn.plan
+        assert turn.question is None
+
+
 class TestTheConfidenceFloor:
     def test_a_low_scoring_fact_is_held_back(self, world):
         from ripple.db.models import ChangeOperation, ChangeSet

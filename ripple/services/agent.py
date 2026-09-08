@@ -123,6 +123,7 @@ class AgentTurn:
     trace_id: str | None = None
     messages: list[dict[str, Any]] = field(default_factory=list)
     plan: list[dict[str, Any]] = field(default_factory=list)
+    question: dict[str, Any] | None = None
     coverage: dict[str, Any] = field(default_factory=dict)
     stage: str = DRAFT_STAGE
 
@@ -134,6 +135,13 @@ scene, a changed prop. You work by calling tools. The tools read the graph and
 propose changes; you never apply anything. A human presses Confirm.
 
 How to work:
+- A request that leaves a real choice open is answered with a question, not
+  a guess. "Add a new love interest" decides nothing about how far she
+  reaches; ask_user puts that to the user with concrete options sized from
+  the script's own scene and act counts (a light touch of two or three
+  scenes, a thread through most of an act, a lead). A routine or fully
+  specified change never asks: "the sedan is now grey" goes straight to
+  work.
 - Find what the request touches with search_graph, then coverage, which
   returns every scene citing an entity. Coverage is computed from the graph,
   not from memory: work from it, and account for every scene it lists.
@@ -323,6 +331,42 @@ def tool_declarations(
         ]
         tools.append(
             {
+                "name": "ask_user",
+                "description": (
+                    "Put one question to the user when the request leaves a "
+                    "real choice open: how far a change reaches, which "
+                    "direction to take it. Offer two or three short, "
+                    "concrete options sized from this script's own scene "
+                    "and act counts; a closing 'Decide for me' option is "
+                    "appended for you, so never write a defer option "
+                    "yourself. The turn ends on the question and the answer "
+                    "arrives as the user's next message. Ask before any "
+                    "plan, at most once, and never for a routine or fully "
+                    "specified change."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "question": {
+                            "type": "string",
+                            "description": "The question, one or two sentences.",
+                        },
+                        "options": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Two to four answers the user can pick with "
+                                "one press, each specific enough to plan "
+                                "from."
+                            ),
+                        },
+                    },
+                    "required": ["question", "options"],
+                },
+            }
+        )
+        tools.append(
+            {
                 "name": "state_plan",
                 "description": (
                     "State what you intend to change, one row per scene the "
@@ -393,6 +437,9 @@ class _TurnState:
     # says is affected cannot go unmentioned.
     covered: dict[str, str] = field(default_factory=dict)
     plan: list[dict[str, Any]] = field(default_factory=list)
+    # A question put to the user instead of a plan: the turn ends on it and
+    # the user's answer arrives as the next message.
+    question: dict[str, Any] | None = None
     ran: set[str] = field(default_factory=set)
     change_set_id: str | None = None
     held_back: list[dict[str, Any]] = field(default_factory=list)
@@ -584,6 +631,13 @@ def run_turn(
                     )
                 if stage == PLAN_STAGE and state.plan:
                     planned = True
+                if state.question is not None and not state.plan:
+                    # The turn's work is the question: it becomes the reply,
+                    # the options render as buttons, and the user's answer
+                    # opens the next turn. A plan stated in the same breath
+                    # supersedes the asking, since the model decided anyway.
+                    reply_text = state.question["text"]
+                    break
             else:
                 if planned:
                     # The ceiling fell on the call that stated the plan. The
@@ -633,6 +687,7 @@ def run_turn(
         trace_id=trace_id,
         messages=messages,
         plan=state.plan,
+        question=None if state.plan else state.question,
         coverage={"scenes": len(state.covered)} if state.covered else {},
         stage=stage,
     )
@@ -802,6 +857,8 @@ def _execute(
             return _tool_findings(session, state)
         if name == "state_plan":
             return _tool_plan(session, state, arguments)
+        if name == "ask_user":
+            return _tool_ask_user(state, arguments)
     except (PreviewRefused, PreviewFailed) as error:
         return ToolRun(name, f"{name} failed", {"error": str(error)}, ok=False)
     return ToolRun(
@@ -1294,6 +1351,86 @@ def _tool_preview_omit(
             "drafting_allowed": state.settings.draft_around_cut,
             "note": (
                 "Nothing changed. Omitting a scene is applied from the reader."
+            ),
+        },
+    )
+
+
+def _tool_ask_user(state: _TurnState, arguments: dict[str, Any]) -> ToolRun:
+    """Put one question with pressable options in front of the user.
+
+    The question and its options render as the model wrote them, so both are
+    bounded here; the page escapes them like any other model text, and an
+    option is only ever sent back as the user's next message, carrying no
+    authority a typed reply would not.
+    """
+    if state.stage != PLAN_STAGE:
+        return ToolRun(
+            "ask_user",
+            "Not while drafting",
+            {
+                "error": (
+                    "The choice was made before drafting started. Work from "
+                    "the plan as it stands."
+                )
+            },
+            ok=False,
+        )
+    if state.question is not None or state.plan:
+        return ToolRun(
+            "ask_user",
+            "Already decided",
+            {
+                "error": (
+                    "One question per turn, and none after a plan is "
+                    "stated. Work with what you have."
+                )
+            },
+            ok=False,
+        )
+    question = str(arguments.get("question") or "").strip()[:300]
+    options = []
+    for raw in arguments.get("options") or []:
+        text = str(raw).strip()[:120]
+        if text and text not in options:
+            options.append(text)
+    # The defer option is the same three words every time, appended in code,
+    # so however the model phrases its own options the way out reads
+    # "Decide for me" and nothing else. A model-written defer option (it is
+    # told not to write one) is dropped rather than doubled.
+    defer_phrasings = (
+        "decide for me", "leave it to", "leave the scope", "leave this to",
+        "up to you", "you decide",
+    )
+    options = [
+        one
+        for one in options
+        if not any(phrase in one.lower() for phrase in defer_phrasings)
+    ][:3]
+    if not question or len(options) < 2:
+        return ToolRun(
+            "ask_user",
+            "Nothing to ask",
+            {
+                "error": (
+                    "A question needs its text and at least two distinct "
+                    "options. Ask properly or plan without asking."
+                )
+            },
+            ok=False,
+        )
+    options.append("Decide for me")
+    state.question = {"text": question, "options": options}
+    return ToolRun(
+        "ask_user",
+        "Asked the user",
+        {
+            "question": question,
+            "options": options,
+            "note": (
+                "The question is in front of the user with the options as "
+                "buttons. The turn ends here; the answer arrives as the "
+                "user's next message."
             ),
         },
     )

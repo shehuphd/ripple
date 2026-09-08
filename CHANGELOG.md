@@ -6,6 +6,8 @@ All notable changes to Ripple are documented here.
 
 ### Added
 
+- **An ambiguous change request asks before it plans.** "Add a new love interest" decides nothing about how far she reaches, so Ripple now puts that to you: one question with pressable options sized from the script's own scene and act counts, closed by a fixed "Decide for me". A press is the answer and planning continues from it, with the reply box as the write-in. A routine or fully specified change never asks. An option is only ever sent as a message, so a button carries no authority typing would not.
+
 - **The library batch-deletes scripts.** A checkbox per row, **Select all** over the rows the search shows, and **Delete selected scripts**, removing the chosen scripts whole behind a confirm. New: `POST /api/scripts/batch/delete`. Every list's batch controls also move beside Select all instead of floating at the foot of the page.
 
 - **Graphs are a list, and one can be deleted without its script.** The sidebar gains **Graphs**: one row per built graph with status, counts, model, and build time. Rows batch-select, and **Delete selected graphs** removes the graph and everything under it while the script stays, ready to rebuild. New: `GET /graphs`, `POST /api/graphs/batch/delete`.

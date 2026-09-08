@@ -3556,6 +3556,7 @@ def _turn_payload(turn: agent.AgentTurn) -> dict:
             for run in turn.tools
         ],
         "plan": turn.plan,
+        "question": turn.question,
         "ripple": preview,
         "omission": omission,
         "change_set_id": turn.change_set_id,

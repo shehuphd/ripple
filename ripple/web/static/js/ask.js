@@ -86,6 +86,18 @@ if (chatwrap) {
       </div>`;
   }
 
+  /* A question the agent put back: the text is the reply above; this card
+     is the options, each one press away from being the user's answer. An
+     option is only ever sent as a message, exactly as if it had been typed,
+     so a pressed button carries no authority the reply box does not. */
+  function questionCard(question) {
+    if (!question || !(question.options || []).length) return '';
+    const buttons = question.options.map((option) =>
+      `<button class="btn" data-option="${esc(option)}">${esc(option)}</button>`)
+      .join('');
+    return `<div class="askoptions">${buttons}</div>`;
+  }
+
   function findingRows(findings) {
     return (findings || []).map((f) => `
       <div class="finding">
@@ -133,7 +145,8 @@ if (chatwrap) {
   }
 
   function actionRow(payload) {
-    if (payload.stage === 'plan') {
+    if (payload.question) return '';
+    if (payload.stage === 'plan' && (payload.plan || []).length) {
       return `<div class="cardactions">
         <button class="btn pri" data-act="go">✓ Go ahead</button>
         <button class="btn" data-act="adjust">↺ Adjust the plan</button>
@@ -153,11 +166,20 @@ if (chatwrap) {
     const wrap = turn('ripple', 'Ripple', `
       ${toolChips(payload.tools)}
       <div class="answer">${esc(payload.reply || '')}</div>
+      ${questionCard(payload.question)}
       ${planCard(payload.plan)}
       ${omissionCard(payload.omission)}
       ${rippleCard(payload.ripple, payload.held_back)}
       ${actionRow(payload)}`);
     wireActions(wrap, payload);
+    wrap.querySelectorAll('[data-option]').forEach((button) => {
+      button.addEventListener('click', () => {
+        wrap.querySelectorAll('[data-option]').forEach((one) => {
+          one.disabled = true;
+        });
+        run(button.dataset.option, 'plan');
+      });
+    });
     return wrap;
   }
 
@@ -225,6 +247,10 @@ if (chatwrap) {
   function retire(wrap) {
     const actions = wrap.querySelector('.cardactions');
     if (actions) actions.remove();
+    // An answered question keeps its options readable but not pressable.
+    wrap.querySelectorAll('[data-option]').forEach((button) => {
+      button.disabled = true;
+    });
   }
 
   function wireActions(wrap, payload) {

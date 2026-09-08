@@ -826,6 +826,9 @@ table.scripts .title .ic.graphed{color:var(--ac)}
 .turn .said,.turn .answer{font-size:14.5px;line-height:1.65;color:var(--t1)}
 .turn .answer{white-space:pre-wrap}
 .turn .chatcard{margin-top:14px}
+/* A question's options: one press is the answer, the reply box the write-in. */
+.askoptions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.askoptions .btn:disabled{opacity:.45}
 .turn .chatcard .hd{display:flex;align-items:center;gap:10px;
   margin-bottom:10px}
 .turn .chatcard .hd h2{font-size:13.5px;margin:0}
