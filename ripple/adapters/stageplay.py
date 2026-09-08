@@ -4,9 +4,10 @@ Public-domain plays (Shakespeare, Wilde, Ibsen and the like, as distributed by
 Project Gutenberg) carry their structure in act and scene headings named in
 words or numerals, not in INT./EXT. sluglines, and their character cues are an
 all-caps name ending in a period on its own line. This adapter reads that
-shape: each SCENE, or an ACT that holds no numbered scenes, becomes one scene;
-the setting that opens it becomes the heading, so a location reads out of it the
-same way a slugline's does; cues name the speaker; bracketed lines and
+shape: each SCENE becomes one scene, and an ACT holding no numbered scenes
+is cut at the entrances and exits it is played in; the setting that opens it
+becomes the heading, so a location reads out of it the same way a slugline's
+does; cues name the speaker; bracketed lines and
 Enter/Exit lines are stage directions; and the Project Gutenberg licence
 wrapper and front matter are dropped before parsing.
 """

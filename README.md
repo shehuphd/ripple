@@ -37,7 +37,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/python -
 
 **Add a key.** Settings → Models: paste a Google AI Studio key, press Validate, then pick a main model. The key is checked against the provider's own models endpoint and stored in a local owner-only file, never in the database. Everything that does not call a model, importing, reading, writing, exporting, the diff engine, works without this step.
 
-**Build the graph.** Open a script and press **Build graph**. Ripple reads one scene per call and writes what it finds: the cast, props, locations, wardrobe, and vehicles a production has to move, each assertion citing the line it came from. A scene commits on its own, so a build can be stopped, resumed, or left to run while you read.
+**Build the graph.** Open a script and press **Build graph**. Ripple reads a scene per call, or a long scene in windows of 120 lines, and writes what it finds: the cast, props, locations, wardrobe, and vehicles a production has to move, each assertion citing the line it came from. A scene commits on its own, so a build can be stopped, resumed, or left to run while you read.
 
 **Change a line, and see the ripple.** Click into a line and edit it. The line goes amber, and **See ripple** puts the edit through the judgement pipeline before anything is applied: which stored facts still hold, what the graph gains and loses, which attributes changed, and any continuity conflict the change opens with the lines it contradicts. Accept applies it as one change set with undo. Reject leaves the script untouched.
 
