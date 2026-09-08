@@ -26,6 +26,8 @@ All notable changes to Ripple are documented here.
 
 ### Changed
 
+- **The seed reaches the provider on every call.** KeyCall 1.10 passes a seed through to the model, so the pin moves to it and the seed Ripple already sent on extraction and judge calls stops being dropped in transit. Three identical live calls came back identical, where the same call at the provider's default varied read to read. The variance check reports any scene whose extraction count still swings, so a prompt or gate regression surfaces on its own.
+
 - **A rebuild replaces a scene's facts instead of adding to them.** A forced rebuild used to leave the prior read's edges in place and write the new read beside them, so the graph was the union of every rebuild and the assertion count only ever climbed. Each scene now supersedes its own earlier model and pre-pass edges before the fresh read is written, so the graph reflects the latest pass and the count holds steady across rebuilds. Edges you accepted or authored by hand are left untouched, and superseded edges are deactivated, not deleted, so undo and the audit trail still reach them.
 
 - **Ripple runs on a host, not only a desktop.** `PORT` names the exact port and binds every interface, dropping the port scan, the browser, and the reloader; `RIPPLE_HOST` sets the bind address on its own. Both launchers honour them, and a new `.replit` skips the launchers and starts uvicorn on `0.0.0.0` directly. A desktop run sets neither and behaves as it always did: loopback, a scanned port from 8420, a browser, reload on edit.

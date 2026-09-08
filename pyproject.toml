@@ -7,7 +7,7 @@ dependencies = [
     "defusedxml>=0.7.1",
     "pdf-inspector>=0.2.6",
     "traceact>=1.0,<2",
-    "keycall[traceact]==1.8.0",
+    "keycall[traceact]==1.10.0",
     "google-genai>=1.20",
     "rates>=0.0.4",
     "sqlalchemy>=2.0",
