@@ -765,6 +765,72 @@ class TestCrossFormat:
         assert len(first.content_hash) == 64
 
 
+class TestFrenchScenes:
+    """An act that prints no numbered scenes is still played in scenes: the
+    stage changes when someone comes on or goes off. Left whole, such an act
+    is one scene of several hundred units, and the graph, the reader, the
+    continuity findings and the one extraction call a scene gets all work at
+    the wrong grain."""
+
+    @staticmethod
+    def _play(entrances: int, speeches_each: int) -> str:
+        """A three-act play whose first act runs long. Detection needs three
+        act headings before it reads the text as a play at all."""
+        play = ["Title: Split Test\n", "\nACT I\n", "\nA room in the Castle.\n"]
+        for index in range(entrances):
+            if index:
+                play.append(f"\nEnter GUEST {index}.\n")
+            for line in range(speeches_each):
+                play.append(f"\nHOST.\nLine {index}-{line}.\n")
+        for act in ("ACT II", "ACT III"):
+            play.append(f"\n{act}\n\nThe same room.\n\nHOST.\nAnd so on.\n")
+        return "".join(play)
+
+    def test_an_act_splits_at_its_entrances(self):
+        result = import_screenplay(self._play(4, 12).encode(), "play.txt")
+        assert result.accepted
+        assert [s.display_scene_number for s in result.scenes][:4] == [
+            "1.1",
+            "1.2",
+            "1.3",
+            "1.4",
+        ]
+        # The place does not change when the company does, so every part
+        # keeps the act's heading and a location still reads out of it.
+        assert {s.heading for s in result.scenes[:4]} == {"A room in the Castle"}
+        # The two short acts are untouched.
+        assert [s.display_scene_number for s in result.scenes][4:] == ["2", "3"]
+
+    def test_a_short_act_is_left_whole(self):
+        """The split buys nothing on a scene the model reads in one call."""
+        result = import_screenplay(self._play(3, 3).encode(), "play.txt")
+        assert [s.display_scene_number for s in result.scenes] == ["1", "2", "3"]
+
+    def test_a_flurry_of_entrances_makes_no_two_line_scenes(self):
+        """An entrance inside a run of them carries on the scene in hand."""
+        from ripple.adapters.stageplay import MIN_UNITS_PER_FRENCH_SCENE
+
+        result = import_screenplay(self._play(20, 2).encode(), "play.txt")
+        assert result.accepted
+        split = [s for s in result.scenes if str(s.display_scene_number).startswith("1")]
+        assert len(split) > 1
+        assert all(len(scene.units) >= MIN_UNITS_PER_FRENCH_SCENE for scene in split)
+
+    def test_a_declared_scene_is_never_resplit(self):
+        """A play that prints SCENE headings has already said where its
+        scenes are; an Enter line inside one does not open another."""
+        play = (
+            "Title: Numbered\n\nACT I\n\nSCENE I. A platform.\n\n"
+            + "".join(f"\nGUARD.\nLine {n}.\n" for n in range(30))
+            + "\nEnter HAMLET.\n"
+            + "".join(f"\nGUARD.\nLine {n}.\n" for n in range(30, 60))
+            + "\nSCENE II. A hall.\n\nGUARD.\nDone.\n"
+        )
+        result = import_screenplay(play.encode(), "play.txt")
+        assert result.accepted
+        assert [s.display_scene_number for s in result.scenes] == ["1.1", "1.2"]
+
+
 class TestUnitCap:
     def test_a_full_act_fits_under_the_unit_ceiling(self):
         """A stage play's acts are its scenes; the ceiling is sized for an

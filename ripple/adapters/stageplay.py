@@ -95,6 +95,20 @@ _CAST_LIST_HEADING = re.compile(
 
 _END_MARKER = re.compile(r"^_?\[?(?:THE END|FINIS|CURTAIN)\.?\]?_?$", re.IGNORECASE)
 
+# An act that prints no numbered scenes is still played in scenes: the stage
+# changes whenever someone comes on or goes off, which is the French scene the
+# text marks with Enter, Exeunt, or Exit. Left whole, such an act is one scene
+# of several hundred units, and everything keyed on a scene (the graph, the
+# reader, continuity findings, and the one extraction call a scene gets) works
+# at the wrong grain.
+_ENTRANCE = re.compile(r"^[_\[\s]*(?:Enter|Re-enter|Re-enters|Exeunt|Exit)\b", re.I)
+#: An act shorter than this is left whole: the split buys nothing on a scene
+#: the model can already read in one call.
+MIN_UNITS_TO_SPLIT = 60
+#: A French scene shorter than this joins the one before it, so a flurry of
+#: entrances does not produce a run of two-line scenes.
+MIN_UNITS_PER_FRENCH_SCENE = 8
+
 # The unit types a printed play's hard wrap breaks apart: a speech and a
 # stage direction both run as a paragraph across several physical lines. A
 # cue, a heading, and a parenthetical are each one line by construction.
@@ -373,7 +387,58 @@ class StagePlayAdapter:
                 "Every act or scene heading was a contents entry with nothing "
                 "under it, so the play itself was never reached.",
             )
+        scenes = self._split_french_scenes(scenes)
         return scenes, warnings
+
+    @staticmethod
+    def _split_french_scenes(scenes: list[ParsedScene]) -> list[ParsedScene]:
+        """Cut a long act into the scenes it is played in.
+
+        Only an act that printed no numbered scenes is cut, and only at a line
+        the text itself marks as an entrance or an exit. The act's heading and
+        its setting stay with the first part, since the place does not change
+        when the company does; the parts after it are numbered under the act
+        and carry its heading, so a location still reads out of them.
+        """
+        split: list[ParsedScene] = []
+        for scene in scenes:
+            parts = [scene.units]
+            if (
+                scene.display_scene_number is not None
+                and "." not in scene.display_scene_number
+                and len(scene.units) >= MIN_UNITS_TO_SPLIT
+            ):
+                parts = []
+                current: list[ParsedUnit] = []
+                for unit in scene.units:
+                    opens = (
+                        unit.unit_type is UnitType.ACTION
+                        and _ENTRANCE.match(unit.text)
+                        and len(current) >= MIN_UNITS_PER_FRENCH_SCENE
+                    )
+                    if opens:
+                        parts.append(current)
+                        current = []
+                    current.append(unit)
+                if current:
+                    if parts and len(current) < MIN_UNITS_PER_FRENCH_SCENE:
+                        parts[-1].extend(current)
+                    else:
+                        parts.append(current)
+            act = scene.display_scene_number
+            for order, units in enumerate(parts, start=1):
+                number = act if len(parts) == 1 else f"{act}.{order}"
+                split.append(
+                    ParsedScene(
+                        sequence_index=len(split),
+                        heading=scene.heading,
+                        units=units,
+                        display_scene_number=number,
+                        int_ext=scene.int_ext,
+                        time_of_day=scene.time_of_day,
+                    )
+                )
+        return split
 
     @staticmethod
     def _drop_contents_entries(
