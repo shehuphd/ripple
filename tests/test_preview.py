@@ -733,9 +733,9 @@ class NewEntityJudge(FakeJudge):
                     ],
                     "new_assertions": [
                         {
-                            "s": "e1",
-                            "p": "appears_in",
-                            "o": "scene",
+                            "s": "scene",
+                            "p": "requires",
+                            "o": "e1",
                             "unit": unit_id,
                             "conf": 0.9,
                         }

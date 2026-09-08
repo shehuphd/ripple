@@ -445,16 +445,21 @@ class _Seeder:
             established = self.scenes.get(chain.establishes)
             if established is not None:
                 self._edge("establishes", established, entity, established, 0.9)
-                if entity.entity_type != "location":
+                if entity.entity_type == "cast":
                     self._edge("appears_in", entity, established, established, 0.9)
+                elif entity.entity_type != "location":
+                    self._edge("requires", established, entity, established, 0.9)
             for number in chain.dependants:
                 scene = self.scenes.get(number)
                 if scene is None:
                     continue
                 if entity.entity_type == "location":
                     self._edge("occurs_at", scene, entity, scene, 0.9)
-                else:
+                elif entity.entity_type == "cast":
                     self._edge("appears_in", entity, scene, scene, 0.88)
+                else:
+                    # A scene needs a prop; only a person appears in one.
+                    self._edge("requires", scene, entity, scene, 0.88)
 
     def _seed_scene_assertions(self) -> None:
         for number, subject_name, predicate, object_name, confidence in (

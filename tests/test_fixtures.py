@@ -140,17 +140,18 @@ class TestSeeding:
                 Assertion.active.is_(True),
             )
         )
-        appearances = session.scalar(
+        # A vehicle is what a scene requires; only a person appears in one.
+        uses = session.scalar(
             select(func.count())
             .select_from(Assertion)
             .where(
-                Assertion.predicate == "appears_in",
-                Assertion.subject_entity_id == sedan.id,
+                Assertion.predicate == "requires",
+                Assertion.object_entity_id == sedan.id,
                 Assertion.active.is_(True),
             )
         )
         assert establishes == 1
-        assert appearances >= 8
+        assert uses >= 8
 
     def test_attributes_carry_evidence(self, session):
         script = _import(session, "02-the-understudy", "the-understudy.fountain")

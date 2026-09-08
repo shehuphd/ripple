@@ -33,9 +33,6 @@ ENTITY_TYPES: frozenset[str] = frozenset(
 # Everything a scene can require: a department deliverable, never a person and
 # never the place the scene happens at, which is `occurs_at`.
 REQUIRABLE = ENTITY_TYPES - {"cast", "location"}
-# Everything that can be present in a scene. A location is where the scene is,
-# not something appearing in it.
-PRESENTABLE = ENTITY_TYPES - {"location"}
 
 
 class NodeKind(str, Enum):
@@ -57,7 +54,14 @@ class Signature:
 
 
 SIGNATURES: dict[str, Signature] = {
-    "appears_in": Signature(NodeKind.ENTITY, NodeKind.SCENE, PRESENTABLE, None),
+    # Cast only. An object's presence in a scene is what `requires` and
+    # `establishes` record; `appears_in` is about a person, and its manner
+    # (on stage, referenced, depicted) has no reading for a prop. Opened to
+    # every type but location, it produced a photograph "depicted" in a scene
+    # where the person in the photograph was the one being depicted.
+    "appears_in": Signature(
+        NodeKind.ENTITY, NodeKind.SCENE, frozenset({"cast"}), None
+    ),
     "occurs_at": Signature(
         NodeKind.SCENE, NodeKind.ENTITY, None, frozenset({"location"})
     ),

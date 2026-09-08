@@ -163,8 +163,8 @@ class TestSpanBounds:
     def test_an_out_of_bounds_span_is_dropped_to_no_span(self):
         report = validate_response(
             '{"entities": [{"id": "e1", "type": "prop", "name": "Key", '
-            '"conf": 0.9}], "assertions": [{"s": "e1", "p": "appears_in", '
-            '"o": "scene", "unit": "u1", "start": 0, "end": 99, "conf": 0.9}]}',
+            '"conf": 0.9}], "assertions": [{"s": "scene", "p": "requires", '
+            '"o": "e1", "unit": "u1", "start": 0, "end": 99, "conf": 0.9}]}',
             {"u1"},
             unit_texts={"u1": "A key."},
         )
@@ -174,8 +174,8 @@ class TestSpanBounds:
     def test_a_span_within_bounds_survives(self):
         report = validate_response(
             '{"entities": [{"id": "e1", "type": "prop", "name": "Key", '
-            '"conf": 0.9}], "assertions": [{"s": "e1", "p": "appears_in", '
-            '"o": "scene", "unit": "u1", "start": 2, "end": 5, "conf": 0.9}]}',
+            '"conf": 0.9}], "assertions": [{"s": "scene", "p": "requires", '
+            '"o": "e1", "unit": "u1", "start": 2, "end": 5, "conf": 0.9}]}',
             {"u1"},
             unit_texts={"u1": "A key."},
         )

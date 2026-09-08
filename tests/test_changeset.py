@@ -72,11 +72,11 @@ def build_world(session):
     session.flush()
     existing = Assertion(
         script_id=script.id,
-        subject_kind="entity",
-        subject_entity_id=sedan.id,
-        predicate="appears_in",
-        object_kind="scene",
-        object_scene_id=scene.id,
+        subject_kind="scene",
+        subject_scene_id=scene.id,
+        predicate="requires",
+        object_kind="entity",
+        object_entity_id=sedan.id,
         source_unit_id=unit.id,
         confidence=0.9,
     )
@@ -111,13 +111,13 @@ def add_op(world, name="Picture bicycle", kind="transportation", index=0):
         "target_id": None,
         "before_json": None,
         "after_json": {
-            "subject_kind": "entity",
-            "subject_ref": name,
-            "subject_entity_type": kind,
-            "predicate": "appears_in",
-            "object_kind": "scene",
-            "object_ref": str(world["scene"].id),
-            "object_entity_type": None,
+            "subject_kind": "scene",
+            "subject_ref": str(world["scene"].id),
+            "subject_entity_type": None,
+            "predicate": "requires",
+            "object_kind": "entity",
+            "object_ref": name,
+            "object_entity_type": kind,
             "source_unit_id": str(world["unit"].id),
             "confidence": 0.81,
         },
@@ -130,7 +130,7 @@ def remove_op(world, index=0):
         "operation_type": "remove_assertion",
         "target_type": "assertion",
         "target_id": str(world["existing"].id),
-        "before_json": {"predicate": "appears_in"},
+        "before_json": {"predicate": "requires"},
         "after_json": None,
     }
 
@@ -389,31 +389,31 @@ class TestUndo:
 
 
 def update_op(world, new_name="Grey van", index=0):
-    """An update that swaps the existing edge's subject for a new entity."""
+    """An update that swaps the existing edge's object for a new entity."""
     return {
         "sequence_index": index,
         "operation_type": "update_assertion",
         "target_type": "assertion",
         "target_id": str(world["existing"].id),
         "before_json": {
-            "subject_kind": "entity",
-            "subject_ref": "Blue sedan",
-            "subject_entity_type": "transportation",
-            "predicate": "appears_in",
-            "object_kind": "scene",
-            "object_ref": str(world["scene"].id),
-            "object_entity_type": None,
+            "subject_kind": "scene",
+            "subject_ref": str(world["scene"].id),
+            "subject_entity_type": None,
+            "predicate": "requires",
+            "object_kind": "entity",
+            "object_ref": "Blue sedan",
+            "object_entity_type": "transportation",
             "source_unit_id": str(world["unit"].id),
             "confidence": 0.9,
         },
         "after_json": {
-            "subject_kind": "entity",
-            "subject_ref": new_name,
-            "subject_entity_type": "transportation",
-            "predicate": "appears_in",
-            "object_kind": "scene",
-            "object_ref": str(world["scene"].id),
-            "object_entity_type": None,
+            "subject_kind": "scene",
+            "subject_ref": str(world["scene"].id),
+            "subject_entity_type": None,
+            "predicate": "requires",
+            "object_kind": "entity",
+            "object_ref": new_name,
+            "object_entity_type": "transportation",
             "source_unit_id": str(world["unit"].id),
             "confidence": 0.85,
         },
@@ -445,11 +445,11 @@ class TestUpdateAssertion:
         assert van is not None
         replacement = session.scalar(
             select(Assertion).where(
-                Assertion.subject_entity_id == van.id, Assertion.active.is_(True)
+                Assertion.object_entity_id == van.id, Assertion.active.is_(True)
             )
         )
         assert replacement is not None
-        assert replacement.predicate == "appears_in"
+        assert replacement.predicate == "requires"
 
     def test_undoing_an_update_restores_the_old_edge(self, session, world):
         proposal = create_proposal(
@@ -466,7 +466,7 @@ class TestUpdateAssertion:
             select(Entity).where(Entity.normalized_name == normalize("Grey van"))
         )
         replacement = session.scalar(
-            select(Assertion).where(Assertion.subject_entity_id == van.id)
+            select(Assertion).where(Assertion.object_entity_id == van.id)
         )
         assert replacement is not None and replacement.active is False
         assert proposal.status == "reverted"

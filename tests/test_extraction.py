@@ -210,6 +210,33 @@ class TestOutputValidation:
             "A room furnished comfortably and tastefully", "set_design"
         ) is None
 
+    def test_only_a_person_appears_in_a_scene(self):
+        """A prop's presence in a scene is what `requires` and `establishes`
+        record. Opened to every type but location, `appears_in` produced a
+        photograph "depicted" in a scene, where the person in the photograph
+        was the one being depicted, and every object edge duplicated a
+        `requires` edge that already existed."""
+        report = validate_response(
+            _reply(
+                entities=[
+                    {"id": "e1", "type": "prop", "name": "Photograph", "conf": 0.9},
+                    {"id": "e2", "type": "cast", "name": "DESMOND", "conf": 0.9},
+                ],
+                assertions=[
+                    {"s": "e1", "p": "appears_in", "o": "scene",
+                     "unit": "u1", "conf": 0.9, "manner": "depicted"},
+                    {"s": "e2", "p": "appears_in", "o": "scene",
+                     "unit": "u1", "conf": 0.9, "manner": "depicted"},
+                ],
+            ),
+            {"u1"},
+        )
+        kept = [
+            (a.subject_local_id, a.manner) for a in report.assertions
+        ]
+        assert kept == [("e2", "depicted")]
+        assert "signature_mismatch" in report.rejection_codes
+
     def test_a_heading_that_says_when_is_not_a_location(self):
         """A stage play heads an act with a date ("The sixth of March, 1886"),
         a clock, or a circumstance ("In the library after lunch"), and a
@@ -256,9 +283,9 @@ class TestOutputValidation:
                 ],
                 assertions=[
                     {
-                        "s": "e1",
-                        "p": "appears_in",
-                        "o": "scene",
+                        "s": "scene",
+                        "p": "requires",
+                        "o": "e1",
                         "unit": "a-unit-that-was-never-shown",
                         "conf": 0.9,
                     }
@@ -309,9 +336,9 @@ class TestOutputValidation:
                 ],
                 assertions=[
                     {
-                        "s": "e1",
-                        "p": "appears_in",
-                        "o": "scene",
+                        "s": "scene",
+                        "p": "requires",
+                        "o": "e1",
                         "unit": "u1",
                         "conf": 0.4,
                     }
@@ -335,9 +362,9 @@ class TestOutputValidation:
                 ],
                 assertions=[
                     {
-                        "s": "e1",
-                        "p": "appears_in",
-                        "o": "scene",
+                        "s": "scene",
+                        "p": "requires",
+                        "o": "e1",
                         "unit": "u1",
                         "conf": 0.9,
                     },
@@ -742,9 +769,9 @@ class TestWritingTheGraph:
             ],
             assertions=[
                 {
-                    "s": "e1",
-                    "p": "appears_in",
-                    "o": "scene",
+                    "s": "scene",
+                    "p": "requires",
+                    "o": "e1",
                     "unit": _short_id(session, scene.id, action.id),
                     "start": 0,
                     "end": 10,
@@ -808,9 +835,9 @@ class TestWritingTheGraph:
                     ],
                     assertions=[
                         {
-                            "s": "e1",
-                            "p": "appears_in",
-                            "o": "scene",
+                            "s": "scene",
+                            "p": "requires",
+                            "o": "e1",
                             "unit": _short_id(session, job.scene_id, units[0].id),
                             "conf": 0.9,
                         }
@@ -901,9 +928,9 @@ class TestWritingTheGraph:
         scene = script.scenes[13]
         units = _units_of(session, scene.id)
         edge = {
-            "s": "e1",
-            "p": "appears_in",
-            "o": "scene",
+            "s": "scene",
+            "p": "requires",
+            "o": "e1",
             "unit": _short_id(session, scene.id, units[0].id),
             "conf": 0.9,
         }
@@ -1048,9 +1075,9 @@ class TestAttributes:
             ],
             assertions=[
                 {
-                    "s": "e1",
-                    "p": "appears_in",
-                    "o": "scene",
+                    "s": "scene",
+                    "p": "requires",
+                    "o": "e1",
                     "unit": _short_id(session, scene.id, action.id),
                     "conf": 0.88,
                 }
@@ -1326,9 +1353,9 @@ class TestExtractionFallback:
             ],
             assertions=[
                 {
-                    "s": "e1",
-                    "p": "appears_in",
-                    "o": "scene",
+                    "s": "scene",
+                    "p": "requires",
+                    "o": "e1",
                     "unit": _short_id(session, scene.id, action.id),
                     "conf": 0.9,
                 }
@@ -1390,9 +1417,9 @@ class TestExtractionEscalation:
             ],
             assertions=[
                 {
-                    "s": "e1",
-                    "p": "appears_in",
-                    "o": "scene",
+                    "s": "scene",
+                    "p": "requires",
+                    "o": "e1",
                     "unit": _short_id(session, scene.id, action.id),
                     "conf": 0.9,
                 }
@@ -1491,9 +1518,9 @@ class TestEvidenceOffsetPairs:
                 ],
                 assertions=[
                     {
-                        "s": "e1",
-                        "p": "appears_in",
-                        "o": "scene",
+                        "s": "scene",
+                        "p": "requires",
+                        "o": "e1",
                         "unit": "u1",
                         "conf": 0.9,
                         **offsets,
