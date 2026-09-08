@@ -50,6 +50,8 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **Tooltips never clip at an edge.** The tooltip was a `::after` element aimed by a growing set of per-location rules; a trigger without one, such as the preview's "Write the explanation" button, grew a centred tooltip that ran past its container and lost its opening words. One floating element now serves every tooltip, positioned from the trigger's box and clamped to the viewport, so the full text shows wherever the trigger is.
+
 - **Ask Ripple scopes a question to what it names.** A question's words were matched as substrings over the graph, so "appear" caught the `appears_in` edge on every cast cue and answered "who is the young woman" with a page of unrelated speaker names as its evidence. Matching now runs on whole words with question stopwords removed, and a question that names an entity is scoped to that entity's own edges. The evidence card prefers substantive lines over bare appearance cues, and an entity the graph holds no facts about returns an honest empty grounding instead of a keyword sweep.
 
 - **In-script search matches across an accepted edit.** A search for a phrase straddling an accepted edit ("young man", where the edit had added "man and his little brother") found nothing, because the accepted words render inside a `<mark>` that splits the line into separate text nodes and the search matched one node at a time. It now searches each line's whole text and highlights the match even where it crosses the edit.

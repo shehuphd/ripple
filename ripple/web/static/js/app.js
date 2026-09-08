@@ -388,3 +388,73 @@ function askDialog(message, confirmLabel, placeholder) {
     field.focus();
   });
 }
+
+/* Tooltips. One floating element serves every [data-tip] on the page. Its
+   position is computed from the trigger's box and clamped to the viewport, so
+   a tip can't clip against a window edge or an ancestor that hides its
+   overflow, wherever the trigger sits. It shows on pointer enter and keyboard
+   focus with no timer, per the instant-tooltip rule, and is dropped when the
+   trigger moves under it (scroll, resize) rather than left at a stale spot. */
+(function tooltips() {
+  const GAP = 7;
+  const MARGIN = 8;
+  const tip = document.createElement('div');
+  tip.className = 'tip-float';
+  tip.setAttribute('role', 'tooltip');
+  tip.hidden = true;
+  let current = null;
+
+  function hide() {
+    current = null;
+    tip.hidden = true;
+  }
+
+  function place(trigger) {
+    const text = trigger.getAttribute('data-tip');
+    if (!text) return;
+    if (!tip.isConnected) document.body.appendChild(tip);
+    current = trigger;
+    tip.textContent = text;
+    tip.hidden = false;
+    const box = trigger.getBoundingClientRect();
+    const width = tip.offsetWidth;
+    const height = tip.offsetHeight;
+    // Below the trigger by default; flipped above when the bottom has no room
+    // but the top does.
+    let top = box.bottom + GAP;
+    if (top + height + MARGIN > window.innerHeight && box.top - GAP - height >= MARGIN) {
+      top = box.top - GAP - height;
+    }
+    // Centred on the trigger, then both edges clamped inside the viewport.
+    let left = box.left + box.width / 2 - width / 2;
+    left = Math.max(MARGIN, Math.min(left, window.innerWidth - width - MARGIN));
+    tip.style.left = `${Math.round(left)}px`;
+    tip.style.top = `${Math.round(top)}px`;
+  }
+
+  function fromEvent(event) {
+    const node = event.target;
+    return node && node.closest ? node.closest('[data-tip]') : null;
+  }
+
+  document.addEventListener('pointerover', (event) => {
+    const trigger = fromEvent(event);
+    if (trigger) place(trigger);
+  });
+  document.addEventListener('pointerout', (event) => {
+    const trigger = fromEvent(event);
+    if (!trigger || trigger !== current) return;
+    // Moving to a child of the same trigger keeps the tip; leaving it drops it.
+    if (!event.relatedTarget || !trigger.contains(event.relatedTarget)) hide();
+  });
+  document.addEventListener('focusin', (event) => {
+    const trigger = fromEvent(event);
+    if (trigger) place(trigger);
+  });
+  document.addEventListener('focusout', hide);
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') hide();
+  });
+  window.addEventListener('scroll', hide, true);
+  window.addEventListener('resize', hide);
+})();

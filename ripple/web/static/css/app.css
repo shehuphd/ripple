@@ -504,43 +504,17 @@ table.scripts .title .ic.graphed{color:var(--ac)}
   padding:14px 0}
 .pager-status{color:var(--t3);font-size:12.5px;font-variant-numeric:tabular-nums}
 
-/* Instant tooltips. data-tip carries the text; CSS renders it with no
-   hover delay. Icon-only controls pair it with aria-label so the name
-   exists for readers too. */
-[data-tip]{position:relative}
-[data-tip]::after{content:attr(data-tip);position:absolute;left:50%;
-  top:calc(100% + 7px);transform:translateX(-50%);background:#1c2733;
-  color:#f2f5f8;padding:4px 9px;border-radius:6px;font-family:var(--sf);
-  font-size:11.5px;font-weight:500;line-height:1.35;white-space:normal;
-  width:max-content;max-width:320px;opacity:0;pointer-events:none;z-index:80;
-  border:.5px solid rgba(255,255,255,.16);
-  box-shadow:0 4px 14px rgba(0,0,0,.35);transition:opacity .08s}
-.right [data-tip]::after,.gzoomctl [data-tip]::after{left:auto;right:0;
-  transform:none}
-/* The sidebar toggle is the leftmost control; a centred tooltip would
-   extend past the bar's left edge and under the sidebar. Grow rightward. */
-.toggle[data-tip]::after{left:0;transform:none}
-/* A toggle at the other end of the bar takes the right anchor back: with
-   both edges pinned the tooltip is squeezed to the button's own width and
-   its text runs off the window. */
-.right .toggle[data-tip]::after{left:auto;right:0}
-/* A control at the right edge of a scrolling column: the column sets
-   overflow-y, which makes the other axis scroll too, so a centred tooltip is
-   cut off at the edge rather than overhanging it. Grow leftward instead. */
-.sctl [data-tip]::after,
-.find [data-tip]::after,
-.pane .card .hd [data-tip]::after{left:auto;right:0;transform:none}
-[data-tip]:hover::after,[data-tip]:focus-visible::after{opacity:1}
-/* A chip whose own label already reads as the action: the tooltip adds what
-   the action does, so it waits for a hover that means it. The chat column
-   scrolls, so a centred tooltip is clipped at the column's edge; each chip
-   grows its tooltip towards the middle of the row instead. */
-.chat-examples [data-tip]:hover::after,
-.chat-examples [data-tip]:focus-visible::after{transition-delay:.5s}
-.chat-examples [data-tip]::after{left:0;transform:none;max-width:300px;
-  text-align:left}
-.chat-examples [data-tip]:last-child::after{left:auto;right:0}
-@media (prefers-reduced-motion:reduce){[data-tip]::after{transition:none}}
+/* Instant tooltips. data-tip carries the text; one floating element (see
+   app.js) is positioned from the trigger's box and clamped to the viewport,
+   so a tip never clips at an edge or inside an ancestor's overflow, whatever
+   corner or page the trigger sits in. Icon-only controls pair it with an
+   aria-label so the name exists for readers too. The z-index clears every
+   overlay; the element carries no pointer events, so it never eats a hover. */
+.tip-float{position:fixed;z-index:300;background:#1c2733;color:#f2f5f8;
+  padding:4px 9px;border-radius:6px;font-family:var(--sf);font-size:11.5px;
+  font-weight:500;line-height:1.35;white-space:normal;max-width:320px;
+  pointer-events:none;border:.5px solid rgba(255,255,255,.16);
+  box-shadow:0 4px 14px rgba(0,0,0,.35)}
 
 /* Touch targets grow to 44px where the pointer is coarse; the dense
    desktop layout keeps its own sizes. */
