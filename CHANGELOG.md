@@ -60,6 +60,8 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **A curly apostrophe no longer makes a second entity.** Name normalization folded accents but left the typographic quotes and dashes alone, so a printed play's “lady’s bedchamber” and the straight-quoted form a person types in the reader were two locations past the unique index, and duplicate detection missed the pair because it compares the same unfolded keys. Those forms fold now, so the pair resolves to one entity as it is written. Entities already stored under the older key are merged from the Entities page.
+
 - **Only a person appears in a scene.** The schema lock took any entity but a location as the subject of appears_in, while the prompt's own rules said cast, so the model followed the table and wrote a photograph "depicted" in a scene where the person in the photograph was the one being depicted. An object's presence is what requires and establishes record, and every object appears_in edge in the corpus duplicated one of those. The subject is cast now, and the extractor and the diff engine both refuse the rest. Rebuild a graph to clear the older edges.
 
 - **A heading that says when is no longer a location.** The heading splitter hands back the whole heading when no INT./EXT. prefix matches, which is right for a slugline and wrong for a stage play's act, so "The sixth of March, 1886" and "In the library after lunch" became locations whose occurs_at edge pointed a scene at itself. A heading segment naming a time, a date, a circumstance, a stage direction, or OMITTED is refused now; a place carrying a clock ("Covent Garden at 11.15 p.m") is kept. Rebuild a graph to clear the entities an earlier read wrote.

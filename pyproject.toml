@@ -74,3 +74,7 @@ ignore = ["UP042"]
 # quotes at the start of a spoken line.
 "tests/test_adversarial.py" = ["RUF001"]
 "ripple/adapters/base.py" = ["RUF001"]
+# The punctuation fold table and the tests that exercise it are written in
+# the ambiguous characters on purpose: folding them is what the code does.
+"ripple/db/naming.py" = ["RUF001"]
+"tests/test_duplicates.py" = ["RUF001"]

@@ -179,6 +179,22 @@ class TestDetection:
         world["entity"]("Forklift", "prop")
         assert len(detect(session, world["script"].id)) == 1
 
+    def test_a_curly_apostrophe_never_makes_a_second_entity(self, session):
+        """A printed play sets every apostrophe curly and a person editing in
+        the reader types the straight one, so "A lady's bedchamber" arrived
+        beside "lady's bedchamber" as two locations. The typographic forms
+        fold, so the pair is one entity rather than a duplicate to review."""
+        from ripple.db.naming import normalize
+
+        assert normalize("A lady’s bedchamber") == normalize(
+            "lady's bedchamber"
+        )
+        assert normalize("Friar Lawrence’s Cell") == normalize(
+            "friar lawrence's cell"
+        )
+        # An en-dash name and its hyphen form are also one key.
+        assert normalize("Container 4–4–1") == normalize("container 4-4-1")
+
     def test_a_kept_separate_pair_stops_being_offered(self, session):
         world = build_world(session)
         keep_separate(session, world["parka"].id, world["fork"].id)
