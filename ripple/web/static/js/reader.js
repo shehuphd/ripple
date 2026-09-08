@@ -1684,8 +1684,9 @@ if (extract) {
       const ok = await confirmDialog(
         `Rebuild the graph? This reads all ${scenes} scenes again with the `
         + 'model and bills for each, rather than replaying the stored '
-        + 'answers. Facts already in the graph stay; a rebuild adds and '
-        + 'refreshes, it does not clear them.',
+        + 'answers. Each scene’s facts are replaced by the fresh read, so '
+        + 'the graph reflects the latest pass; anything you accepted or edited '
+        + 'by hand is kept.',
         'Rebuild',
       );
       if (!ok) return;

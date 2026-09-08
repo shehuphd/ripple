@@ -26,6 +26,8 @@ All notable changes to Ripple are documented here.
 
 ### Changed
 
+- **A rebuild replaces a scene's facts instead of adding to them.** A forced rebuild used to leave the prior read's edges in place and write the new read beside them, so the graph was the union of every rebuild and the assertion count only ever climbed. Each scene now supersedes its own earlier model and pre-pass edges before the fresh read is written, so the graph reflects the latest pass and the count holds steady across rebuilds. Edges you accepted or authored by hand are left untouched, and superseded edges are deactivated, not deleted, so undo and the audit trail still reach them.
+
 - **Ripple runs on a host, not only a desktop.** `PORT` names the exact port and binds every interface, dropping the port scan, the browser, and the reloader; `RIPPLE_HOST` sets the bind address on its own. Both launchers honour them, and a new `.replit` skips the launchers and starts uvicorn on `0.0.0.0` directly. A desktop run sets neither and behaves as it always did: loopback, a scanned port from 8420, a browser, reload on edit.
 
 - **The pre-push hook protects `main`.** It refuses a deletion of `main`, and a push that would drop commits the remote already has, before the docs gates run. GitHub's own protection needs a paid plan on a private repository, so this stands in for it; `--no-verify` goes round it, which makes it a guard against the slip rather than against intent.
@@ -51,6 +53,8 @@ All notable changes to Ripple are documented here.
 - **Every setting applies where it is saved, and in whatever else is open.** Saves announce themselves on the page and to other tabs, the Models card swaps its two states in place, and no setting needs a reload.
 
 ### Fixed
+
+- **Every model call sets its own temperature, and grounded queries repeat exactly.** Nothing set a temperature, so every call ran at the provider's default (which is high) and the same input could vary run to run. The whole LLM layer now sets one on every call and defaults to the floor. The grounded-query path also pins a seed, which is what makes its output identical read to read: the temperature floor alone does not, checked against the model. Extraction and the judge run at the floor and pass a seed too, which takes effect as soon as their transport carries one. A companion check flags any scene whose extraction count still swings across reads, so a prompt or gate regression surfaces on its own.
 
 - **Tooltips never clip at an edge.** The tooltip was a `::after` element aimed by a growing set of per-location rules; a trigger without one, such as the preview's "Write the explanation" button, grew a centred tooltip that ran past its container and lost its opening words. One floating element now serves every tooltip, positioned from the trigger's box and clamped to the viewport, so the full text shows wherever the trigger is.
 

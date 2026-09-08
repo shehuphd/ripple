@@ -34,6 +34,7 @@ from ripple.extraction.service import (
     pending_scene_count,
     progress,
     start_run,
+    variance_alerts,
 )
 from ripple.extraction.validate import MalformedResponse, validate_response
 from tests.support.fixture_provider import FixtureProvider
@@ -395,6 +396,117 @@ class TestOutputValidation:
             {"u1"},
         )
         assert [a.manner for a in report.assertions] == [None]
+
+
+class TestDeterministicExtraction:
+    def test_extraction_pins_the_temperature_floor_and_a_seed(
+        self, session, script, tmp_path
+    ):
+        """Extraction must never run at the model's default temperature, which
+        is what made a scene's count swing run to run. Every extraction call
+        goes out at the floor with a fixed seed."""
+        from ripple.llm.base import GRAPH_SEED
+
+        provider = _provider(tmp_path, _reply())
+        run = start_run(session, script.id, MODEL)
+        job = claim_next_scene(session, run.id)
+        extract_scene(session, job, provider)
+        last = provider.calls[-1]
+        assert last["temperature"] == 0.0
+        assert last["seed"] == GRAPH_SEED
+
+
+class TestRebuildReplaces:
+    def test_a_rebuild_replaces_a_scene_and_keeps_accepted_edges(
+        self, session, script
+    ):
+        """Re-reading a scene replaces its model and pre-pass edges instead of
+        adding to them, so the count stops drifting up with every rebuild. An
+        edge a person accepted is never touched."""
+        from types import SimpleNamespace
+
+        from ripple.db.models import Assertion, Entity, Scene, ScriptUnit
+        from ripple.db.naming import normalize
+        from ripple.extraction.service import _supersede_scene
+
+        scene = session.scalars(
+            select(Scene).where(Scene.script_id == script.id).limit(1)
+        ).one()
+        cast = Entity(
+            script_id=script.id, entity_type="cast", canonical_name="Rosa",
+            normalized_name=normalize("Rosa"),
+        )
+        session.add(cast)
+        session.flush()
+
+        # Three edges on one unit would collide on the dedupe key, so give each
+        # its own unit to keep them distinct and all active.
+        units = session.scalars(
+            select(ScriptUnit).where(ScriptUnit.scene_id == scene.id).limit(3)
+        ).all()
+
+        def edge(provenance, unit):
+            return Assertion(
+                script_id=script.id, subject_kind="entity", subject_entity_id=cast.id,
+                predicate="appears_in", manner="on_stage", object_kind="scene",
+                object_scene_id=scene.id, source_unit_id=unit.id, confidence=1.0,
+                provenance=provenance, active=True,
+            )
+
+        model_edge = edge("model", units[0])
+        system_edge = edge("system", units[1])
+        accepted_edge = edge("accepted_change", units[2])
+        for e in (model_edge, system_edge, accepted_edge):
+            session.add(e)
+        session.flush()
+
+        _supersede_scene(
+            session,
+            SimpleNamespace(script_id=script.id),
+            SimpleNamespace(scene_id=scene.id),
+        )
+        session.flush()
+        for e in (model_edge, system_edge, accepted_edge):
+            session.refresh(e)
+        assert model_edge.active is False, "a rebuild should retire the model edge"
+        assert system_edge.active is False, "a rebuild should retire the pre-pass edge"
+        assert accepted_edge.active is True, "an accepted edge must survive a rebuild"
+
+
+class TestVarianceAlerts:
+    def test_a_wide_per_scene_swing_is_flagged(self, session, script):
+        """The QA signal: extraction is pinned deterministic, so a scene whose
+        assertion count swings across reads points at a prompt or gate
+        regression. A steady scene is not flagged."""
+        from ripple.db.models import ModelCall, Scene
+
+        scenes = session.scalars(
+            select(Scene).where(Scene.script_id == script.id).limit(2)
+        ).all()
+        steady, swinging = scenes[0], scenes[1]
+
+        def record(scene, count):
+            session.add(
+                ModelCall(
+                    script_id=script.id, scene_id=scene.id, purpose="extract",
+                    prompt_version="extract.test", model_id=MODEL, outcome="ok",
+                    request_text="", response_text="",
+                    validation_json={"assertions": count, "rejected": 0},
+                )
+            )
+
+        for c in (5, 6, 5):
+            record(steady, c)
+        for c in (4, 4, 13):
+            record(swinging, c)
+        session.flush()
+
+        flagged = variance_alerts(session, script.id, threshold=3)
+        ids = {item.scene_id for item in flagged}
+        assert str(swinging.id) in ids
+        assert str(steady.id) not in ids
+        by_id = {item.scene_id: item for item in flagged}
+        assert by_id[str(swinging.id)].spread == 9
 
 
 class TestClaiming:

@@ -140,6 +140,21 @@ NON_TEXT_MARKERS = (
 # "low" as thinkingLevel and thought-token counts follow the level.
 DEFAULT_REASONING_EFFORT = "medium"
 
+# No call runs at the model's own default temperature, which is high (Gemini's
+# is ~1.0) and makes a call that should repeat vary run to run. Everything here
+# is transcription- or judgement-shaped, so the floor is the default; a caller
+# wanting variation sets its own value on purpose. Verified against the Gemini
+# API docs and google-genai 2.22.0 (2026-09-08): temperature accepts 0.0-2.0,
+# and GenerateContentConfig carries a `seed`. KeyCall 1.8.0 takes temperature
+# but offers no seed, so the seed is passed only where the provider has one.
+DEFAULT_TEMPERATURE = 0.0
+
+# A fixed seed for the deterministic graph-building calls (extraction, the
+# judge). It is best-effort: a seed narrows sampling drift but Gemini does not
+# guarantee bit-identical output, so temperature is the load-bearing lever and
+# the seed is the belt beside it.
+GRAPH_SEED = 20260908
+
 # Identifier substrings that suggest a cost tier.
 CHEAP_MARKERS = ("flash-lite", "mini", "nano", "haiku", "lite", "flash", "small")
 STRONG_MARKERS = ("opus", "ultra", "pro", "-o1", "o3", "reasoner", "thinking")
@@ -232,6 +247,7 @@ class LLMProvider(Protocol):
         tools: list[dict[str, Any]] | None = None,
         max_output_tokens: int = 2048,
         reasoning_effort: str | None = DEFAULT_REASONING_EFFORT,
+        temperature: float = DEFAULT_TEMPERATURE,
     ) -> AgentReply:
         """Continue a conversation, with tools the model may call.
 
@@ -253,6 +269,8 @@ class LLMProvider(Protocol):
         max_output_tokens: int = 2048,
         json_schema: dict[str, Any] | None = None,
         reasoning_effort: str | None = DEFAULT_REASONING_EFFORT,
+        temperature: float = DEFAULT_TEMPERATURE,
+        seed: int | None = None,
     ) -> GenerationResult:
         """Generate text, optionally constrained to a JSON schema.
 
@@ -261,4 +279,9 @@ class LLMProvider(Protocol):
         (provider-chosen) budget it was the second-largest cost of a graph
         build, so every call states a level; None restores the provider's
         default for a caller that wants the model to think at length.
+
+        `temperature` is always set, never left to the model's default: it
+        defaults to the floor so a repeatable call repeats, and a caller that
+        wants variation raises it deliberately. `seed` pins sampling where the
+        provider offers one and is ignored where it does not.
         """

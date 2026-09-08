@@ -111,6 +111,7 @@ class FixtureProvider:
         tools: list[dict[str, Any]] | None = None,
         max_output_tokens: int = 2048,
         reasoning_effort: str | None = None,
+        temperature: float = 0.0,
     ) -> AgentReply:
         """Return the next queued turn, recording what it was asked."""
         self.conversations.append(
@@ -119,6 +120,7 @@ class FixtureProvider:
                 "messages": messages,
                 "system": system,
                 "tools": [tool["name"] for tool in (tools or [])],
+                "temperature": temperature,
             }
         )
         if not getattr(self, "turns", None):
@@ -143,6 +145,8 @@ class FixtureProvider:
         max_output_tokens: int = 2048,
         json_schema: dict[str, Any] | None = None,
         reasoning_effort: str | None = None,
+        temperature: float = 0.0,
+        seed: int | None = None,
     ) -> GenerationResult:
         """Return the recorded reply for this prompt."""
         self.calls.append(
@@ -152,6 +156,8 @@ class FixtureProvider:
                 "system": system,
                 "max_output_tokens": max_output_tokens,
                 "has_schema": json_schema is not None,
+                "temperature": temperature,
+                "seed": seed,
             }
         )
 

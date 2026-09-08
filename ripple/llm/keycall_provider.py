@@ -18,6 +18,7 @@ from keycall import KeyCall, KeyCallError, Message, TextInput
 
 from ripple.llm.base import (
     DEFAULT_REASONING_EFFORT,
+    DEFAULT_TEMPERATURE,
     GenerationResult,
     ModelInfo,
     ProviderError,
@@ -96,8 +97,15 @@ class KeycallProvider:
         max_output_tokens: int = 2048,
         json_schema: dict[str, Any] | None = None,
         reasoning_effort: str | None = DEFAULT_REASONING_EFFORT,
+        temperature: float = DEFAULT_TEMPERATURE,
+        seed: int | None = None,
     ) -> GenerationResult:
-        """Generate text, with native structured output when a schema is given."""
+        """Generate text, with native structured output when a schema is given.
+
+        KeyCall 1.8.0 takes a temperature but offers no seed, so `seed` is
+        accepted for interface parity and dropped here; determinism rests on
+        the temperature alone on this provider.
+        """
         messages = []
         if system:
             messages.append(Message(role="system", content=[TextInput(text=system)]))
@@ -109,6 +117,7 @@ class KeycallProvider:
                     model=model_id,
                     messages=messages,
                     max_output_tokens=max_output_tokens,
+                    temperature=temperature,
                     response_schema=json_schema,
                     reasoning_effort=reasoning_effort,
                 )

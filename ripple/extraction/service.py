@@ -67,7 +67,12 @@ from ripple.extraction.validate import (
     validate_response,
 )
 from ripple.graph.predicates import canonical_endpoints
-from ripple.llm.base import AVAILABILITY_CODES, LLMProvider, ProviderError
+from ripple.llm.base import (
+    AVAILABILITY_CODES,
+    GRAPH_SEED,
+    LLMProvider,
+    ProviderError,
+)
 from ripple.services import pricing
 from ripple.services.spend import (
     BudgetExceeded,
@@ -440,6 +445,7 @@ def extract_scene(
                     system=SYSTEM_PROMPT,
                     max_output_tokens=MAX_OUTPUT_TOKENS,
                     json_schema=OUTPUT_SCHEMA,
+                    seed=GRAPH_SEED,
                 )
             except ProviderError as error:
                 if error.code == "model_not_available":
@@ -591,6 +597,32 @@ def _reuse_cached(session: Session, job: SceneExtraction) -> SceneOutcome | None
     )
 
 
+def _supersede_scene(
+    session: Session, run: ExtractionRun, job: SceneExtraction
+) -> None:
+    """Deactivate this scene's prior derived edges before the new run writes.
+
+    Scoped to edges cited to one of the scene's own units and to the two
+    machine provenances (model output and the deterministic pre-pass), so a
+    person's accepted or authored edges survive a rebuild untouched. History
+    is preserved: the rows are deactivated, not deleted, so undo and the audit
+    trail still reach them. The partial unique index is on active rows, so
+    freeing these lets the new run's identical edge insert cleanly.
+    """
+    scene_units = select(ScriptUnit.id).where(ScriptUnit.scene_id == job.scene_id)
+    session.execute(
+        update(Assertion)
+        .where(
+            Assertion.script_id == run.script_id,
+            Assertion.active.is_(True),
+            Assertion.provenance.in_(("model", "system")),
+            Assertion.source_unit_id.in_(scene_units),
+        )
+        .values(active=False),
+        execution_options={"synchronize_session": False},
+    )
+
+
 def _complete(
     session: Session,
     job: SceneExtraction,
@@ -606,6 +638,14 @@ def _complete(
     The pre-pass's cast and location rows are written first, so a model
     reply referencing a provided id resolves against a row that exists.
     """
+    # Re-reading a scene replaces its derived graph rather than adding to it.
+    # The prior run's model and pre-pass edges for this scene are deactivated
+    # before the new ones land, so a rebuild reflects the latest read instead
+    # of the union of every read, and the assertion count stops drifting upward
+    # with each rebuild. Edges a person accepted or authored (provenance
+    # accepted_change or user) are never touched.
+    _supersede_scene(session, run, job)
+
     resolved: dict[str, Entity] = {}
     written = 0
     for rule_entity in provided or []:
@@ -1109,3 +1149,68 @@ def progress(session: Session, run_id) -> RunProgress:
         cost_usd=cost,
         cost=pricing.display(cost),
     )
+
+
+@dataclass
+class SceneVariance:
+    """One scene's assertion count across its recent extraction reads."""
+
+    scene_id: str
+    counts: list[int]
+    #: The largest count minus the smallest, over the window.
+    spread: int
+
+
+def extraction_variance(
+    session: Session, script_id, window: int = 5
+) -> list[SceneVariance]:
+    """Per-scene assertion-count spread across a script's recent reads.
+
+    Extraction is pinned to the temperature floor and a fixed seed, so reading
+    the same scene twice should land on nearly the same count. A wide spread is
+    the signal the count was never meant to have: it points at the prompt, a
+    filter, or a gate drifting, not at the screenplay. The counts come from the
+    validation record each extraction call already stores, so this reads
+    history and calls no model. Cached replays carry no fresh count and are
+    skipped; a scene with fewer than two real reads has nothing to compare.
+    """
+    rows = session.execute(
+        select(ModelCall.scene_id, ModelCall.validation_json)
+        .where(
+            ModelCall.script_id == script_id,
+            ModelCall.purpose == "extract",
+            ModelCall.validation_json.is_not(None),
+            ModelCall.outcome != "cached",
+        )
+        .order_by(ModelCall.created_at)
+    ).all()
+    by_scene: dict[uuid_module.UUID, list[int]] = {}
+    for scene_id, validation in rows:
+        count = (validation or {}).get("assertions")
+        if isinstance(count, int) and not isinstance(count, bool):
+            by_scene.setdefault(scene_id, []).append(count)
+    result = []
+    for scene_id, counts in by_scene.items():
+        recent = counts[-window:]
+        if len(recent) >= 2:
+            result.append(
+                SceneVariance(str(scene_id), recent, max(recent) - min(recent))
+            )
+    return sorted(result, key=lambda item: item.spread, reverse=True)
+
+
+# A scene whose read-to-read count moves by more than this is flagged. With
+# extraction pinned deterministic the honest spread is 0 or 1; 3 leaves room
+# for a boundary case without swallowing a real regression.
+VARIANCE_THRESHOLD = 3
+
+
+def variance_alerts(
+    session: Session, script_id, threshold: int = VARIANCE_THRESHOLD, window: int = 5
+) -> list[SceneVariance]:
+    """The scenes whose recent assertion-count spread exceeds `threshold`."""
+    return [
+        item
+        for item in extraction_variance(session, script_id, window)
+        if item.spread > threshold
+    ]

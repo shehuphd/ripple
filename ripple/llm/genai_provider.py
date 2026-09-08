@@ -20,6 +20,7 @@ from google.genai import types
 
 from ripple.llm.base import (
     DEFAULT_REASONING_EFFORT,
+    DEFAULT_TEMPERATURE,
     AgentReply,
     GenerationResult,
     ModelInfo,
@@ -100,11 +101,15 @@ class GoogleGenaiProvider:
         max_output_tokens: int = 2048,
         json_schema: dict[str, Any] | None = None,
         reasoning_effort: str | None = DEFAULT_REASONING_EFFORT,
+        temperature: float = DEFAULT_TEMPERATURE,
+        seed: int | None = None,
     ) -> GenerationResult:
         """Generate text, with native structured output when a schema is given."""
         config = types.GenerateContentConfig(
             system_instruction=system,
             max_output_tokens=max_output_tokens,
+            temperature=temperature,
+            seed=seed,
             # The query never passes tools, so the SDK's automatic function
             # calling is off; leaving it on logs a warning on every call.
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
@@ -140,6 +145,7 @@ class GoogleGenaiProvider:
         tools: list[dict[str, Any]] | None = None,
         max_output_tokens: int = 2048,
         reasoning_effort: str | None = DEFAULT_REASONING_EFFORT,
+        temperature: float = DEFAULT_TEMPERATURE,
     ) -> AgentReply:
         """One agent turn: the model answers or asks for tools.
 
@@ -150,6 +156,7 @@ class GoogleGenaiProvider:
         config = types.GenerateContentConfig(
             system_instruction=system,
             max_output_tokens=max_output_tokens,
+            temperature=temperature,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
                 disable=True
             ),

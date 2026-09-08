@@ -74,6 +74,7 @@ from ripple.graph.diff import Edge, EdgeRef, GraphDiff, diff_edges, to_operation
 from ripple.graph.predicates import SIGNATURES
 from ripple.llm.base import (
     AVAILABILITY_CODES,
+    GRAPH_SEED,
     GenerationResult,
     LLMProvider,
     ProviderError,
@@ -1119,6 +1120,7 @@ def _generate_verdicts(
                 system=system,
                 max_output_tokens=MAX_OUTPUT_TOKENS,
                 json_schema=schema,
+                seed=GRAPH_SEED,
             )
             break
         except ProviderError as error:
