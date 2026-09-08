@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-06 16:54:01 UTC
+Last updated: 2026-09-09 00:00:00 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `.venv`) are gitignored and not listed.
 
@@ -58,7 +58,7 @@ Every file in the repository and what it does. Directories the application write
 | File | Purpose |
 |---|---|
 | `db/__init__.py` | Package marker. |
-| `db/models.py` | SQLAlchemy models for all 22 tables, with CHECK constraints for every vocabulary. |
+| `db/models.py` | SQLAlchemy models for all 25 tables, with CHECK constraints for every vocabulary. |
 | `db/ids.py` | Identifier coercion: strings to UUIDs, shared by routes, payloads, and stored history. |
 | `db/naming.py` | Entity name normalization, shared by extraction and the change-set service. |
 | `db/repository.py` | Query helpers: persistence, deletion previews, counts, shared graph labels. |
@@ -154,7 +154,7 @@ Every file in the repository and what it does. Directories the application write
 |---|---|
 | `tests/__init__.py` | Package marker. |
 | `tests/conftest.py` | Shared fixtures, including byte-precise XML attack payloads. |
-| `tests/test_adapters.py` | Import pipeline across all four formats. |
+| `tests/test_adapters.py` | Import pipeline across all five formats, including the stage-play act split. |
 | `tests/test_authoring.py` | Writing in Ripple: creation, renaming, composition typing, the cited-line guards, undo of a direct save, and the Fountain round trip. |
 | `tests/test_adversarial.py` | Hostile inputs: malformed files, encoding traps, oversized documents. |
 | `tests/test_changeset.py` | Accept, reject, undo, and inverse operations. |
@@ -192,7 +192,7 @@ Every file in the repository and what it does. Directories the application write
 | File | Purpose |
 |---|---|
 | `tools/check_changelog.py` | Refuses a changelog entry over 800 characters, checking only entries the branch adds. Runs in the pre-push hook. |
-| `tools/render_screenplay.py` | Renders a Fountain source to PDF for calibration. |
+| `tools/render_screenplay.py` | Renders each authored Fountain demo source to Final Draft XML, PDF, and plain text. |
 | `tools/restate_findings.py` | Rewrites stored continuity messages in the current continuity voice, dry run by default. |
 | `tools/seed_graph.py` | Writes a demo script's ground-truth graph by hand. |
 

@@ -52,6 +52,8 @@ Each row has a checkbox and a **Select all** control beside the table, which tic
 | `needs_review` | Parsed, but structure was inferred rather than read (OCR, no indentation, weak signal). |
 | `rejected` | Not importable; the rejection code says why. |
 
+The outcome shows on the library row. **Needs review** means the importer wants a human to check the parse before a graph is built on it: opening the script shows a banner naming each warning, and **Mark reviewed** closes the review once you've looked, with the warnings staying on the row. A rejected import's reason shows in the upload banner.
+
 A rejected import changes nothing. Deleting a script first shows a deletion preview counting everything that goes with it: scenes, units, entities, assertions, findings, and traces.
 
 ## Settings
@@ -86,15 +88,16 @@ A run reports its spend as it goes: the progress counter and the finished label 
 
 The button is gated on billable work. Once the graph is built and every scene's content matches its cached extraction, it reads **Rebuild graph**: pressing it asks for confirmation, then reads every scene again with the model instead of replaying the cache, for when the parser or the pre-pass has improved since the last build. Each scene's facts are replaced by the fresh read, so the graph reflects the latest pass rather than the sum of every past one; anything you accepted or edited by hand is kept. When scenes have changed since the last build (an added or restored scene, a linked draft, or a switched model), it reads **Update graph** and its tooltip counts the changed scenes; only those are billed, since the rest replay from cache. An accepted ripple does not count: its judgement already applied the graph changes, so acceptance marks the scene's new content as extracted, provided the pre-edit content had been extracted under the same prompt and model.
 
-A run ends in one of three states:
+A run ends in one of four states:
 
 | Status | Meaning |
 |---|---|
 | `ready` | Every scene completed. |
 | `partially_ready` | Some scenes completed, some failed. Re-run to retry the failures. |
+| `cancelled` | Stopped after the scene in flight. Build graph resumes from the completed scenes. |
 | `failed` | No scene completed. |
 
-Extraction reads entities (cast, props, wardrobe, locations, and the other departments), their aliases, typed attributes (`color: emerald`, cited to the line that states it), and assertions: evidence-backed edges such as MARA `wears` the emerald gown in scene 12. Model output is validated before any row is written; an assertion citing a line the model was never shown, violating a predicate signature, or falling below the confidence floor is dropped with a recorded reason.
+Extraction reads entities (cast, props, wardrobe, locations, and the other departments), their aliases, typed attributes (`color: emerald`, cited to the line that states it), and assertions: evidence-backed edges such as MARA `wears` the emerald gown in scene 12. An `appears_in` edge also records how the character is present: on stage (in the scene's action), referenced (named or spoken of but absent), or depicted (present only inside a photograph, recording, letter, or song). Model output is validated before any row is written; an assertion citing a line the model was never shown, violating a predicate signature, or falling below the confidence floor is dropped with a recorded reason.
 
 ## The graph views
 
@@ -266,12 +269,12 @@ A written answer also carries a grounding tag: "no ungrounded entities" when eve
 
 ## Import formats
 
-| | Fountain | Final Draft XML | PDF | Plain text |
-|---|---|---|---|---|
-| Element types | Read from markup | Read from `Paragraph Type` | Inferred from position | Inferred from indentation |
-| Scene numbers | `#N#` markers | `Number` attribute | Margin-printed numbers | Trailing `#N#` if present |
-| Provenance | Character offsets | Block index | Page, block index, bounding box | Character offsets |
-| Notes | Parsed as `note` units | Not present | Not present | Not present |
+| | Fountain | Final Draft XML | PDF | Plain text | Stage play |
+|---|---|---|---|---|---|
+| Element types | Read from markup | Read from `Paragraph Type` | Inferred from position | Inferred from indentation | Read from cue and heading shape |
+| Scene numbers | `#N#` markers | `Number` attribute | Margin-printed numbers | Trailing `#N#` if present | Act and scene ordinals (1.2) |
+| Provenance | Character offsets | Block index | Page, block index, bounding box | Character offsets | Character offsets |
+| Notes | Parsed as `note` units | Not present | Not present | Not present | Not present |
 
 ### PDF
 
@@ -308,10 +311,6 @@ Final Draft XML is parsed through `defusedxml`; external entities and entity exp
 | `pdf_backend_missing` | `pdf-inspector` not installed. |
 
 ## Tracing and debugging
-
-### Import outcomes
-
-An import ends in one of four outcomes, shown on its library row. **Accepted** parsed with no concerns. **Accepted with warnings** parsed with notes you may want to read (the row's tooltip carries them). **Needs review** means the importer wants a human to check the parse before a graph is built on it: the text is OCR-derived, the structure gave a weak screenplay signal, or a size ceiling touched the file. Opening the script shows a banner naming each warning, and **Mark reviewed** closes the review once you've looked; the warnings stay on the library row. **Rejected** did not import, with the reason in the upload banner.
 
 Meaningful actions (import, extraction, preview, accept, undo, query, draft linking, renames) are traced with TraceAct to `data/traces/traces.jsonl`, full payloads included: every model call's complete prompt, reply, and token usage (answer, hidden reasoning, input), every preview's edits, every query's question and answer. The traces are the debugging record; when something fails, its trace says why. They stay on the local machine, out of version control, and credential-shaped values are still caught by value-pattern redaction. The Traces page remains the application's own model-call audit; the reader's page decisions also mirror to the browser console, where the traceact-browser extension can capture them.
 

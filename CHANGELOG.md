@@ -32,7 +32,7 @@ All notable changes to Ripple are documented here.
 
 - **An act splits into the scenes it is played in.** A stage play that prints no numbered scenes gave one scene per act, several hundred units long, and the graph, the reader, continuity findings and the single extraction call a scene gets all worked at that grain. Such an act now cuts at the entrances and exits the text marks, numbered under the act (1.1, 1.2). An act under sixty units is left whole, a part under eight joins the one before it, and a play that prints its own SCENE headings is never recut.
 
-- **The seed reaches the provider on every call.** KeyCall 1.10 passes a seed through to the model, so the pin moves to it and the seed Ripple already sent on extraction and judge calls stops being dropped in transit. Three identical live calls came back identical, where the same call at the provider's default varied read to read. The variance check reports any scene whose extraction count still swings, so a prompt or gate regression surfaces on its own.
+- **The seed reaches the provider on every call.** KeyCall 1.11 passes a seed through to the model, so the pin moves to it and the seed Ripple already sent on extraction and judge calls stops being dropped in transit. Three identical live calls came back identical, where the same call at the provider's default varied read to read. The variance check reports any scene whose extraction count still swings, so a prompt or gate regression surfaces on its own.
 
 - **A rebuild replaces a scene's facts instead of adding to them.** A forced rebuild used to leave the prior read's edges in place and write the new read beside them, so the graph was the union of every rebuild and the assertion count only ever climbed. Each scene now supersedes its own earlier model and pre-pass edges before the fresh read is written, so the graph reflects the latest pass and the count holds steady across rebuilds. Edges you accepted or authored by hand are left untouched, and superseded edges are deactivated, not deleted, so undo and the audit trail still reach them.
 
@@ -61,6 +61,8 @@ All notable changes to Ripple are documented here.
 - **Every setting applies where it is saved, and in whatever else is open.** Saves announce themselves on the page and to other tabs, the Models card swaps its two states in place, and no setting needs a reload.
 
 ### Fixed
+
+- **The docs match the code again.** A Shiplock semantic audit against 1.0.0 found 22 disagreements across all five doc surfaces, most of them older than the release: ARCHITECTURE denied that `launch.bat` exists, named a `fixture.py` that does not, counted four adapters where five are registered, and described neither the second provider registry nor Ask Ripple's agent; the README's format list omitted stage plays; MANIFEST counted 22 tables against 25; USAGE listed three run states against four. Each is corrected, and windowed reads gained the tests they lacked.
 
 - **A curly apostrophe no longer makes a second entity.** Name normalization folded accents but left the typographic quotes and dashes alone, so a printed play's “lady’s bedchamber” and the straight-quoted form a person types in the reader were two locations past the unique index, and duplicate detection missed the pair because it compares the same unfolded keys. Those forms fold now, so the pair resolves to one entity as it is written. Entities already stored under the older key are merged from the Entities page.
 

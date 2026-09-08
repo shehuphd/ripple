@@ -1,6 +1,6 @@
 # Ripple
 
-Ripple treats a screenplay as a production database rather than a static document. It imports Fountain, Final Draft XML, PDF, and plain text, or writes one from nothing in the page itself, parses them into structured script units, extracts production entities and evidence-backed assertions into a graph, and shows the downstream production and continuity impact of a proposed edit before anything is applied. A script written in Ripple exports as Fountain that imports back as itself.
+Ripple treats a screenplay as a production database rather than a static document. It imports Fountain, Final Draft XML, PDF, plain text, and stage plays, or writes one from nothing in the page itself, parses them into structured script units, extracts production entities and evidence-backed assertions into a graph, and shows the downstream production and continuity impact of a proposed edit before anything is applied. A script written in Ripple exports as Fountain that imports back as itself.
 
 The loop is: write or import a script, build its graph, edit a line, see the ripple, decide.
 
@@ -33,7 +33,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/python -
 
 **See what the name means.** With the app open, press `Ctrl` `Opt` `Space`. The tab becomes a lake: stones drop, ripples spread, and as each wavefront passes a point a production entity surfaces there. Settings holds three looks for it: grey-blue water, dark, and warm paper. That is the idea the tool is built on, drawn rather than explained. Escape brings the app back where you left it, down to the scroll position.
 
-**Open a script.** Three screenplays are already in the library, each with its graph built, so there is something to work on before you configure anything. Drop a Fountain, Final Draft, PDF, or plain-text file on the library to import your own, or press **New script** and write one in the page.
+**Open a script.** Three screenplays are already in the library, each with its graph built, so there is something to work on before you configure anything. Drop a Fountain, Final Draft, PDF, plain-text, or stage-play file on the library to import your own, or press **New script** and write one in the page.
 
 **Add a key.** Settings → Models: paste a Google AI Studio key, press Validate, then pick a main model. The key is checked against the provider's own models endpoint and stored in a local owner-only file, never in the database. Everything that does not call a model, importing, reading, writing, exporting, the diff engine, works without this step.
 

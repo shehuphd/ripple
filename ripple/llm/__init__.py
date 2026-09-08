@@ -1,9 +1,12 @@
 """Provider registry.
 
-Gemini is the only provider Ripple builds and tests against. It is a
-KeycallProvider (`ripple/llm/keycall_provider.py`): KeyCall
-(https://github.com/shehuphd/keycall) is what talks to the provider's API, so
-there is nothing provider-specific left to hand-write here.
+Gemini is the only provider Ripple builds and tests against, reached over two
+transports. `PROVIDERS` holds a KeycallProvider (`keycall_provider.py`) for
+extraction, judgement, continuity, and synthesis, where KeyCall
+(https://github.com/shehuphd/keycall) talks to the provider's API.
+`QUERY_PROVIDERS` holds a GoogleGenaiProvider (`genai_provider.py`) for the Ask
+path, reached through `get_query_provider`. Same credential, same model ids,
+same GenerationResult; only the transport differs.
 """
 
 from __future__ import annotations

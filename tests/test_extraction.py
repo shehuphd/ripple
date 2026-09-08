@@ -9,6 +9,7 @@ every later stage treats the graph as fact.
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 from sqlalchemy import func, select
@@ -27,6 +28,7 @@ from ripple.db.session import create_all, create_db_engine, session_factory
 from ripple.extraction.prompt import PROMPT_VERSION, build_prompt, input_hash
 from ripple.extraction.service import (
     MAX_ATTEMPTS,
+    MAX_UNITS_PER_CALL,
     _scene_units,
     cancel_run,
     claim_next_scene,
@@ -530,6 +532,124 @@ class TestRebuildReplaces:
         assert model_edge.active is False, "a rebuild should retire the model edge"
         assert system_edge.active is False, "a rebuild should retire the pre-pass edge"
         assert accepted_edge.active is True, "an accepted edge must survive a rebuild"
+
+
+class TestWindowedReads:
+    """A scene longer than one call can cover is read in windows. One reply has
+    a token ceiling and an attention span: a stage play's act handed over whole
+    came back summarising it."""
+
+    def _long_scene(self, session, script):
+        """Grow the first scene past the window so a build has to split it."""
+        from ripple.db.models import ScriptUnit
+
+        scene = script.scenes[0]
+        units = _units_of(session, scene.id)
+        start = len(units)
+        for offset in range(MAX_UNITS_PER_CALL + 20 - start):
+            session.add(
+                ScriptUnit(
+                    scene_id=scene.id,
+                    unit_type="action",
+                    sequence_index=start + offset,
+                    current_text=f"A crate marked {offset} waits on the dock.",
+                    parser_method="fountain",
+                )
+            )
+        session.flush()
+        return scene
+
+    def _run(self, session, scene, provider):
+        run = start_run(session, scene.script_id, MODEL, scene_ids=[scene.id])
+        job = session.scalar(
+            select(SceneExtraction).where(
+                SceneExtraction.extraction_run_id == run.id,
+                SceneExtraction.scene_id == scene.id,
+            )
+        )
+        return extract_scene(session, job, provider)
+
+    def test_a_scene_over_the_window_takes_more_than_one_call(
+        self, session, script, tmp_path
+    ):
+        scene = self._long_scene(session, script)
+        provider = _provider(tmp_path, _reply())
+        outcome = self._run(session, scene, provider)
+
+        assert outcome.status == "completed"
+        units = len(_scene_units(session, scene.id))
+        expected = -(-units // MAX_UNITS_PER_CALL)
+        assert expected > 1, "the fixture scene must exceed one window"
+        assert len(provider.calls) == expected
+        # Each window carries its own lines and nobody else's.
+        assert all(
+            call["prompt"].count("[u") <= MAX_UNITS_PER_CALL
+            for call in provider.calls
+        )
+
+    def test_two_windows_inventing_the_same_id_do_not_collide(
+        self, session, script, tmp_path
+    ):
+        """Both windows name their first invented entity e1. Left as they
+        arrived, the second window's assertions would resolve against the
+        first window's entity."""
+        scene = self._long_scene(session, script)
+        units = _units_of(session, scene.id)
+        first, last = units[0], units[-1]
+
+        class TwoWindowProvider(FixtureProvider):
+            def generate(self, model_id, prompt, **kwargs):
+                # Each window is answered with an entity called e1, naming a
+                # different prop, cited to a line that window actually holds.
+                held = re.findall(r"\[(u\d+)\]", prompt)
+                first_window = held[0] == "u1"
+                self.default_reply = _reply(
+                    entities=[
+                        {
+                            "id": "e1",
+                            "type": "prop",
+                            "name": "First crate" if first_window else "Last crate",
+                            "conf": 0.9,
+                        }
+                    ],
+                    assertions=[
+                        {
+                            "s": "scene",
+                            "p": "requires",
+                            "o": "e1",
+                            "unit": held[0] if first_window else held[-1],
+                            "conf": 0.9,
+                        }
+                    ],
+                )
+                return super().generate(model_id, prompt, **kwargs)
+
+        provider = TwoWindowProvider(tmp_path / "fixtures", default_reply="{}")
+        outcome = self._run(session, scene, provider)
+        assert outcome.status == "completed"
+
+        named = {
+            entity.id: entity.canonical_name
+            for entity in session.scalars(
+                select(Entity).where(Entity.script_id == script.id)
+            )
+        }
+        assert {"First crate", "Last crate"} <= set(named.values()), named
+        # Each window's edge points at the entity that window named. Sharing
+        # the id "e1" across windows sent both edges to whichever entity
+        # resolved last.
+        edges = {
+            assertion.source_unit_id: named[assertion.object_entity_id]
+            for assertion in session.scalars(
+                select(Assertion).where(
+                    Assertion.script_id == script.id,
+                    Assertion.predicate == "requires",
+                    Assertion.active.is_(True),
+                )
+            )
+        }
+        assert edges[first.id] == "First crate", edges
+        assert edges[last.id] == "Last crate", edges
 
 
 class TestDuplicatesAfterABuild:

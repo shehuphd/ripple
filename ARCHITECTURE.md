@@ -13,18 +13,19 @@
 ```
 ripple/
 ├── ripple/
-│   ├── adapters/       # Format detection and parsing: Fountain, FDX, PDF, plain text
+│   ├── adapters/       # Format detection and parsing: Fountain, FDX, PDF, plain text, stage plays
 │   ├── config/         # Local credential storage (ripple/config/secrets.py)
 │   ├── db/             # SQLAlchemy models, session/engine, naming, repository queries
 │   ├── extraction/     # The scene → entities/assertions LLM pipeline: prompt, service, validation, judgement
 │   ├── graph/          # Deterministic, model-free: diff engine, continuity retrieval, 2D layout, predicate rules
 │   ├── llm/            # Provider contract, the KeyCall adapter, the google-genai adapter
-│   ├── services/       # Preview engine, change-set service, spend ledger, settings, synthesizer
+│   ├── services/       # Preview engine, Ask Ripple agent, change-set service, spend ledger,
+│                      #   settings, retrieval, synthesizer
 │   ├── web/            # FastAPI app, Jinja2 templates, static CSS/JS
 │   └── tracing.py      # TraceAct configuration
 ├── tests/              # pytest, one file per module above plus adversarial/integration tests
 ├── tools/              # Developer commands (render_screenplay.py, seed_graph.py,
-│                      #   restate_findings.py)
+│                      #   restate_findings.py, check_changelog.py)
 ├── demo-scripts/       # Bundled screenplay corpus, each with an expected-output dependencies.md
 └── data/               # Runtime state: sqlite db, secrets.env, traces/ (gitignored)
 ```
@@ -58,7 +59,7 @@ flowchart LR
     ChangeSet -->|undo| Graph
 ```
 
-The model is called for extraction, the preview's judgement and continuity passes, the opt-in prose explanation, and the grounded query; everything else (detection, parsing, the diff, continuity retrieval, layout, severity) is deterministic application code, so the diff and the orphaned-reference finding hold even with no provider configured. The continuity judgement is advisory: when its call fails, the preview stands on the deterministic findings and says so. Every model call, refusal included, is written to the `model_calls` audit table.
+The model is called for extraction, the preview's judgement and continuity passes, the opt-in prose explanation, the grounded query, and Ask Ripple's agent turns and its drafter; everything else (detection, parsing, the diff, continuity retrieval, layout, severity) is deterministic application code, so the diff and the orphaned-reference finding hold even with no provider configured. The continuity judgement is advisory: when its call fails, the preview stands on the deterministic findings and says so. Every model call, refusal included, is written to the `model_calls` audit table.
 
 ## STRuFO
 
@@ -117,11 +118,11 @@ You upload a screenplay and Ripple reads it into a web of who and what each scen
 
 | Component | Role |
 |---|---|
-| `ripple/adapters/` | One contract (`base.py`) across four format adapters: detect a format from content (never a filename), parse into `ParsedScene`/`ParsedUnit`, and return a typed `ImportResult`. Adapters never write to the database. |
+| `ripple/adapters/` | One contract (`base.py`) across five format adapters: detect a format from content (never a filename), parse into `ParsedScene`/`ParsedUnit`, and return a typed `ImportResult`. Adapters never write to the database. |
 | `ripple/extraction/` | `prompt.py` builds the per-scene prompt, holds `OUTPUT_SCHEMA`, and fingerprints both into the cache key; `service.py` runs one scene through the model, resuming per-scene rather than restarting a whole run; `validate.py` checks the model's JSON against the schema and the predicate-signature rules before any row is written; `judge.py` verifies a preview's verdicts in code, dropping unlisted ids, downgrading `holds` on deleted evidence, and treating a missing verdict as a coverage miss. `continuity_judge.py` is the continuity pass's contract: prompt, schema, and verification, with every claimed conflict required to cite evidence ids from the packet. |
 | `ripple/graph/` | `diff.py` compares two assertion sets by edge identity (both endpoints plus predicate), not row identity, so a proposed-but-unsaved assertion still compares correctly; `continuity.py` retrieves the bounded evidence packet the continuity judgement consumes and computes the one finding that needs no model (an edit removing an entity's only `establishes` edge while later scenes still reference it); `layout.py` is a fixed, deterministic 2D layout (focus at centre, scenes on a spine, entities in per-department wedges) rather than a force simulation, so two renders of the same graph match; `predicates.py` is the shared vocabulary both the schema and the diff read from; `fixtures.py` builds judge-visible scene context for the preview prompt. |
-| `ripple/llm/` | `base.py` is the provider contract (`ModelInfo`, `GenerationResult`, `ProviderError`) plus provider-agnostic helpers (`infer_tier`, `is_text_model`); `keycall_provider.py` is the adapter behind extraction and judgement, backed by [KeyCall](https://pypi.org/project/keycall); `genai_provider.py` is the [google-genai](https://pypi.org/project/google-genai) adapter behind the Ask path, so a Google SDK generation runs at runtime; `fixture.py` is a deterministic test double that never touches a network. |
-| `ripple/services/` | `authoring.py` is the writing surface: it creates and renames a script, types a written line by its marker or its position, guards the direct save and delete behind the judgement engine when a fact cites the line, retypes a character cue that never received a speech, and exports the script as Fountain that imports back as itself; `preview.py` is the judgement engine: it sends the model the stored assertions and attributes the edited lines support, validates the verdicts through `judge.py`, replays an identical pending judge call from the audit table at no cost, runs the advisory continuity pass over the evidence packet, and links every call to the proposal it produced; `changeset.py` turns a diff and its findings into an atomic accept/reject/undo, with latest-only undo; `spend.py` is the token ledger and the hard budget gate every call site checks before contacting the provider; `settings.py` handles credential entry, validation, and main/fallback model selection; `duplicates.py` detects entity forks and applies a reviewed merge; `renames.py` detects a renamed character across drafts from carried-over speaking positions; `synthesizer.py` writes the plain-language ripple explanation from the diff and findings, with a deterministic fallback when no model is configured. |
+| `ripple/llm/` | `base.py` is the provider contract (`ModelInfo`, `GenerationResult`, `ProviderError`) plus provider-agnostic helpers (`infer_tier`, `is_text_model`); `keycall_provider.py` is the adapter behind extraction and judgement, backed by [KeyCall](https://pypi.org/project/keycall); `genai_provider.py` is the [google-genai](https://pypi.org/project/google-genai) adapter behind the Ask path, so a Google SDK generation runs at runtime. |
+| `ripple/services/` | `authoring.py` is the writing surface: it creates and renames a script, types a written line by its marker or its position, guards the direct save and delete behind the judgement engine when a fact cites the line, retypes a character cue that never received a speech, and exports the script as Fountain that imports back as itself; `preview.py` is the judgement engine: it sends the model the stored assertions and attributes the edited lines support, validates the verdicts through `judge.py`, replays an identical pending judge call from the audit table at no cost, runs the advisory continuity pass over the evidence packet, and links every call to the proposal it produced; `changeset.py` turns a diff and its findings into an atomic accept/reject/undo, with latest-only undo; `spend.py` is the token ledger and the hard budget gate every call site checks before contacting the provider; `settings.py` handles credential entry, validation, and main/fallback model selection; `duplicates.py` detects entity forks and applies a reviewed merge; `renames.py` detects a renamed character across drafts from carried-over speaking positions; `synthesizer.py` writes the plain-language ripple explanation from the diff and findings, with a deterministic fallback when no model is configured; `agent.py` runs an Ask Ripple turn: a read-only tool loop over the graph that states a plan before any drafting spend, hands the rewrite to a separate drafter behind a minimal-edit guard and a confidence floor, and previews the result through the same judgement pipeline as a hand edit, holding no tool that could apply it; `conversations.py` stores those threads and replays them at no cost; `retrieval.py` builds the evidence packet a question is answered from, scoped to the entities the question names; `scenes.py` inserts, omits, and restores a scene; `drafts.py` and `draft_report.py` link one draft of a script to the next and report what moved between them. |
 | `ripple/db/` | SQLAlchemy models for the 25 tables (scripts, scenes, units, entities, aliases, attributes, distinctions, assertions, extraction runs, change sets, findings, evidence, reports, conversations and their turns, query log, model-call audit, budget, UI preferences, app configuration), with CHECK constraints enforcing every enumerated vocabulary at the database layer. `session.py` enforces SQLite foreign keys per connection, turns on write-ahead logging for a file-backed database, and provides the transactional `session_scope` every write path uses. |
 | `ripple/web/` | FastAPI routes, Jinja2 templates, and static CSS/JS for the library, reader (reading, writing, and editing in the same lines), ripple preview, settings, graph views, grounded query, the list pages (entities, assertions, reports, findings, traces), and the idle screensaver. A saved preference announces itself to every open page, on the page and across tabs, so no setting needs a reload to take effect. No frontend build step; plain JS files served directly. |
 | `ripple/tracing.py` | Configures TraceAct once at startup: `capture_inputs=False` (screenplay text and uploaded bytes are never captured automatically), redaction presets for AI prompts, API keys, HTTP, filesystem paths, and env vars. |
@@ -153,14 +154,15 @@ The database never holds a credential: `AppConfiguration` stores only the select
 
 | Integration | Purpose | Scope |
 |---|---|---|
-| [KeyCall](https://pypi.org/project/keycall) | Credential validation, model listing, and text generation against Google Gemini | The only provider registered at runtime (`ripple/llm/__init__.py`). KeyCall talks to the provider directly over HTTP; no vendor SDK is a dependency. |
+| [KeyCall](https://pypi.org/project/keycall) | Credential validation, model listing, and text generation against Google Gemini | The provider behind extraction, judgement, continuity, and synthesis (`PROVIDERS` in `ripple/llm/__init__.py`). KeyCall talks to the provider over HTTP. |
+| [google-genai](https://pypi.org/project/google-genai) | Text generation on the Ask Ripple path | The second registry (`QUERY_PROVIDERS` in `ripple/llm/__init__.py`), reached through `get_query_provider`. Same credential and same model ids as KeyCall; only the transport differs. |
 | [TraceAct](https://github.com/traceact/traceact) | Execution tracing for import, extraction, preview, accept, undo, and grounded query | Configured once in `ripple/tracing.py`; disabled in tests via `RIPPLE_TRACING=off`. |
 | [traceact-browser](https://github.com/traceact/traceact-browser) | Frontend visibility during development | A developer tool, not a runtime dependency; not in `pyproject.toml`. |
 | `tesseract` / `pdftoppm` (poppler) | OCR for scanned PDFs | Optional system binaries, checked at launch; a scanned PDF is rejected with a stated reason when they're absent rather than silently mis-parsed. |
 
 ## Deployment and infrastructure
 
-Local development runs through `launch.command`, which terminates any Ripple server already running (a stale instance is never reused), verifies Python 3.11+, creates or repairs `.venv`, marks the virtual environment and `data/` as ignored by Dropbox sync, installs the app in editable mode, and starts `uvicorn` on the first free port from 8420. A port held by another Ripple instance is taken over; a port held by anything else is skipped. Only `launch.command` exists today; `launch.sh` and `launch.bat` don't yet.
+Local development runs through `launch.command`, which terminates any Ripple server already running (a stale instance is never reused), verifies Python 3.11+, creates or repairs `.venv`, marks the virtual environment and `data/` as ignored by Dropbox sync, installs the app in editable mode, and starts `uvicorn` on the first free port from 8420. A port held by another Ripple instance is taken over; a port held by anything else is skipped. `launch.command` and `launch.bat` cover macOS and Windows; `launch.sh` doesn't exist.
 
 The deployment target is Replit Starter Autoscale, which supplies `DATABASE_URL` (PostgreSQL) and holds provider credentials in Replit Secrets. The application hasn't been deployed there yet.
 
@@ -187,7 +189,6 @@ Known debt and open decisions only, not a roadmap:
 
 - Whether `pdftoppm` and `tesseract` install on Replit Autoscale through Nix; if not, scanned PDFs stay rejected in production rather than silently degrading.
 - Whether intercut sub-headings should collapse into their parent numbered scene instead of becoming separate scenes.
-- `launch.sh` and `launch.bat` don't exist yet; only `launch.command`.
 - No migration tooling: `create_all` builds the schema the models declare, and a database from an earlier schema is rebuilt. The first release with users is the point to adopt Alembic.
 
 ## Glossary
@@ -198,7 +199,7 @@ Known debt and open decisions only, not a roadmap:
 | Scene | An ordered sequence of units under one heading. |
 | Entity | A canonical production noun: cast, prop, wardrobe, location, set design, makeup, transportation, VFX, stunt, or sound, unique per script and type. |
 | Attribute | A keyed value on an entity (`color: emerald`), evidence-backed like an assertion; extraction never overwrites an active value, only an accepted change set does. |
-| Assertion | An evidence-backed directed edge between two graph nodes (an entity or a scene), carrying a predicate, a confidence, and the source unit it was extracted from. |
+| Assertion | An evidence-backed directed edge between two graph nodes (an entity or a scene), carrying a predicate, a confidence, and the source unit it was extracted from. An `appears_in` edge also carries a manner saying how the character is present: on stage, referenced, or depicted. |
 | Predicate | The relationship an assertion states: `appears_in`, `occurs_at`, `wears`, `carries`, `uses`, `requires`, `travels_by`, `interacts_with`, `establishes`. |
 | Ripple | The downstream production and continuity impact a proposed edit would have, shown as a diff and a set of findings before anything is applied; the product's namesake. |
 | Judgement | The preview's model call: a verdict (`holds`, `changed`, `removed`) for each stored item the edited lines support, verified in code before anything persists. |

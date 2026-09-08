@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Render an authored Fountain screenplay into the other three import formats.
 
-One authored source per demo script produces .fdx, .pdf, and .txt, so all four
-adapters have a fixture derived from identical content. Any
+One authored source per demo script produces .fdx, .pdf, and .txt, so the four
+screenplay adapters have a fixture derived from identical content. Any
 difference an adapter produces is the adapter's, not the source material's.
 
     python tools/render_screenplay.py                    # every demo script

@@ -145,8 +145,9 @@ DEFAULT_REASONING_EFFORT = "medium"
 # is transcription- or judgement-shaped, so the floor is the default; a caller
 # wanting variation sets its own value on purpose. Verified against the Gemini
 # API docs and google-genai 2.22.0 (2026-09-08): temperature accepts 0.0-2.0,
-# and GenerateContentConfig carries a `seed`. KeyCall 1.8.0 takes temperature
-# but offers no seed, so the seed is passed only where the provider has one.
+# and GenerateContentConfig carries a `seed`. KeyCall gained `seed` after
+# 1.8.0, so `accepts_seed()` probes the installed signature and the seed is
+# passed only where it is taken.
 DEFAULT_TEMPERATURE = 0.0
 
 # A fixed seed for the deterministic graph-building calls (extraction, the

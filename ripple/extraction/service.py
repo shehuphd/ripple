@@ -1,9 +1,9 @@
 """Resumable, scene-at-a-time graph extraction.
 
-Paid background workers are ruled out, so the browser drives the
-loop: it asks for one scene job, the server does that scene and commits it, and
-the browser asks again. A reload resumes from the first incomplete scene
-because progress lives in `scene_extractions` rather than in a process.
+A worker thread drains the run and the page polls its progress; the per-scene
+endpoint remains for a browser-driven loop. Either way a reload resumes from
+the first incomplete scene, because progress lives in `scene_extractions`
+rather than in a process.
 
 Three properties this module has to hold:
 
