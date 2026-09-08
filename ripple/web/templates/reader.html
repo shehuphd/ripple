@@ -48,6 +48,8 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
   <span class="btn" aria-disabled="true" tabindex="-1"
         data-tip="Build the graph first, then view it here">⁙ View graph</span>
   {% endif %}
+  <a class="btn" href="/ask?script={{ script.id }}"
+     data-tip="Ask questions or request changes over this script's graph">≋ Ask Ripple</a>
   <a class="btn" href="/api/scripts/{{ script.id }}/export"
      data-tip="Download the script as Fountain plain text">Export</a>
   <button class="chip{{ '' if findings else ' hide' }}" id="finding-jump"

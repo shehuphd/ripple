@@ -209,6 +209,8 @@ class TestPages:
         # otherwise become the newest row _first_script returns.
         built = client.get(f"/scripts/{_first_script(client)}").text
         assert 'data-graph-ready="true"' in built
+        # The toolbar opens an Ask chat on this same script directly.
+        assert f'href="/ask?script={_first_script(client)}"' in built
         assert 'class="btn gleam"' not in built
         assert "/graph" in built
 
