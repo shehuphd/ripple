@@ -1881,20 +1881,44 @@ if (findBox) {
   let at = -1;
   let typing = null;
 
-  function textNodes() {
+  function lineHolders() {
     // Only the script's own words: a heading and a line, never the toolbar,
     // the scene controls, or the insert buttons between scenes.
-    const nodes = [];
-    document.querySelectorAll('#page .u, #page .sh > span:not(.no)')
-      .forEach((holder) => {
-        const walker = document.createTreeWalker(holder, NodeFilter.SHOW_TEXT);
-        let node = walker.nextNode();
-        while (node) {
-          if (node.nodeValue.trim()) nodes.push(node);
-          node = walker.nextNode();
-        }
-      });
-    return nodes;
+    return [...document.querySelectorAll('#page .u, #page .sh > span:not(.no)')];
+  }
+
+  function segmentsOf(holder) {
+    // A line's text nodes in order, each tagged with its offset in the line's
+    // full text. An accepted edit wraps its words in a <mark>, so one line is
+    // several text nodes; searching them one at a time misses any match that
+    // straddles the boundary ("young man" split across "A young " and the
+    // marked "man ..."). The full string is searched instead, and a match maps
+    // back to a range that can start in one node and end in another.
+    const walker = document.createTreeWalker(holder, NodeFilter.SHOW_TEXT);
+    const segments = [];
+    let full = '';
+    let node = walker.nextNode();
+    while (node) {
+      segments.push({ node, start: full.length });
+      full += node.nodeValue;
+      node = walker.nextNode();
+    }
+    return { segments, full };
+  }
+
+  function rangeAt(segments, from, to) {
+    // Map a [from, to) span in the line's full text onto a DOM range, spanning
+    // text nodes when the match crosses an inline element.
+    const range = document.createRange();
+    for (const { node, start } of segments) {
+      const end = start + node.nodeValue.length;
+      if (from >= start && from < end) range.setStart(node, from - start);
+      if (to > start && to <= end) {
+        range.setEnd(node, to - start);
+        break;
+      }
+    }
+    return range;
   }
 
   function paint() {
@@ -1912,14 +1936,13 @@ if (findBox) {
     at = -1;
     if (needle.length >= 2) {
       const lower = needle.toLowerCase();
-      textNodes().forEach((node) => {
-        const haystack = node.nodeValue.toLowerCase();
+      lineHolders().forEach((holder) => {
+        const { segments, full } = segmentsOf(holder);
+        if (!segments.length) return;
+        const haystack = full.toLowerCase();
         let from = haystack.indexOf(lower);
         while (from !== -1) {
-          const range = document.createRange();
-          range.setStart(node, from);
-          range.setEnd(node, from + needle.length);
-          hits.push(range);
+          hits.push(rangeAt(segments, from, from + needle.length));
           from = haystack.indexOf(lower, from + needle.length);
         }
       });
