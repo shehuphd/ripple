@@ -135,6 +135,11 @@ class RunProgress:
     tokens: int = 0
     cost_usd: float | None = None
     cost: str | None = None
+    #: Suspected duplicate entities in the script, counted once the run is
+    #: over. A build resolves the same thing under two names often enough
+    #: that leaving the count for whoever opens the entities page means it
+    #: is never seen; merging is still a decision a person makes.
+    duplicates: int = 0
 
     @property
     def finished(self) -> bool:
@@ -1190,6 +1195,13 @@ def progress(session: Session, run_id) -> RunProgress:
         for call in calls
     )
     cost = pricing.calls_cost_usd(calls)
+    # Only once the run is over: the count is meaningless mid-build, and the
+    # detection is a scan of every entity pair in the script.
+    duplicates = 0
+    if not outstanding and run.status in ("ready", "partially_ready"):
+        from ripple.services.duplicates import detect
+
+        duplicates = len(detect(session, run.script_id))
     return RunProgress(
         run_id=str(run_id),
         status=run.status,
@@ -1201,6 +1213,7 @@ def progress(session: Session, run_id) -> RunProgress:
         tokens=tokens,
         cost_usd=cost,
         cost=pricing.display(cost),
+        duplicates=duplicates,
     )
 
 

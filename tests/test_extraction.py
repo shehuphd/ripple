@@ -532,6 +532,48 @@ class TestRebuildReplaces:
         assert accepted_edge.active is True, "an accepted edge must survive a rebuild"
 
 
+class TestDuplicatesAfterABuild:
+    """A build resolves the same thing under two names ("A lady's bedchamber"
+    beside "lady's bedchamber"), and the count was left for whoever happened
+    to open the entities page. A finished run reports it, so the review is
+    offered; merging stays a decision a person makes."""
+
+    def _entity(self, session, script, name):
+        from ripple.db.naming import normalize
+
+        entity = Entity(
+            script_id=script.id,
+            entity_type="location",
+            canonical_name=name,
+            normalized_name=normalize(name),
+        )
+        session.add(entity)
+        return entity
+
+    def test_a_finished_run_counts_the_suspected_duplicates(self, session, script):
+        run = start_run(session, script.id, MODEL)
+        for job in session.scalars(
+            select(SceneExtraction).where(SceneExtraction.extraction_run_id == run.id)
+        ):
+            job.status = "completed"
+        run.status = "ready"
+        run.completed_scenes = run.total_scenes
+        self._entity(session, script, "Dispatch monitors")
+        self._entity(session, script, "Monitors")
+        session.flush()
+
+        assert progress(session, run.id).duplicates == 1
+
+    def test_a_running_build_does_not_count_them(self, session, script):
+        """Mid-build the number is noise, and the scan is every entity pair."""
+        run = start_run(session, script.id, MODEL)
+        self._entity(session, script, "Dispatch monitors")
+        self._entity(session, script, "Monitors")
+        session.flush()
+
+        assert progress(session, run.id).duplicates == 0
+
+
 class TestVarianceAlerts:
     def test_a_wide_per_scene_swing_is_flagged(self, session, script):
         """The QA signal: extraction is pinned deterministic, so a scene whose

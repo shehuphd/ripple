@@ -1707,6 +1707,15 @@ if (extract) {
       label.textContent =
         (stopped ? 'Extraction cancelled' : 'Extraction finished')
         + spendLabel(progress);
+      // A build resolves the same thing under two names often enough that
+      // the count is said here rather than left for whoever opens Entities.
+      if (!stopped && progress && progress.duplicates) {
+        const many = progress.duplicates !== 1;
+        toast(
+          `${progress.duplicates} suspected duplicate entit${many ? 'ies' : 'y'}`
+          + ' to review on the Entities page.',
+        );
+      }
       setTimeout(() => window.location.reload(), 900);
     } catch (error) {
       ripple.trace('extract.stopped', { error: error.message });
