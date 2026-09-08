@@ -363,8 +363,39 @@ class TestDecisionFlow:
         assert judgement is not None, "a judged preview must carry its verdicts"
         assert "assertion_verdicts" in judgement
         assert "attribute_verdicts" in judgement
-        # The verification-drop list the card renders, as (id, reason) pairs.
+        # The verification-drop list the card renders, one sentence per line.
         assert isinstance(judgement["rejected"], list)
+
+    def test_the_drop_list_reads_as_sentences_not_codes(self):
+        """The card must never show internal rejection codes or audit
+        phrasing: each reason is translated, repeats collapse into one line
+        with a tally, and the header count still covers every drop."""
+        from ripple.extraction.judge import JudgementReport
+
+        report = JudgementReport()
+        report.rejected = [
+            ("a1", "removal not visible in the edited lines, downgraded to holds"),
+            ("a2", "removal not visible in the edited lines, downgraded to holds"),
+            ("assertion", "unresolved_endpoint"),
+            ("a3", "unknown verdict 'maybe'"),
+            ("new_items", "reply was not JSON: line 1 column 2"),
+        ]
+        payload = web._judgement_payload(report)
+        assert payload["dropped"] == 5
+        assert len(payload["rejected"]) == 4
+        joined = " ".join(payload["rejected"])
+        assert "unresolved_endpoint" not in joined
+        assert "downgraded" not in joined
+        assert "'maybe'" not in joined
+        assert "JSON" not in joined
+        assert (
+            "A fact was called removed, but the edited lines don't show that; "
+            "it was kept. (twice)" in payload["rejected"]
+        )
+        assert (
+            "A new fact referred to something the reply never introduced."
+            in payload["rejected"]
+        )
 
     def test_accepting_applies_the_text(self, client, judged):
         unit_id, preview = self._preview(client)

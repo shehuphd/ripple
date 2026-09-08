@@ -148,8 +148,8 @@ function renderJudgement(body) {
   if (j && j.rejected && j.rejected.length) {
     parts.push(
       `<div class="judge-drop"><div class="drop-hd">Verification dropped ` +
-      `${j.rejected.length}</div>` +
-      j.rejected.map((r) => `<div class="drop-row">${esc(r[1])}</div>`).join('') +
+      `${j.dropped || j.rejected.length}</div>` +
+      j.rejected.map((line) => `<div class="drop-row">${esc(line)}</div>`).join('') +
       '</div>');
   } else if (j) {
     parts.push('<div class="judge-drop ok">Verification dropped nothing.</div>');
