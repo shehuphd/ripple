@@ -210,6 +210,38 @@ class TestOutputValidation:
             "A room furnished comfortably and tastefully", "set_design"
         ) is None
 
+    def test_a_heading_that_says_when_is_not_a_location(self):
+        """A stage play heads an act with a date ("The sixth of March, 1886"),
+        a clock, or a circumstance ("In the library after lunch"), and a
+        screenplay heads a cut scene OMITTED or opens one on a stage
+        direction. Each reached the graph as a location named after the
+        heading, whose occurs_at edge then pointed the scene at itself. A
+        place name carrying a time ("Covent Garden at 11.15 p.m") still
+        names a place and is kept."""
+        from ripple.extraction.validate import _unusable_name_reason
+
+        for when in (
+            "The sixth of March, 1886",
+            "Next day at 11 a.m",
+            "TIME: The Present",
+            "NIGHT",
+        ):
+            assert _unusable_name_reason(when, "location") == "names_a_time", when
+        for marker in ("OMITTED", "CONTINUED", "Enter Chorus", "Exeunt"):
+            assert _unusable_name_reason(marker, "location") == "not_a_place", marker
+        assert (
+            _unusable_name_reason("In the library after lunch", "location")
+            == "names_a_circumstance"
+        )
+        for place in (
+            "Covent Garden at 11.15 p.m",
+            "Morning-room at the Manor House",
+            "Juliet's Chamber; Juliet on the bed",
+            "Mantua. A Street",
+            "14 Stannary Lane",
+        ):
+            assert _unusable_name_reason(place, "location") is None, place
+
     def test_a_fabricated_source_unit_is_dropped(self):
         """An evidence pointer to a unit never shown to the model is invented."""
         report = validate_response(

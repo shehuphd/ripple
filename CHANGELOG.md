@@ -56,6 +56,8 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **A heading that says when is no longer a location.** The heading splitter hands back the whole heading when no INT./EXT. prefix matches, which is right for a slugline and wrong for a stage play's act, so "The sixth of March, 1886" and "In the library after lunch" became locations whose occurs_at edge pointed a scene at itself. A heading segment naming a time, a date, a circumstance, a stage direction, or OMITTED is refused now; a place carrying a clock ("Covent Garden at 11.15 p.m") is kept. Rebuild a graph to clear the entities an earlier read wrote.
+
 - **Every model call sets its own temperature, and grounded queries repeat identically.** Nothing set a temperature, so every call ran at the provider's default (which is high) and the same input could vary run to run. The whole LLM layer now sets one on every call and defaults to the floor. The grounded-query path also pins a seed, which is what makes its output identical read to read: the temperature floor alone does not, checked against the model. Extraction and the judge run at the floor and pass a seed too, which takes effect as soon as their transport carries one. A companion check flags any scene whose extraction count still swings across reads, so a prompt or gate regression surfaces on its own.
 
 - **Tooltips never clip at an edge.** The tooltip was a `::after` element aimed by a growing set of per-location rules; a trigger without one, such as the preview's "Write the explanation" button, grew a centred tooltip that ran past its container and lost its opening words. One floating element now serves every tooltip, positioned from the trigger's box and clamped to the viewport, so the full text shows wherever the trigger is.

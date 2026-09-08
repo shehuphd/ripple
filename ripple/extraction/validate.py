@@ -96,6 +96,48 @@ def _describes_rather_than_names(location: str) -> bool:
     return False
 
 
+# A heading segment can say when rather than where. A stage play heads an act
+# with a date ("The sixth of March, 1886"), a clock ("Next day at 11 a.m"), or
+# a label ("TIME: The Present"), and a screenplay heads a cut scene "OMITTED"
+# or opens one with a stage direction ("Enter Chorus"). Each of those becomes
+# a location entity named after the heading, and its occurs_at edge then points
+# a scene at itself.
+_LABEL_PREFIX = re.compile(r"^[A-Z][A-Z ]*:\s*")
+_STAGE_DIRECTION = re.compile(r"^(?:re-)?(?:enter|exeunt|exit)\b", re.IGNORECASE)
+_PRODUCTION_MARKER = frozenset({"omitted", "continued", "tbd", "deleted"})
+_TIME_WORDS = frozenset(
+    {
+        "present", "past", "future", "morning", "afternoon", "evening",
+        "night", "midnight", "noon", "dawn", "dusk", "daybreak", "sunrise",
+        "sunset", "today", "tomorrow", "yesterday", "day", "days", "week",
+        "weeks", "month", "months", "year", "years", "hour", "hours",
+        "minute", "minutes", "later", "earlier", "next", "last", "following",
+        "same", "clock", "o'clock", "am", "pm", "a", "m", "p",
+        "january", "february", "march", "april", "may", "june", "july",
+        "august", "september", "october", "november", "december",
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+        "sunday",
+        "first", "second", "third", "fourth", "fifth", "sixth", "seventh",
+        "eighth", "ninth", "tenth", "eleventh", "twelfth",
+    }
+)
+#: Ignored when deciding whether a phrase is only a time.
+_TIME_STOPWORDS = frozenset({"the", "of", "at", "on", "in", "and", "it", "is"})
+#: A heading opening on one of these states a circumstance, not a place name.
+_CIRCUMSTANCE_OPENERS = frozenset(
+    {"in", "on", "at", "after", "before", "during", "towards", "toward", "by"}
+)
+
+
+def _names_a_time(location: str) -> bool:
+    """True when every word in the phrase belongs to a date or a clock."""
+    words = re.findall(r"[a-z']+|\d+", _LABEL_PREFIX.sub("", location).lower())
+    words = [word for word in words if word not in _TIME_STOPWORDS]
+    if not words:
+        return False
+    return all(word in _TIME_WORDS or word.isdigit() for word in words)
+
+
 def _unusable_name_reason(name: str, entity_type: str = "cast") -> str | None:
     """Why a name cannot be an entity, or None when it is usable.
 
@@ -118,10 +160,16 @@ def _unusable_name_reason(name: str, entity_type: str = "cast") -> str | None:
     # sentence-in-name check, which a place name ("Elsinore. A platform
     # before the Castle") would trip on its region-then-spot period.
     if entity_type == "location":
-        if len(name.strip()) > _LOCATION_MAX_CHARS or _describes_rather_than_names(
-            name
-        ):
+        stripped = name.strip()
+        if len(stripped) > _LOCATION_MAX_CHARS or _describes_rather_than_names(name):
             return "descriptive_location"
+        if folded in _PRODUCTION_MARKER or _STAGE_DIRECTION.match(stripped):
+            return "not_a_place"
+        if _names_a_time(stripped):
+            return "names_a_time"
+        opener = re.match(r"[a-z]+", stripped.lower())
+        if opener and opener.group(0) in _CIRCUMSTANCE_OPENERS:
+            return "names_a_circumstance"
         return None
     if _SENTENCE_IN_NAME.search(name):
         return "sentence_like_name"
