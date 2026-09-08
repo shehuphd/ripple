@@ -3,7 +3,7 @@
 
 The application does this itself at startup for any demo script without a
 graph. This command exists to re-run it by hand, for development, after
-**Delete selected graphs** on the Graphs page, or to verify the ground-truth
+**Delete all graphs** on the Graphs page, or to verify the ground-truth
 files parse.
 
     .venv/bin/python tools/seed_graph.py

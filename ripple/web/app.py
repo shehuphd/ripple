@@ -1511,6 +1511,20 @@ def graphs_page(request: Request, session: Session = Depends(get_session)):
                 "confirm": True,
             },
         ],
+        header_action={
+            "url": "/api/graphs/clear",
+            "label": "Delete all graphs",
+            "tip": "Delete every graph in the library. Scripts, scenes, and "
+            "lines stay; Build graph starts each one over.",
+            "danger": True,
+            "confirm": (
+                "Delete every graph in the library? Entities, assertions, "
+                "runs, change sets, and findings go. The scripts themselves "
+                "stay, and Build graph starts each one over."
+            ),
+        }
+        if items
+        else None,
     )
 
 
@@ -2020,8 +2034,21 @@ def batch_delete_graphs(ids: str = Form(...), session: Session = Depends(get_ses
 
 @app.post("/api/graphs/clear")
 def clear_graphs(session: Session = Depends(get_session)):
-    """Delete graph data while preserving scripts and parsed units."""
-    return clear_all_graphs(session).__dict__
+    """Delete every graph while preserving scripts and parsed units.
+
+    Reached from **Delete all graphs** on the Graphs page, which confirms
+    first. The per-script form is the batch delete beside it; this is the
+    whole library at once, for when a schema or prompt change has made every
+    stored graph stale.
+    """
+    counts = clear_all_graphs(session)
+    return {
+        **counts.__dict__,
+        "message": (
+            f"Cleared {counts.entities} entities and {counts.assertions} "
+            "assertions. Every script is ready to build again."
+        ),
+    }
 
 
 @app.get("/api/scenes/{scene_id}/units")

@@ -6,6 +6,8 @@ All notable changes to Ripple are documented here.
 
 ### Added
 
+- **Delete all graphs, on the Graphs page.** Every stored graph could be removed at once through `POST /api/graphs/clear`, which no control reached, so a library made stale by a schema or prompt change had to be emptied from a shell. The button is beside the search box: it confirms first, names what goes, and reports the entities and assertions it removed. Scripts, scenes, and lines stay, and Build graph starts each one over.
+
 - **A finished build says how many duplicates it left.** Detection ran only when someone opened the Entities page, so a build that resolved the same thing under two names ("Monitors" beside "Dispatch monitors") said nothing about it. The run reports the count when it ends and the reader shows it, with the review still on the Entities page: merging is a decision a person makes, and this only makes sure the decision is offered. The count is computed once the last scene is done, never mid-build.
 
 - **An appearance records how a cast member is present.** An `appears_in` edge now carries a manner: on stage (physically in the action), referenced (named or spoken of but not present), or depicted (present only inside a photograph, recording, letter, or song). A speaking cue is on stage; the model tags the rest as it reads the scene. The reader and the graph label the referenced and depicted cases, and Ask Ripple can say a character is shown in a photograph rather than a flat "appears" or a false "does not appear". Rebuild a graph to capture the manner on a script read before this.

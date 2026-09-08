@@ -20,7 +20,9 @@
 {% endif %}
 
 {% if header_action %}
-<button class="btn" id="header-action" data-post="{{ header_action.url }}"
+<button class="btn{{ ' danger' if header_action.danger }}" id="header-action"
+        data-post="{{ header_action.url }}"
+        {% if header_action.confirm %}data-confirm="{{ header_action.confirm }}"{% endif %}
         data-tip="{{ header_action.tip }}">{{ header_action.label }}</button>
 {% endif %}
 {% endblock %}
@@ -134,10 +136,18 @@
 {% block scripts %}
 <script>
 /* A header action POSTs and, when the reply carries a url, opens it in a new
-   tab (the trace viewer) rather than reloading the page. */
+   tab (the trace viewer) rather than reloading the page. One that names a
+   consequence confirms first, and one that reports what it did says so before
+   the reload. */
 const headerAction = document.getElementById('header-action');
 if (headerAction) {
   headerAction.addEventListener('click', async () => {
+    if (headerAction.dataset.confirm) {
+      const ok = await confirmDialog(headerAction.dataset.confirm,
+        headerAction.textContent.trim(),
+        { destructive: headerAction.classList.contains('danger') });
+      if (!ok) return;
+    }
     headerAction.disabled = true;
     let result;
     try {
@@ -151,6 +161,7 @@ if (headerAction) {
     if (result && result.url) {
       window.open(result.url, '_blank', 'noopener');
     } else {
+      if (result && result.message) toast(result.message);
       window.location.reload();
     }
   });

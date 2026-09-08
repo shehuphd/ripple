@@ -3721,6 +3721,33 @@ class TestGraphDeletion:
         assert "Delete selected graphs" in page
         assert 'data-kinds="clear_graph"' in page
 
+    def test_clear_all_graphs_is_reachable_from_the_page(self, client):
+        """The route existed with no way to press it, so a stale library had
+        to be cleared with a shell command. The control confirms first, since
+        it takes every graph in one press."""
+        page = self._graph_rows(client)
+        assert "Delete all graphs" in page
+        assert 'data-post="/api/graphs/clear"' in page
+        assert 'data-confirm="Delete every graph in the library?' in page
+
+    def test_clearing_every_graph_keeps_the_scripts(self, client):
+        import re
+
+        before = re.findall(r'data-id="([0-9a-f-]{36})"', self._graph_rows(client))
+        assert len(before) >= 2
+
+        outcome = client.post("/api/graphs/clear")
+        assert outcome.status_code == 200
+        body = outcome.json()
+        assert body["entities"] > 0
+        assert "ready to build again" in body["message"]
+
+        assert re.findall(r'data-id="([0-9a-f-]{36})"', self._graph_rows(client)) == []
+        for script_id in before:
+            reader = client.get(f"/scripts/{script_id}")
+            assert reader.status_code == 200
+            assert "Build graph" in reader.text
+
     def test_deleting_one_graph_keeps_the_script_and_the_other_graphs(
         self, client
     ):
