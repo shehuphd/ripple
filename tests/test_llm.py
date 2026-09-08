@@ -23,6 +23,62 @@ from ripple.llm.base import (
 )
 
 
+class TestSeedCapabilityProbe:
+    """KeyCall gained `seed` after 1.8.0, so the adapter reads the installed
+    signature rather than assuming. The probe decides whether a seed is sent,
+    and both answers have to behave."""
+
+    def test_the_probe_reads_the_installed_signature(self):
+        import inspect
+
+        from keycall import KeyCall
+
+        from ripple.llm.keycall_provider import accepts_seed
+
+        expected = "seed" in inspect.signature(KeyCall.generate_text).parameters
+        assert accepts_seed() is expected
+
+    def test_a_seed_is_sent_only_where_the_installed_client_takes_one(
+        self, monkeypatch
+    ):
+        """On a build with the parameter the seed reaches KeyCall; on one
+        without, it is dropped rather than raising a TypeError."""
+        from ripple.llm import keycall_provider
+
+        sent = {}
+
+        class FakeResult:
+            text = "{}"
+            model = "gemini-flash-lite-latest"
+            usage = None
+            finish_reason = "stop"
+
+        class FakeClient:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def generate_text(self, **kwargs):
+                sent.clear()
+                sent.update(kwargs)
+                return FakeResult()
+
+        provider = keycall_provider.KeycallProvider("google", "GOOGLE_API_KEY")
+        monkeypatch.setattr(provider, "_client", lambda: FakeClient())
+
+        monkeypatch.setattr(keycall_provider, "accepts_seed", lambda: True)
+        provider.generate("gemini-flash-lite-latest", "hi", seed=20260908)
+        assert sent["seed"] == 20260908
+        assert sent["temperature"] == 0.0
+
+        monkeypatch.setattr(keycall_provider, "accepts_seed", lambda: False)
+        provider.generate("gemini-flash-lite-latest", "hi", seed=20260908)
+        assert "seed" not in sent, "an older KeyCall must not be sent a seed"
+        assert sent["temperature"] == 0.0
+
+
 class TestModalityFilter:
     """A picker offering an embedding model produces an unexplained runtime error."""
 

@@ -11,7 +11,9 @@ caller-side regex sniffing of a raw provider error string is needed either.
 
 from __future__ import annotations
 
+import inspect
 import os
+from functools import cache
 from typing import Any
 
 from keycall import KeyCall, KeyCallError, Message, TextInput
@@ -26,6 +28,23 @@ from ripple.llm.base import (
     infer_tier,
     is_text_model,
 )
+
+
+@cache
+def accepts_seed() -> bool:
+    """Whether the installed KeyCall's generate_text takes a seed.
+
+    KeyCall gained the parameter after 1.8.0. Reading the installed signature
+    rather than a version string means the seed starts being sent the moment
+    the dependency is upgraded and is dropped on an older one, with no code
+    change either way. Gemini, the provider behind Ripple's models, is one of
+    the providers KeyCall marks seed-capable, so a seed sent this way reaches
+    the model rather than tripping KeyCall's own unsupported-parameter gate.
+    """
+    try:
+        return "seed" in inspect.signature(KeyCall.generate_text).parameters
+    except (TypeError, ValueError):  # a stub or a C-implemented callable
+        return False
 
 
 class KeycallProvider:
@@ -102,14 +121,18 @@ class KeycallProvider:
     ) -> GenerationResult:
         """Generate text, with native structured output when a schema is given.
 
-        KeyCall 1.8.0 takes a temperature but offers no seed, so `seed` is
-        accepted for interface parity and dropped here; determinism rests on
-        the temperature alone on this provider.
+        The seed is passed only where the installed KeyCall takes one; on a
+        build without it the argument is dropped and determinism rests on the
+        temperature alone, which is weaker (the temperature floor narrows the
+        sampling but does not pin it).
         """
         messages = []
         if system:
             messages.append(Message(role="system", content=[TextInput(text=system)]))
         messages.append(Message(role="user", content=[TextInput(text=prompt)]))
+        sampling: dict[str, Any] = {}
+        if seed is not None and accepts_seed():
+            sampling["seed"] = seed
 
         with self._client() as client:
             try:
@@ -120,6 +143,7 @@ class KeycallProvider:
                     temperature=temperature,
                     response_schema=json_schema,
                     reasoning_effort=reasoning_effort,
+                    **sampling,
                 )
             except KeyCallError as error:
                 raise _to_provider_error(error) from error
