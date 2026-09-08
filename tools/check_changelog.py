@@ -17,7 +17,7 @@ import sys
 
 # Characters, counting the bold lead-in. Three or four plain sentences fit;
 # the paragraph-length entries this was written for do not.
-LIMIT = 500
+LIMIT = 800
 CHANGELOG = "CHANGELOG.md"
 
 

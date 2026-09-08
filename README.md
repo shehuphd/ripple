@@ -93,7 +93,7 @@ git config core.hooksPath .githooks
 
 ## Commits
 
-One line, imperative, under about 60 characters. No body: the reasoning and the detail go in `CHANGELOG.md`, where they are read. A changelog entry is a bold title and a few sentences, 500 characters at most; `tools/check_changelog.py` refuses a longer one at the push, checking only entries the branch adds. Settings paths are written with arrows (Settings → Interface → Screensaver), so an entry says where the setting lives. No trailers of any kind either, so no co-authors, no attribution, no generated-by lines. The `commit-msg` hook enforces the trailer half of that; the rest is convention.
+One line, imperative, under about 60 characters. No body: the reasoning and the detail go in `CHANGELOG.md`, where they are read. A changelog entry is a bold title and a few sentences, 800 characters at most; `tools/check_changelog.py` refuses a longer one at the push, checking only entries the branch adds. Settings paths are written with arrows (Settings → Interface → Screensaver), so an entry says where the setting lives. No trailers of any kind either, so no co-authors, no attribution, no generated-by lines. The `commit-msg` hook enforces the trailer half of that; the rest is convention.
 
 ## Tests
 
