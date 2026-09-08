@@ -26,6 +26,8 @@ All notable changes to Ripple are documented here.
 
 ### Changed
 
+- **A long scene is read in windows.** One call has a token ceiling and an attention span, and a stage play's act handed over whole came back as a summary of it: 42 assertions off the 1,546 units of Arms and the Man, with long stretches unread. A scene over 120 units is now read in windows of that size, one call each, merged into one answer for the scene; ids the model invents are namespaced per window so two windows cannot collide. The same play reads as 118 entities and 234 assertions. A screenplay scene fits one window and is unchanged.
+
 - **An act splits into the scenes it is played in.** A stage play that prints no numbered scenes gave one scene per act, several hundred units long, and the graph, the reader, continuity findings and the single extraction call a scene gets all worked at that grain. Such an act now cuts at the entrances and exits the text marks, numbered under the act (1.1, 1.2). An act under sixty units is left whole, a part under eight joins the one before it, and a play that prints its own SCENE headings is never recut.
 
 - **The seed reaches the provider on every call.** KeyCall 1.10 passes a seed through to the model, so the pin moves to it and the seed Ripple already sent on extraction and judge calls stops being dropped in transit. Three identical live calls came back identical, where the same call at the provider's default varied read to read. The variance check reports any scene whose extraction count still swings, so a prompt or gate regression surfaces on its own.

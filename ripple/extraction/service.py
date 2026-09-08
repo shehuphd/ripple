@@ -92,6 +92,13 @@ MAX_ATTEMPTS = 2
 # stage-play act the model spends 5-8k tokens thinking before it writes, so
 # the ceiling leaves room for both.
 MAX_OUTPUT_TOKENS = 24576
+# How many units one call reads. A screenplay scene sits well under this and
+# is read in a single call, as before. A stage play's act runs to hundreds of
+# units, and asking for all of them at once returned a summary of the act: 42
+# assertions off 1,546 units of Arms and the Man, with whole stretches
+# unread. The window is sized to the longest stretch the model covers line by
+# line rather than to the token ceiling, which it reaches first.
+MAX_UNITS_PER_CALL = 120
 
 
 @dataclass(frozen=True)
@@ -396,155 +403,201 @@ def extract_scene(
                 unit_by_short, units, strict=True
             )
         ]
-        unit_texts = {short: text for short, _, text in prompt_units}
-        prompt = build_prompt(
-            scene.heading,
-            scene.display_scene_number,
-            prompt_units,
-            provided=[(p.local_id, p.entity_type, p.name) for p in provided],
-        )
+        # A scene longer than one call can cover is read in windows. One reply
+        # has a token ceiling and an attention span: on a stage play's act,
+        # 1,500 units in one call came back as a summary of the act rather
+        # than a reading of it. Each window is a call over its own lines, and
+        # the windows merge into one answer for the scene.
+        windows = [
+            prompt_units[start : start + MAX_UNITS_PER_CALL]
+            for start in range(0, len(prompt_units), MAX_UNITS_PER_CALL)
+        ]
         job.attempt_count += 1
-
-        # The main model, then the configured fallback. The fallback answers
-        # when the main refuses for an availability reason, and also when the
-        # main's reply fails validation: a cheap main model with an escalation
-        # path costs less over a whole build than running the stronger model
-        # everywhere. Each attempt writes its own audit row.
-        candidates = [job.model_id]
-        _, fallback = get_fallback_model(session)
-        if fallback and fallback != job.model_id:
-            candidates.append(fallback)
-
-        result = None
-        call = None
-        report = None
-        for candidate in candidates:
-            call = ModelCall(
-                script_id=run.script_id,
-                scene_id=job.scene_id,
-                purpose="extract",
-                prompt_version=job.prompt_version,
-                model_id=candidate,
-                request_text=prompt,
-                outcome="ok",
+        merged = ValidationReport()
+        model_used: str | None = None
+        for window_index, window in enumerate(windows):
+            unit_texts = {short: text for short, _, text in window}
+            prompt = build_prompt(
+                scene.heading,
+                scene.display_scene_number,
+                window,
+                provided=[(p.local_id, p.entity_type, p.name) for p in provided],
             )
-            try:
-                check_budget(session, call)
-            except BudgetExceeded:
-                # A spent budget fails the scene outright: retrying cannot
-                # help, and the pending run should stop asking rather than
-                # loop.
-                job.attempt_count = MAX_ATTEMPTS
-                return _fail(session, job, run, trace, "budget_exceeded")
 
-            call_started = time.perf_counter()
-            try:
-                result = provider.generate(
-                    candidate,
-                    prompt,
-                    system=SYSTEM_PROMPT,
-                    max_output_tokens=MAX_OUTPUT_TOKENS,
-                    json_schema=OUTPUT_SCHEMA,
-                    seed=GRAPH_SEED,
+            # The main model, then the configured fallback. The fallback answers
+            # when the main refuses for an availability reason, and also when the
+            # main's reply fails validation: a cheap main model with an escalation
+            # path costs less over a whole build than running the stronger model
+            # everywhere. Each attempt writes its own audit row.
+            candidates = [job.model_id]
+            _, fallback = get_fallback_model(session)
+            if fallback and fallback != job.model_id:
+                candidates.append(fallback)
+
+            result = None
+            call = None
+            report = None
+            for candidate in candidates:
+                call = ModelCall(
+                    script_id=run.script_id,
+                    scene_id=job.scene_id,
+                    purpose="extract",
+                    prompt_version=job.prompt_version,
+                    model_id=candidate,
+                    request_text=prompt,
+                    outcome="ok",
                 )
-            except ProviderError as error:
-                if error.code == "model_not_available":
-                    mark_model_unavailable(session, provider.name, candidate)
-                record_failure(session, call, error, call_started)
-                more = candidate != candidates[-1]
-                if more and error.code in AVAILABILITY_CODES:
-                    logger.info(
-                        "extraction failing over after %s", error.code
+                try:
+                    check_budget(session, call)
+                except BudgetExceeded:
+                    # A spent budget fails the scene outright: retrying cannot
+                    # help, and the pending run should stop asking rather than
+                    # loop.
+                    job.attempt_count = MAX_ATTEMPTS
+                    return _fail(session, job, run, trace, "budget_exceeded")
+
+                call_started = time.perf_counter()
+                try:
+                    result = provider.generate(
+                        candidate,
+                        prompt,
+                        system=SYSTEM_PROMPT,
+                        max_output_tokens=MAX_OUTPUT_TOKENS,
+                        json_schema=OUTPUT_SCHEMA,
+                        seed=GRAPH_SEED,
                     )
-                    continue
-                return _fail(session, job, run, trace, error.code)
-            clear_model_unavailable(session, provider.name, candidate)
+                except ProviderError as error:
+                    if error.code == "model_not_available":
+                        mark_model_unavailable(session, provider.name, candidate)
+                    record_failure(session, call, error, call_started)
+                    more = candidate != candidates[-1]
+                    if more and error.code in AVAILABILITY_CODES:
+                        logger.info(
+                            "extraction failing over after %s", error.code
+                        )
+                        continue
+                    return _fail(session, job, run, trace, error.code)
+                clear_model_unavailable(session, provider.name, candidate)
 
-            record_success(session, call, result, call_started)
+                record_success(session, call, result, call_started)
 
-            model_event(
-                purpose="extract",
-                model_id=call.model_id,
-                request=prompt,
-                response=result.text,
-                result=result,
-                status="failed" if result.truncated else "completed",
-                duration_ms=call.duration_ms,
-            )
-            escalate = candidate != candidates[-1]
-            if result.truncated:
-                call.outcome = "truncated"
-                session.add(call)
-                session.flush()
-                if escalate:
-                    logger.info("extraction escalating after truncation")
-                    continue
-                return _fail(session, job, run, trace, "output_truncated")
-
-            try:
-                report = validate_response(
-                    result.text,
-                    set(unit_by_short),
-                    provided={
-                        p.local_id: (p.entity_type, p.name) for p in provided
-                    },
-                    unit_texts=unit_texts,
+                model_event(
+                    purpose="extract",
+                    model_id=call.model_id,
+                    request=prompt,
+                    response=result.text,
+                    result=result,
+                    status="failed" if result.truncated else "completed",
+                    duration_ms=call.duration_ms,
                 )
-            except MalformedResponse as error:
-                logger.info("scene %s: %s", job.scene_id, error)
-                call.outcome = "malformed"
-                call.error_message = str(error)
-                session.add(call)
-                session.flush()
-                if escalate:
-                    logger.info("extraction escalating after a malformed reply")
+                escalate = candidate != candidates[-1]
+                if result.truncated:
+                    call.outcome = "truncated"
+                    session.add(call)
+                    session.flush()
+                    if escalate:
+                        logger.info("extraction escalating after truncation")
+                        continue
+                    return _fail(session, job, run, trace, "output_truncated")
+
+                try:
+                    report = validate_response(
+                        result.text,
+                        set(unit_by_short),
+                        provided={
+                            p.local_id: (p.entity_type, p.name) for p in provided
+                        },
+                        unit_texts=unit_texts,
+                    )
+                except MalformedResponse as error:
+                    logger.info("scene %s: %s", job.scene_id, error)
+                    call.outcome = "malformed"
+                    call.error_message = str(error)
+                    session.add(call)
+                    session.flush()
+                    if escalate:
+                        logger.info("extraction escalating after a malformed reply")
+                        continue
+                    return _fail(session, job, run, trace, "malformed_response")
+
+                if escalate and not report.entities and _has_content(units):
+                    # A scene with content and an answer naming nothing in it is
+                    # a miss the schema cannot catch; the stronger model reads it.
+                    call.outcome = "incomplete"
+                    session.add(call)
+                    session.flush()
+                    logger.info("extraction escalating after an empty answer")
                     continue
-                return _fail(session, job, run, trace, "malformed_response")
+                break
 
-            if escalate and not report.entities and _has_content(units):
-                # A scene with content and an answer naming nothing in it is
-                # a miss the schema cannot catch; the stronger model reads it.
-                call.outcome = "incomplete"
-                session.add(call)
-                session.flush()
-                logger.info("extraction escalating after an empty answer")
-                continue
-            break
-
-        call.validation_json = {
-            "entities": len(report.entities),
-            "assertions": len(report.assertions),
-            "rejected": len(report.rejected),
-            "rejection_codes": sorted(set(report.rejection_codes)),
-        }
-        session.add(call)
-        session.flush()
-
-        trace.event(
-            kind="validate",
-            operation="extraction_output",
-            data={
+            call.validation_json = {
                 "entities": len(report.entities),
                 "assertions": len(report.assertions),
                 "rejected": len(report.rejected),
                 "rejection_codes": sorted(set(report.rejection_codes)),
-            },
-        )
-        # The database cites units by UUID; the model cited the short ids.
-        for assertion in report.assertions:
-            assertion.source_unit_id = unit_by_short[assertion.source_unit_id]
-        for entity in report.entities:
-            for attribute in entity.attributes:
-                attribute.source_unit_id = unit_by_short[attribute.source_unit_id]
+            }
+            session.add(call)
+            session.flush()
+
+            trace.event(
+                kind="validate",
+                operation="extraction_output",
+                data={
+                    "entities": len(report.entities),
+                    "assertions": len(report.assertions),
+                    "rejected": len(report.rejected),
+                    "rejection_codes": sorted(set(report.rejection_codes)),
+                },
+            )
+            # The database cites units by UUID; the model cited the short ids.
+            for assertion in report.assertions:
+                assertion.source_unit_id = unit_by_short[assertion.source_unit_id]
+            for entity in report.entities:
+                for attribute in entity.attributes:
+                    attribute.source_unit_id = unit_by_short[attribute.source_unit_id]
+            # Two windows both name their first invented entity e1, so the ids
+            # are namespaced before merging. A provided id is left alone: the
+            # pre-pass hands the same list to every window, so it means the
+            # same thing in each.
+            _namespace_local_ids(report, window_index, {p.local_id for p in provided})
+            merged.entities.extend(report.entities)
+            merged.assertions.extend(report.assertions)
+            merged.rejected.extend(report.rejected)
+            model_used = call.model_id
+
         return _complete(
             session,
             job,
             run,
-            report,
+            merged,
             trace,
-            model_used=call.model_id,
+            model_used=model_used,
             provided=provided,
         )
+
+
+def _namespace_local_ids(
+    report: ValidationReport, window: int, provided_ids: set[str]
+) -> None:
+    """Prefix a window's invented ids so two windows cannot collide.
+
+    Only ids the model made up are renamed. A provided id names a row the
+    pre-pass already resolved and is shared across windows, and a scene
+    reference is not a local id at all.
+    """
+    if window == 0:
+        return
+
+    def renamed(local_id: str) -> str:
+        return local_id if local_id in provided_ids else f"w{window}:{local_id}"
+
+    for entity in report.entities:
+        entity.local_id = renamed(entity.local_id)
+    for assertion in report.assertions:
+        if assertion.subject_kind == "entity":
+            assertion.subject_local_id = renamed(assertion.subject_local_id)
+        if assertion.object_kind == "entity":
+            assertion.object_local_id = renamed(assertion.object_local_id)
 
 
 def _reuse_cached(session: Session, job: SceneExtraction) -> SceneOutcome | None:
