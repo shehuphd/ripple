@@ -202,7 +202,7 @@ class Screensaver {
         <span class="saver-word">Ripple</span>
       </div>
       <div class="saver-hint">
-        <span>Click to drop a stone</span><span><kbd>Esc</kbd> Exit</span>
+        <span>Click to drop a stone</span><span><kbd>Esc</kbd> Back to Ripple</span>
       </div>`;
     root.style.cursor = `url("${saverCursor(this.look)}") 13 13, default`;
     const fade = this.fade();

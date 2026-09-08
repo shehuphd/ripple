@@ -6,7 +6,7 @@ All notable changes to Ripple are documented here.
 
 ### Added
 
-- **An ambiguous change request asks before it plans.** "Add a new love interest" decides nothing about how far she reaches, so Ripple now puts that to you: one question with pressable options sized from the script's own scene and act counts, closed by a fixed "Decide for me". A press is the answer and planning continues from it, with the reply box as the write-in. A routine or fully specified change never asks. An option is only ever sent as a message, so a button carries no authority typing would not.
+- **An ambiguous change request asks before it plans.** "Add a new love interest" decides nothing about how far she reaches, so Ripple now puts that to you: one question with pressable options sized from the script's own scene and act counts, closed by a fixed "Decide for me". A press is the answer and planning continues from it, with the reply box as the write-in. A routine or fully specified change never asks.
 
 - **The library batch-deletes scripts.** A checkbox per row, **Select all** over the rows the search shows, and **Delete selected scripts**, removing the chosen scripts whole behind a confirm. New: `POST /api/scripts/batch/delete`. Every list's batch controls also move beside Select all instead of floating at the foot of the page.
 
@@ -47,6 +47,8 @@ All notable changes to Ripple are documented here.
 - **Every setting applies where it is saved, and in whatever else is open.** Saves announce themselves on the page and to other tabs, the Models card swaps its two states in place, and no setting needs a reload.
 
 ### Fixed
+
+- **The screensaver footer reads "Back to Ripple".** "Exit" on a hosted page read as quitting the app rather than returning to it.
 
 - **The plan card stops leaking its own instructions.** A covered scene the plan left out was added back carrying the model-facing words "Not covered by the plan. Say what changes here, or that nothing does.", counted in the changing tally, and rode into drafting as an instruction. The added row now reads "No change planned.", counts as unchanged, and drafts nothing; the push to decide those scenes goes to the model alone, told to restate the plan if any of them should change.
 
