@@ -26,6 +26,23 @@ VENV="$REPO_ROOT/.venv"
 PYTHON="$VENV/bin/python"
 BASE_PORT="${RIPPLE_PORT:-8420}"
 
+# Two ways to run: a desktop and a host. A host (Replit, Render, Fly) names
+# the one port it proxies in PORT and reaches the app across the container
+# boundary, so that run takes the port as given, binds every interface, and
+# wants neither a browser nor the reloader. A desktop sets neither variable
+# and keeps the behaviour it always had: loopback, a scanned port, a browser,
+# and reload on edit. RIPPLE_HOST overrides the bind address on its own.
+SERVED_PORT="${PORT:-}"
+if [ -n "$SERVED_PORT" ]; then
+  HOST="${RIPPLE_HOST:-0.0.0.0}"
+else
+  HOST="${RIPPLE_HOST:-127.0.0.1}"
+fi
+case "$HOST" in
+  127.0.0.1|localhost|::1) HOST_IS_LOOPBACK="yes" ;;
+  *) HOST_IS_LOOPBACK="" ;;
+esac
+
 echo "Ripple  ·  $REPO_ROOT"
 echo
 
@@ -114,40 +131,47 @@ if [ "${1:-}" = "--test" ]; then
   exec "$PYTHON" -m pytest "$@"
 fi
 
-# Find a free port, starting at the default and trying up to twenty above it.
-# The kill above normally clears any same-app holder; one found here anyway
-# (a race, a kill that did not take) is killed and its port taken, never
-# reused, so a stale instance cannot keep serving unnoticed.
 PORT=""
-for offset in $(seq 0 20); do
-  candidate=$((BASE_PORT + offset))
-  holders="$(lsof -ti ":$candidate" -sTCP:LISTEN 2>/dev/null || true)"
-  if [ -z "$holders" ]; then
-    PORT="$candidate"
-    break
-  fi
-  same_app=""
-  for pid in $holders; do
-    if ps -p "$pid" -o command= 2>/dev/null | grep -q "ripple\.web\.app"; then
-      same_app="yes"
-      kill "$pid" 2>/dev/null || true
+if [ -n "$SERVED_PORT" ]; then
+  # A host proxies exactly one port, so scanning past it would publish a
+  # server nothing routes to. Take it as given, and let the bind fail loudly
+  # if something already holds it.
+  PORT="$SERVED_PORT"
+else
+  # Find a free port, starting at the default and trying up to twenty above
+  # it. The kill above normally clears any same-app holder; one found here
+  # anyway (a race, a kill that did not take) is killed and its port taken,
+  # never reused, so a stale instance cannot keep serving unnoticed.
+  for offset in $(seq 0 20); do
+    candidate=$((BASE_PORT + offset))
+    holders="$(lsof -ti ":$candidate" -sTCP:LISTEN 2>/dev/null || true)"
+    if [ -z "$holders" ]; then
+      PORT="$candidate"
+      break
+    fi
+    same_app=""
+    for pid in $holders; do
+      if ps -p "$pid" -o command= 2>/dev/null | grep -q "ripple\.web\.app"; then
+        same_app="yes"
+        kill "$pid" 2>/dev/null || true
+      fi
+    done
+    if [ -n "$same_app" ]; then
+      sleep 1
+      for pid in $(lsof -ti ":$candidate" -sTCP:LISTEN 2>/dev/null || true); do
+        kill -9 "$pid" 2>/dev/null || true
+      done
+      PORT="$candidate"
+      break
     fi
   done
-  if [ -n "$same_app" ]; then
-    sleep 1
-    for pid in $(lsof -ti ":$candidate" -sTCP:LISTEN 2>/dev/null || true); do
-      kill -9 "$pid" 2>/dev/null || true
-    done
-    PORT="$candidate"
-    break
-  fi
-done
 
-if [ -z "$PORT" ]; then
-  echo "No free port between $BASE_PORT and $((BASE_PORT + 20))." >&2
-  echo "Close whatever holds those ports, or set RIPPLE_PORT to another" >&2
-  echo "starting port, then run this script again." >&2
-  exit 1
+  if [ -z "$PORT" ]; then
+    echo "No free port between $BASE_PORT and $((BASE_PORT + 20))." >&2
+    echo "Close whatever holds those ports, or set RIPPLE_PORT to another" >&2
+    echo "starting port, then run this script again." >&2
+    exit 1
+  fi
 fi
 
 echo
@@ -162,24 +186,37 @@ done
 
 URL="http://127.0.0.1:$PORT"
 echo
-echo "Starting Ripple on $URL"
+if [ -n "$HOST_IS_LOOPBACK" ]; then
+  echo "Starting Ripple on $URL"
+else
+  echo "Starting Ripple on $HOST:$PORT"
+fi
 echo "Press Control-C to stop."
 echo
 
 # Open the browser once the server answers, rather than immediately, so the
-# first page load is not a connection error.
-(
-  for _ in $(seq 1 40); do
-    if curl -fsS -o /dev/null "$URL" 2>/dev/null; then
-      open "$URL" 2>/dev/null || true
-      exit 0
-    fi
-    sleep 0.25
-  done
-) &
+# first page load is not a connection error. A run bound past loopback is
+# being served to someone else's browser, so there is none to open here.
+if [ -n "$HOST_IS_LOOPBACK" ]; then
+  (
+    for _ in $(seq 1 40); do
+      if curl -fsS -o /dev/null "$URL" 2>/dev/null; then
+        open "$URL" 2>/dev/null || true
+        exit 0
+      fi
+      sleep 0.25
+    done
+  ) &
+fi
 
 # --reload restarts the server when a Python file changes, so an edit shows
 # up on the next page load. Templates and static assets need no restart at
 # all: templates re-read on render, and every response is sent no-store.
-exec "$PYTHON" -m uvicorn ripple.web.app:app --host 127.0.0.1 --port "$PORT" \
+# A host runs code that no one is editing, and the reloader's file watching
+# costs it memory for nothing, so that run goes without.
+if [ -n "$SERVED_PORT" ]; then
+  exec "$PYTHON" -m uvicorn ripple.web.app:app --host "$HOST" --port "$PORT" \
+    --log-level info
+fi
+exec "$PYTHON" -m uvicorn ripple.web.app:app --host "$HOST" --port "$PORT" \
   --log-level info --reload --reload-dir "$REPO_ROOT/ripple"

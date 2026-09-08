@@ -20,6 +20,8 @@ All notable changes to Ripple are documented here.
 
 ### Changed
 
+- **Ripple runs on a host, not only a desktop.** `PORT` names the exact port and binds every interface, dropping the port scan, the browser, and the reloader; `RIPPLE_HOST` sets the bind address on its own. Both launchers honour them, and a new `.replit` skips the launchers and starts uvicorn on `0.0.0.0` directly. A desktop run sets neither and behaves as it always did: loopback, a scanned port from 8420, a browser, reload on edit.
+
 - **The pre-push hook protects `main`.** It refuses a deletion of `main`, and a push that would drop commits the remote already has, before the docs gates run. GitHub's own protection needs a paid plan on a private repository, so this stands in for it; `--no-verify` goes round it, which makes it a guard against the slip rather than against intent.
 
 - **Ask Ripple opens on a chooser, not the newest script.** Bare `/ask` used to assume the most recently created script, which after any test upload was the wrong one. It now asks which script to work over: every script lists in the sidebar pane with its graph mark and assertion count, and picking one opens its ask surface.

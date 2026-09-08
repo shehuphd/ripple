@@ -19,11 +19,21 @@ runs the test suite instead of the server, forwarding any extra arguments to pyt
 | Environment variable | Effect |
 |---|---|
 | `RIPPLE_PORT` | First port to try instead of 8420. |
+| `PORT` | The exact port to bind, no scanning. Set by a host (Replit, Render, Fly); binds every interface and drops the browser and the reloader. |
+| `RIPPLE_HOST` | Bind address, `127.0.0.1` on a desktop and `0.0.0.0` when `PORT` is set. |
 | `DATABASE_URL` | PostgreSQL connection string instead of the local SQLite file. |
 | `RIPPLE_SECRETS_PATH` | Alternate location for the local credential file. |
 | `RIPPLE_TRACING=off` | Disables TraceAct trace writing. |
 
 On first run the library seeds three bundled demo screenplays, each with its ground-truth production graph already built, so every feature is explorable before you configure a model.
+
+**Running it on a host.** The launchers are built for a desktop: they create a virtual environment, scan for a free port, and open a browser. A container wants none of that, so `.replit` starts the server directly instead:
+
+```bash
+python -m uvicorn ripple.web.app:app --host 0.0.0.0 --port 8000
+```
+
+The bind address decides whether any of it is reachable. A process on `127.0.0.1` answers only from inside the container, which is what a host's "we couldn't reach this app" page means. Either launcher will serve a host too if you set `PORT`. Put the API key in the host's own secret store as `GOOGLE_API_KEY` rather than entering it through Settings: Ripple detects Replit and reads credentials from the environment there, and an environment value wins over the local file. The SQLite database lives in `data/` and goes when the container is rebuilt, taking any graph built there with it.
 
 ## The library
 

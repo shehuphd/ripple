@@ -16,6 +16,7 @@ Every file in the repository and what it does. Directories the application write
 | `LICENSE` | AGPL-3.0. |
 | `launch.command` | macOS launcher: stops any running instance, builds or repairs the venv, starts the server, opens a browser. `--test` runs the suite instead. |
 | `launch.bat` | Windows launcher: the same behaviour through the py launcher, netstat, and PowerShell. |
+| `.replit` | Replit configuration: runs uvicorn directly on `0.0.0.0`, skipping the desktop launchers' venv, port scan, and browser. |
 | `pyproject.toml` | Package metadata, dependencies, pytest and ruff configuration. |
 | `shiplock.toml` | Shiplock docs-vs-code release checks: declared docs, version alignment, architecture and manifest coverage, one declaration per dependency, and an expectation in every test. |
 | `.gitignore` | Excludes runtime state, virtual environments, and local tool settings. |

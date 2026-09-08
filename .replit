@@ -1,0 +1,30 @@
+# Replit configuration.
+#
+# Ripple runs on Replit as a plain uvicorn process. launch.command and
+# launch.bat are desktop launchers: they build a virtual environment, scan
+# for a free port, and open a browser, none of which a container wants, and
+# the venv they build collides with the one Replit's Python module already
+# provides. Both honour PORT and RIPPLE_HOST if you do want them here, but
+# the commands below skip them and start the server directly.
+#
+# The port is the one Replit proxies. Bind 0.0.0.0, not 127.0.0.1: a process
+# on loopback is reachable only from inside the container, which is what the
+# "we couldn't reach this app" page means.
+#
+# Set GOOGLE_API_KEY in Replit Secrets rather than through Settings.
+# ripple/config/secrets.py detects Replit and reads credentials from the
+# environment there, and a value already in the environment wins over the
+# local file. The SQLite database lives under data/ and goes when the
+# container is rebuilt, so treat a graph built here as disposable.
+
+modules = ["python-3.11"]
+
+run = "python -m uvicorn ripple.web.app:app --host 0.0.0.0 --port 8000"
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["sh", "-c", "python -m uvicorn ripple.web.app:app --host 0.0.0.0 --port 8000"]
+
+[[ports]]
+localPort = 8000
+externalPort = 80
