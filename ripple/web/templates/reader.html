@@ -267,7 +267,10 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
 
   <aside class="pane">
     <div class="card">
-      <div class="hd"><h2>Requirements</h2><span class="meta" id="req-meta"></span></div>
+      <div class="hd"><h2>Requirements</h2><span class="meta" id="req-meta"></span>
+        <button class="card-fold" data-fold="req" aria-expanded="true"
+                data-tip="Collapse or expand this card"
+                aria-label="Collapse Requirements">▾</button></div>
       <div id="req-chips" class="chips"></div>
       <div id="requirements"><div class="empty">Select a line in the script.</div></div>
     </div>
@@ -275,7 +278,10 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
       <div class="hd"><h2>Local graph</h2>
         <span class="meta" id="graph-meta"></span>
         <a class="btn sm" id="expand" aria-disabled="true" tabindex="-1"
-           data-tip="Select a line with graph edges to open it in the full graph">Expand</a></div>
+           data-tip="Select a line with graph edges to open it in the full graph">Expand</a>
+        <button class="card-fold" data-fold="graph" aria-expanded="true"
+                data-tip="Collapse or expand this card"
+                aria-label="Collapse Local graph">▾</button></div>
       <div id="graph"><div class="empty">Select a line in the script.</div></div>
     </div>
     <div class="card">
@@ -283,7 +289,10 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
         <span class="meta" id="cont-meta"></span>
         <a class="btn sm" href="/findings?script={{ script.id }}"
            data-tip="Every finding on this script, including the ones already
-                     decided">All findings</a></div>
+                     decided">All findings</a>
+        <button class="card-fold" data-fold="continuity" aria-expanded="true"
+                data-tip="Collapse or expand this card"
+                aria-label="Collapse Continuity">▾</button></div>
       <div id="continuity">
         <div class="empty">Select a line in the script.</div></div>
     </div>

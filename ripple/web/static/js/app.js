@@ -236,7 +236,13 @@ function setUpPaneToggles() {
       rememberPane('side', collapsed);
       window.dispatchEvent(new Event('resize'));
     });
-    compact.addEventListener('change', () => apply(collapsed));
+    // Crossing the boundary resets the state: entering narrow shuts the
+    // drawer so it never covers the page after a resize, and returning to
+    // wide restores the remembered sidebar preference.
+    compact.addEventListener('change', () => {
+      collapsed = narrow() ? true : paneIsCollapsed('side');
+      apply(collapsed);
+    });
     window.addEventListener('resize', () => apply(collapsed));
     // Tapping the backdrop shuts the drawer, which is what a tap outside a
     // drawer means everywhere else.
@@ -264,6 +270,25 @@ function setUpPaneToggles() {
       apply();
       rememberPane(key, collapsed);
       window.dispatchEvent(new Event('resize'));
+    });
+  }
+
+  // A card folds down to its header, remembered per card across scripts. Most
+  // useful where the pane stacks under the script, but available at any width.
+  for (const button of document.querySelectorAll('[data-fold]')) {
+    const card = button.closest('.card');
+    if (!card) continue;
+    const key = `fold:${button.dataset.fold}`;
+    let folded = paneIsCollapsed(key);
+    const apply = () => {
+      card.classList.toggle('folded', folded);
+      button.setAttribute('aria-expanded', String(!folded));
+    };
+    apply();
+    button.addEventListener('click', () => {
+      folded = !folded;
+      apply();
+      rememberPane(key, folded);
     });
   }
 }

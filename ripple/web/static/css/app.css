@@ -105,7 +105,10 @@ button{font:inherit}
 .bar h1{font-size:16px;font-weight:600;margin:0;white-space:nowrap}
 .bar .sub{color:var(--t3);font-size:13px;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis}
-.bar .right{margin-left:auto;display:flex;align-items:center;gap:10px;flex:0 0 auto}
+/* The toolbar buttons reflow onto more rows as the window narrows, so the
+   last one is never clipped off the edge. On a wide bar they sit right. */
+.bar .right{margin-left:auto;display:flex;align-items:center;gap:10px;
+  flex-wrap:wrap;justify-content:flex-end;row-gap:8px;min-width:0}
 .search{position:relative}
 .search input{background:var(--inset);border:.5px solid var(--bd2);border-radius:7px;
   color:var(--t1);padding:7px 11px 7px 30px;font:inherit;font-size:13px;width:290px}
@@ -192,6 +195,16 @@ a.chip:hover{border-color:var(--ac);color:var(--t1)}
 .card .hd{display:flex;align-items:center;gap:9px;margin-bottom:12px}
 .card .hd h2{font-size:14px;font-weight:600;margin:0}
 .card .hd .meta{margin-left:auto;font-size:12px;color:var(--t3)}
+/* Each right-pane card folds to its header, so at a narrow width, where the
+   pane stacks under the script, the reader can reclaim the vertical space. */
+.card-fold{background:none;border:0;color:var(--t3);cursor:pointer;
+  padding:3px 6px;border-radius:5px;font-size:11px;line-height:1;flex:0 0 auto;
+  transition:transform .15s}
+.card-fold:hover{background:var(--raised);color:var(--t1)}
+.card.folded > :not(.hd){display:none}
+.card.folded .hd{margin-bottom:0}
+.card.folded .card-fold{transform:rotate(-90deg)}
+@media (prefers-reduced-motion:reduce){.card-fold{transition:none}}
 .cards{display:grid;gap:14px}
 .two{grid-template-columns:1fr 1fr}
 @media(max-width:1100px){.two{grid-template-columns:1fr}}
