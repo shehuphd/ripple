@@ -114,6 +114,8 @@ Every file in the repository and what it does. Directories the application write
 | `services/scenes.py` | Scene insertion, omission (OMITTED, reversible), and restoration. |
 | `services/spend.py` | Token ledger and the hard budget gate every call site checks. |
 | `services/settings.py` | Credential entry and validation, main and fallback model selection. |
+| `services/originals.py` | Retention of an imported script's original file: a local copy for re-download and re-upload, mirrored to Replit Object Storage in a deployment, dropped when the script is deleted. |
+| `services/replit_store.py` | Best-effort Replit Object Storage: a no-op off Replit, guarded SDK import, blob put, get, exists, and delete. |
 | `services/retrieval.py` | The evidence packet one question is answered from: keyword retrieval with alias and diacritic folding, the entity roster, and the ordered scene list. |
 | `services/agent.py` | Ask Ripple's agent loop: read-only tools plus a quarantined drafter, sentinel fencing, the minimal-edit guard, the confidence floor, and per-turn ceilings. Accept and undo are not tools. |
 | `services/conversations.py` | Ask Ripple threads: stored turns replayed at no cost, thread history for the next turn, the applied summary, and rejection of abandoned proposals. |
@@ -162,6 +164,7 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_drafts.py` | Draft linking and carry-over on a one-line revision. |
 | `tests/test_renames.py` | Rename detection and application across drafts. |
 | `tests/test_scenes.py` | Scene insertion, omission, and restoration. |
+| `tests/test_originals.py` | Original retention: the local round trip, the Replit gate's no-ops, and cleanup on delete. |
 | `tests/test_continuity.py` | Evidence retrieval, orphaned-reference detection, and cast-rename detection. |
 | `tests/test_continuity_judge.py` | Continuity reply verification and prompt assembly. |
 | `tests/test_diff.py` | Diff engine identity and grouping rules. |

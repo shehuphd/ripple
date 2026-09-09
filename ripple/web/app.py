@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import mimetypes
 import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -30,7 +31,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
@@ -100,7 +101,15 @@ from ripple.graph.fixtures import seed_demo_graphs
 from ripple.graph.layout import DEPARTMENT_ORDER, script_layout
 from ripple.graph.layout import layout as graph_layout
 from ripple.llm import ProviderError, get_provider, get_query_provider
-from ripple.services import agent, authoring, changeset, conversations, pricing, spend
+from ripple.services import (
+    agent,
+    authoring,
+    changeset,
+    conversations,
+    originals,
+    pricing,
+    spend,
+)
 from ripple.services import draft_report as report_service
 from ripple.services import drafts as drafts_service
 from ripple.services import duplicates as duplicates_service
@@ -752,6 +761,7 @@ def reader(request: Request, script_id: str, session: Session = Depends(get_sess
             "model": model,
             "pending_scenes": pending,
             "has_graph": has_graph,
+            "has_original": originals.has_original(script.id),
             "review_warnings": review_warnings,
             "counts": sidebar_counts(session),
         },
@@ -1857,6 +1867,9 @@ async def upload_script(
             },
         )
     script = persist_import(session, result)
+    # Keep the file itself, not only the parse: the reader can hand it back for
+    # download and a re-upload. Best-effort, so it never fails an import.
+    originals.keep_original(script.id, data)
     return {
         "id": str(script.id),
         "title": script.title,
@@ -1985,6 +1998,7 @@ def record_opened(script_id: str, session: Session = Depends(get_session)):
 def remove_script(script_id: str, session: Session = Depends(get_session)):
     """Delete one script and everything under it."""
     counts = delete_script(session, _uuid(script_id))
+    originals.forget_original(_uuid(script_id))
     return counts.__dict__
 
 
@@ -2004,6 +2018,7 @@ def batch_delete_scripts(ids: str = Form(...), session: Session = Depends(get_se
         if script is None:
             continue
         counts = delete_script(session, script.id)
+        originals.forget_original(script.id)
         scenes += counts.scenes
         entities += counts.entities
         assertions += counts.assertions
@@ -2621,6 +2636,34 @@ def export_script(script_id: str, session: Session = Depends(get_session)):
         headers={
             "Content-Disposition": f'attachment; filename="{slug}.fountain"'
         },
+    )
+
+
+@app.get("/api/scripts/{script_id}/original")
+def download_original(script_id: str, session: Session = Depends(get_session)):
+    """The original imported file, kept on import.
+
+    Served from the local copy, falling back to the durable Replit copy in a
+    deployment whose filesystem has since recycled. A 404 means the script was
+    imported before retention existed, or its file was never kept.
+    """
+    script = session.get(Script, _uuid(script_id))
+    if script is None:
+        raise HTTPException(404, "No such script")
+    blob = originals.read_original(script.id)
+    if blob is None:
+        raise HTTPException(404, "No original was kept for this script")
+    latest = session.scalars(
+        select(Import)
+        .where(Import.script_id == script.id)
+        .order_by(Import.imported_at.desc())
+    ).first()
+    filename = (latest.source_name if latest else None) or "script"
+    media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    return Response(
+        blob,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

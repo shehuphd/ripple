@@ -63,6 +63,10 @@ def client(tmp_path, monkeypatch, template_db):
     monkeypatch.setenv("RIPPLE_TRACING", "off")
     monkeypatch.setenv("RIPPLE_SECRETS_PATH", str(tmp_path / "no-secrets.env"))
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    # Kept originals write under the throwaway tmp dir, never the repo's data/,
+    # and no upload test reaches Replit.
+    monkeypatch.delenv("REPL_ID", raising=False)
+    monkeypatch.setattr(web.originals, "ORIGINALS_DIR", tmp_path / "originals")
     with TestClient(web.app) as instance:
         yield instance
 
@@ -3675,6 +3679,45 @@ class TestAuthoring:
 
         result = import_screenplay(response.text.encode(), "again.fountain")
         assert result.accepted, result.rejection_message
+
+
+class TestOriginalRetention:
+    """The imported file is kept and handed back verbatim, for re-upload."""
+
+    def _import(self, client, payload) -> str:
+        # Force past dedup: the seeded corpus already holds this screenplay,
+        # and the test only needs a fresh import whose original was kept.
+        response = client.post(
+            "/api/scripts",
+            files={"file": ("keeper.fountain", payload)},
+            data={"force": "1"},
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["id"]
+
+    def test_a_kept_original_downloads_back_verbatim(
+        self, client, night_freight_fountain
+    ):
+        script_id = self._import(client, night_freight_fountain)
+        response = client.get(f"/api/scripts/{script_id}/original")
+        assert response.status_code == 200
+        assert response.content == night_freight_fountain
+        assert "keeper.fountain" in response.headers["content-disposition"]
+
+    def test_the_reader_offers_the_original_after_import(
+        self, client, night_freight_fountain
+    ):
+        script_id = self._import(client, night_freight_fountain)
+        page = client.get(f"/scripts/{script_id}").text
+        assert f"/api/scripts/{script_id}/original" in page
+
+    def test_a_script_imported_before_retention_has_no_original(self, client):
+        # A seeded library script; nothing was kept for it, so no button and a
+        # download 404s rather than inventing a file.
+        script_id = _first_script(client)
+        page = client.get(f"/scripts/{script_id}").text
+        assert f"/api/scripts/{script_id}/original" not in page
+        assert client.get(f"/api/scripts/{script_id}/original").status_code == 404
 
 
 class TestScreensaverRoutes:

@@ -33,7 +33,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/python -
 
 **See what the name means.** With the app open, press `Ctrl` `Opt` `Space`. The tab becomes a lake: stones drop, ripples spread, and as each wavefront passes a point a production entity surfaces there. Settings holds three looks for it: grey-blue water, dark, and warm paper. That is the idea the tool is built on, drawn rather than explained. Escape brings the app back where you left it, down to the scroll position.
 
-**Open a script.** Three screenplays are already in the library, each with its graph built, so there is something to work on before you configure anything. Drop a Fountain, Final Draft, PDF, plain-text, or stage-play file on the library to import your own, or press **New script** and write one in the page.
+**Open a script.** Three screenplays are already in the library, each with its graph built, so there is something to work on before you configure anything. Drop a Fountain, Final Draft, PDF, plain-text, or stage-play file on the library to import your own, or press **New script** and write one in the page. Ripple keeps the file you import, so **Original** in the reader's toolbar hands it back for download and re-upload.
 
 **Add a key.** Settings → Models: paste a Google AI Studio key, press Validate, then pick a main model. The key is checked against the provider's own models endpoint and stored in a local owner-only file, never in the database. Everything that does not call a model, importing, reading, writing, exporting, the diff engine, works without this step.
 

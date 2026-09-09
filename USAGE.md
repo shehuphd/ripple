@@ -54,7 +54,7 @@ Each row has a checkbox and a **Select all** control beside the table, which tic
 
 The outcome shows on the library row. **Needs review** means the importer wants a human to check the parse before a graph is built on it: opening the script shows a banner naming each warning, and **Mark reviewed** closes the review once you've looked, with the warnings staying on the row. A rejected import's reason shows in the upload banner.
 
-A rejected import changes nothing. Deleting a script first shows a deletion preview counting everything that goes with it: scenes, units, entities, assertions, findings, and traces.
+A rejected import changes nothing. Deleting a script first shows a deletion preview counting everything that goes with it: scenes, units, entities, assertions, findings, and traces. The kept original file goes too.
 
 ## Settings
 
@@ -176,6 +176,8 @@ How an edit saves depends on whether a graph exists. With no graph there is no r
 The title renames in place: click it in the reader's toolbar, type, and Enter or leaving the field saves it. The script's id, and every link to it, stays.
 
 **Export** in the reader's toolbar downloads the script as Fountain plain text. A heading already in slugline form prints as it is, any other prints forced with a leading period, and the file imports back as the same scenes and lines, so a script written in Ripple is never locked in.
+
+**Original**, beside Export, downloads the exact file you imported, byte for byte, so you can re-upload it or keep it. Ripple keeps the original on import; the button shows only for a script whose file was kept, so it is absent on a script imported before this or on one written in Ripple from scratch. On a Replit deployment the original is also stored in Object Storage, which is what keeps it across a redeploy; anywhere else the local copy is the one served. Deleting the script removes the kept file.
 
 ## Adding and omitting scenes
 

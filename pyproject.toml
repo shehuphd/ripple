@@ -29,6 +29,11 @@ dev = [
     "httpx",
     "shiplock>=0.3,<1",
 ]
+# The Replit deployment installs this so imported originals mirror to Object
+# Storage; the import is guarded, so the base install and tests never need it.
+replit = [
+    "replit-object-storage>=1.0,<2",
+]
 
 [project.urls]
 Changelog = "https://github.com/shehuphd/ripple/blob/main/CHANGELOG.md"

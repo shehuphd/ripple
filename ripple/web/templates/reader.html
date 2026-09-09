@@ -52,6 +52,10 @@ scenes are unchanged">Draft {{ script.draft_number }} · open draft
      data-tip="Ask questions or request changes over this script's graph">≋ Ask Ripple</a>
   <a class="btn" href="/api/scripts/{{ script.id }}/export"
      data-tip="Download the script as Fountain plain text">Export</a>
+  {% if has_original %}
+  <a class="btn" href="/api/scripts/{{ script.id }}/original"
+     data-tip="Download the original file you imported">Original</a>
+  {% endif %}
   <button class="chip{{ '' if findings else ' hide' }}" id="finding-jump"
           data-tip="Go to the next line a continuity finding cites">
     <i class="dot medium"></i><span id="finding-label"
