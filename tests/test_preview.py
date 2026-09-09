@@ -133,6 +133,9 @@ class FakeJudge:
         self.calls = 0
         self.continuity_calls = 0
         self.continuity_findings = []
+        self.extraction_calls = 0
+        self.extraction_entities = []
+        self.extraction_assertions = []
 
     def is_configured(self):
         return True
@@ -154,9 +157,37 @@ class FakeJudge:
     def is_continuity(prompt):
         return prompt.startswith("Check the proposed edit")
 
+    @staticmethod
+    def is_extraction(prompt):
+        """Both the extraction and judge prompts open with the entity rules;
+        only the judge's carries the edited-units payload. The synthesis and
+        query prompts open with different text and are left to the judge
+        branch, where a queued error still raises."""
+        return (
+            prompt.startswith("Entity types, and nothing else:")
+            and "edited_units" not in prompt
+        )
+
+    def extraction_reply(self, model_id):
+        self.extraction_calls += 1
+        return GenerationResult(
+            text=json.dumps(
+                {
+                    "entities": self.extraction_entities,
+                    "assertions": self.extraction_assertions,
+                }
+            ),
+            model_id=model_id,
+            provider=self.name,
+            input_tokens=120,
+            output_tokens=10,
+        )
+
     def generate(self, model_id, prompt, **kwargs):
         if self.is_continuity(prompt):
             return self.continuity_reply(model_id)
+        if self.is_extraction(prompt):
+            return self.extraction_reply(model_id)
         self.calls += 1
         if self.errors:
             raise self.errors.pop(0)
@@ -775,6 +806,8 @@ class NewEntityJudge(FakeJudge):
     def generate(self, model_id, prompt, **kwargs):
         if self.is_continuity(prompt):
             return self.continuity_reply(model_id)
+        if self.is_extraction(prompt):
+            return self.extraction_reply(model_id)
         self.calls += 1
         payload = judge_payload(prompt)
         unit_id = payload["edited_units"][0]["unit_id"]
@@ -814,6 +847,66 @@ class NewEntityJudge(FakeJudge):
             input_tokens=500,
             output_tokens=80,
         )
+
+
+class TestExtractionPass:
+    """The dedicated extraction over the proposed text catches an element the
+    judge misses: a prop the edit introduces that the graph does not hold."""
+
+    def test_a_new_prop_the_judge_misses_surfaces_from_the_extraction(
+        self, session
+    ):
+        """The judge holds every stored fact and reports no new entity; the
+        extraction pass finds the added prop and it reaches the diff."""
+        world = build_world(session)
+        judge = FakeJudge()
+        judge.extraction_entities = [
+            {"id": "m1", "type": "prop", "name": "margarita", "conf": 0.9, "attrs": []}
+        ]
+        judge.extraction_assertions = [
+            {"s": "scene", "p": "requires", "o": "m1", "unit": "u1", "conf": 0.9}
+        ]
+        result = preview_changes(
+            session,
+            edit_for(
+                world,
+                "The emerald gown hangs ready. She sips from her margarita.",
+            ),
+            judge,
+            "fake-judge",
+        )
+        added = [(edge.predicate, edge.display_object) for edge in result.diff.added]
+        assert ("requires", "margarita") in added
+        assert judge.extraction_calls == 1
+
+    def test_a_prop_already_in_the_graph_is_not_re_added(self, session):
+        """An extraction that re-finds the gown adds nothing: the judge owns
+        an entity the graph already holds."""
+        world = build_world(session)
+        judge = FakeJudge()
+        judge.extraction_entities = [
+            {
+                "id": "g1",
+                "type": "wardrobe",
+                "name": "Emerald gown",
+                "conf": 0.9,
+                "attrs": [],
+            }
+        ]
+        judge.extraction_assertions = [
+            {"s": "g1", "p": "appears_in", "o": "scene", "unit": "u1", "conf": 0.9}
+        ]
+        result = preview_changes(session, edit_for(world), judge, "fake-judge")
+        assert result.diff.added == []
+
+    def test_the_extraction_call_is_audited_under_its_own_purpose(self, session):
+        world = build_world(session)
+        preview_changes(session, edit_for(world), FakeJudge(), "fake-judge")
+        call = session.scalars(
+            select(ModelCall).where(ModelCall.purpose == "extract")
+        ).one()
+        assert call.outcome == "ok"
+        assert call.change_set_id is not None
 
 
 class TestJudgedEntityNaming:

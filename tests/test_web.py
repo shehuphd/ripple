@@ -679,10 +679,12 @@ class TestTracesAndBudget:
             data={"proposed_text": "A bicycle leans against the gate."},
         )
         ledger = client.get("/api/settings/budget").json()
-        # One judge call plus one continuity call: the seeded graph gives the
-        # edited unit stored facts, so the evidence packet is never empty.
-        assert ledger["calls"] == 2
+        # A judge call, an extraction pass over the proposed text, and one
+        # continuity call: the seeded graph gives the edited unit stored facts,
+        # so the evidence packet is never empty.
+        assert ledger["calls"] == 3
         assert ledger["by_purpose"].get("judge", 0) > 0
+        assert ledger["by_purpose"].get("extract", 0) > 0
         assert ledger["by_purpose"].get("continuity", 0) > 0
 
     def test_a_spent_budget_refuses_the_preview_with_a_next_step(

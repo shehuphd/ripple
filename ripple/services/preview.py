@@ -68,7 +68,18 @@ from ripple.extraction.judge import (
     build_judge_prompt,
     validate_judgement,
 )
-from ripple.extraction.validate import MalformedResponse
+from ripple.extraction.prompt import (
+    OUTPUT_SCHEMA,
+    PROMPT_VERSION,
+    SYSTEM_PROMPT,
+    build_prompt,
+)
+from ripple.extraction.validate import (
+    MalformedResponse,
+    ValidatedAssertion,
+    ValidatedEntity,
+    validate_response,
+)
 from ripple.graph.continuity import (
     CastRename,
     EvidencePacket,
@@ -343,6 +354,14 @@ def _preview(
             audit,
         )
         used_models.add(model_used)
+        # A dedicated extraction over the proposed text catches what the
+        # judgement misses: an element the edit introduces that the graph does
+        # not hold. Its new items join the judgement's own, deduped by name
+        # and type, so they surface in the diff and apply on accept.
+        new_entities, new_assertions = _extract_new_entities(
+            session, script, scene, scene_edits, provider, model_id, audit
+        )
+        _merge_new_items(judgement, new_entities, new_assertions)
         judgements.append(judgement)
         scene_accepted, scene_proposed = _edges_from_verdicts(
             session, scene, judgement, listed_assertions, labels
@@ -1086,6 +1105,222 @@ def _truncation_message(model_id: str, result: Any) -> str:
             "before the answer finishes."
         )
     return message
+
+
+def _extract_new_entities(
+    session: Session,
+    script: Script,
+    scene: Scene,
+    scene_edits: list[tuple[ScriptUnit, str]],
+    provider: LLMProvider,
+    model_id: str,
+    audit: list[ModelCall],
+) -> tuple[list[ValidatedEntity], list[ValidatedAssertion]]:
+    """Extract entities the edit introduces that the graph does not hold.
+
+    The judge verifies stored facts; asked to also extract what an edit adds,
+    it reliably misses a new prop ("she sips from her margarita"), and because
+    accept stamps the scene extracted, the miss is lost until a forced
+    rebuild. This runs the extraction model the graph build uses over the
+    edited lines' proposed text and keeps only what the graph does not already
+    have, so a new element surfaces in the preview and applies on accept.
+
+    Read-only: entities are checked against the graph, never created here.
+    A failed pass returns nothing rather than breaking a preview whose
+    judgement already ran.
+    """
+    prompt_units = [
+        (f"u{index + 1}", unit.unit_type, proposed)
+        for index, (unit, proposed) in enumerate(scene_edits)
+    ]
+    unit_by_short = {
+        f"u{index + 1}": unit.id for index, (unit, _) in enumerate(scene_edits)
+    }
+    unit_texts = {short: text for short, _, text in prompt_units}
+    prompt = build_prompt(scene.heading, scene.display_scene_number, prompt_units)
+    try:
+        call, result = _generate_verdicts(
+            session,
+            script,
+            scene,
+            prompt,
+            provider,
+            model_id,
+            audit,
+            purpose="extract",
+            prompt_version=PROMPT_VERSION,
+            system=SYSTEM_PROMPT,
+            schema=OUTPUT_SCHEMA,
+        )
+    except (PreviewFailed, PreviewRefused):
+        # A new-entity pass that cannot run leaves the judgement's own new
+        # items in place; the preview is not blocked on it. The failing call
+        # is already audited by _generate_verdicts on its error path.
+        return [], []
+
+    # The billed call is audited whatever it yields, the way a judgement is:
+    # _generate_verdicts records fields but leaves the row to its caller.
+    kept_entities, kept_assertions = _kept_new_items(
+        session, script, scene, result, set(unit_by_short), unit_by_short, unit_texts
+    )
+    call.validation_json = {
+        "kept_entities": len(kept_entities),
+        "kept_assertions": len(kept_assertions),
+    }
+    session.add(call)
+    session.flush()
+    return kept_entities, kept_assertions
+
+
+def _kept_new_items(
+    session: Session,
+    script: Script,
+    scene: Scene,
+    result: Any,
+    valid_units: set[str],
+    unit_by_short: dict[str, Any],
+    unit_texts: dict[str, str],
+) -> tuple[list[ValidatedEntity], list[ValidatedAssertion]]:
+    """What an extraction reply adds that the graph does not already hold."""
+    if result.truncated:
+        return [], []
+    try:
+        report = validate_response(result.text, valid_units, unit_texts=unit_texts)
+    except MalformedResponse:
+        return [], []
+
+    # Only entities the graph does not already hold. An extraction over the
+    # whole edited line re-finds the bulb and the duffel that are already
+    # entities; those are the judge's to verify, not this pass's to add. An
+    # id that resolves to an existing entity is remembered by that entity's
+    # name, so an assertion between a new entity and an existing one still
+    # resolves.
+    kept_entities: list[ValidatedEntity] = []
+    kept_ids: set[str] = set()
+    existing_name: dict[str, str] = {}
+    for entity in report.entities:
+        found = _existing_entity_name(
+            session, script.id, entity.entity_type, entity.canonical_name
+        )
+        if found is not None:
+            existing_name[entity.local_id] = found
+            continue
+        kept_entities.append(entity)
+        kept_ids.add(entity.local_id)
+    if not kept_entities:
+        return [], []
+
+    # Keep an assertion only when it introduces one of the new entities. An
+    # endpoint that named an existing entity is rewritten to that entity's
+    # name, which is how _edges_from_verdicts resolves an existing endpoint of
+    # a new edge; the cited unit is mapped to the real id the edit carries.
+    kept_assertions: list[ValidatedAssertion] = []
+    for assertion in report.assertions:
+        for side in ("subject", "object"):
+            kind = getattr(assertion, f"{side}_kind")
+            local_id = getattr(assertion, f"{side}_local_id")
+            if kind == "entity" and local_id in existing_name:
+                setattr(assertion, f"{side}_local_id", existing_name[local_id])
+        touches_new = (
+            assertion.subject_kind == "entity"
+            and assertion.subject_local_id in kept_ids
+        ) or (
+            assertion.object_kind == "entity"
+            and assertion.object_local_id in kept_ids
+        )
+        if not touches_new:
+            continue
+        short = assertion.source_unit_id
+        if short not in unit_by_short:
+            continue
+        assertion.source_unit_id = str(unit_by_short[short])
+        kept_assertions.append(assertion)
+    if not kept_assertions:
+        return [], []
+    referenced = {a.subject_local_id for a in kept_assertions} | {
+        a.object_local_id for a in kept_assertions
+    }
+    kept_entities = [e for e in kept_entities if e.local_id in referenced]
+    return kept_entities, kept_assertions
+
+
+def _existing_entity_name(
+    session, script_id, entity_type: str, name: str
+) -> str | None:
+    """The canonical name of an active entity of this type and name, or None.
+
+    Matches on the normalized name and on any recorded alias, so the pass does
+    not re-add an entity the graph holds under a different surface form.
+    """
+    key = normalize(name)
+    direct = session.scalar(
+        select(Entity.canonical_name).where(
+            Entity.script_id == script_id,
+            Entity.entity_type == entity_type,
+            Entity.normalized_name == key,
+        )
+    )
+    if direct is not None:
+        return direct
+    return session.scalar(
+        select(Entity.canonical_name)
+        .join(EntityAlias, EntityAlias.entity_id == Entity.id)
+        .where(
+            Entity.script_id == script_id,
+            Entity.entity_type == entity_type,
+            EntityAlias.normalized_alias == key,
+        )
+    )
+
+
+def _merge_new_items(
+    judgement: JudgementReport,
+    new_entities: list[ValidatedEntity],
+    new_assertions: list[ValidatedAssertion],
+) -> None:
+    """Fold the extraction pass's new items into the judgement's own.
+
+    An entity the judge already proposed is not added twice, matched by type
+    and name. The extraction ids are namespaced so they cannot collide with
+    the judge's, and every kept assertion's endpoints are moved to the new
+    ids.
+    """
+    if not new_entities:
+        return
+    seen = {
+        (entity.entity_type, normalize(entity.canonical_name))
+        for entity in judgement.new_entities
+    }
+    remap: dict[str, str] = {}
+    added: list[ValidatedEntity] = []
+    for entity in new_entities:
+        key = (entity.entity_type, normalize(entity.canonical_name))
+        if key in seen:
+            continue
+        seen.add(key)
+        new_local = f"x:{entity.local_id}"
+        remap[entity.local_id] = new_local
+        entity.local_id = new_local
+        added.append(entity)
+    if not added:
+        return
+    kept_local_ids = {entity.local_id for entity in added}
+    for assertion in new_assertions:
+        for side in ("subject", "object"):
+            kind = getattr(assertion, f"{side}_kind")
+            local_id = getattr(assertion, f"{side}_local_id")
+            if kind == "entity" and local_id in remap:
+                setattr(assertion, f"{side}_local_id", remap[local_id])
+        touches = (
+            assertion.subject_kind == "entity"
+            and assertion.subject_local_id in kept_local_ids
+        ) or (
+            assertion.object_kind == "entity"
+            and assertion.object_local_id in kept_local_ids
+        )
+        if touches:
+            judgement.new_assertions.append(assertion)
+    judgement.new_entities.extend(added)
 
 
 def _generate_verdicts(
