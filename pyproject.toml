@@ -33,6 +33,7 @@ dev = [
 # Storage; the import is guarded, so the base install and tests never need it.
 replit = [
     "replit-object-storage>=1.0,<2",
+    "psycopg[binary]>=3.1,<4",
 ]
 
 [project.urls]

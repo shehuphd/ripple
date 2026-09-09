@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-09 09:23:48 UTC
+Last updated: 2026-09-09 10:46:12 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `.venv`) are gitignored and not listed.
 
@@ -12,6 +12,7 @@ Every file in the repository and what it does. Directories the application write
 | `USAGE.md` | The full manual: every screen, control, and error code. |
 | `ARCHITECTURE.md` | System structure, data stores, integrations, a STRuFO run-through, and the domain glossary. |
 | `CHANGELOG.md` | Release history, newest first. |
+| `BUGS.md` | Known issues: bugs fixed and limitations still open, a short index into the changelog and history. |
 | `MANIFEST.md` | This file. |
 | `registry/PROMPTS.md` | The prompt registry: every live model-facing prompt version, where its text lives, and what changed between versions. Enforced by `tests/test_docs.py`. |
 | `LICENSE` | AGPL-3.0. |
@@ -63,7 +64,7 @@ Every file in the repository and what it does. Directories the application write
 | `db/ids.py` | Identifier coercion: strings to UUIDs, shared by routes, payloads, and stored history. |
 | `db/naming.py` | Entity name normalization, shared by extraction and the change-set service. |
 | `db/repository.py` | Query helpers: persistence, deletion previews, counts, shared graph labels. |
-| `db/session.py` | Engine and session setup: SQLite foreign-key and write-ahead pragmas, and a liveness check with recycling on the Postgres pool. |
+| `db/session.py` | Engine and session setup: SQLite foreign-key and write-ahead pragmas, the psycopg 3 driver selected for either Postgres URL scheme, and a liveness check with recycling on the Postgres pool. |
 
 ### Extraction (`ripple/extraction/`)
 

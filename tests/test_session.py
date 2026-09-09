@@ -57,3 +57,21 @@ class TestSqlitePool:
     def test_sqlite_is_left_with_its_default_pool(self):
         engine = db_session.create_db_engine("sqlite+pysqlite:///:memory:")
         assert engine.pool._pre_ping is False
+
+
+class TestDatabaseUrl:
+    """Replit's DATABASE_URL must name the psycopg 3 driver, whichever of the
+    two Postgres schemes it arrives with; either bare form otherwise resolves
+    to psycopg2, which the deployment does not install."""
+
+    def test_the_bare_postgres_scheme_names_psycopg(self, monkeypatch):
+        monkeypatch.setenv("DATABASE_URL", "postgres://u:p@host/db")
+        assert db_session.database_url() == "postgresql+psycopg://u:p@host/db"
+
+    def test_the_postgresql_scheme_names_psycopg(self, monkeypatch):
+        monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host/db")
+        assert db_session.database_url() == "postgresql+psycopg://u:p@host/db"
+
+    def test_an_absent_url_falls_back_to_sqlite(self, monkeypatch):
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        assert db_session.database_url() == db_session.DEFAULT_URL

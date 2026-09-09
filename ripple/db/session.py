@@ -32,12 +32,16 @@ SQLITE_TIMEOUT_SECONDS = 5.0
 def database_url() -> str:
     """Resolve the database URL from the environment.
 
-    Replit supplies DATABASE_URL for its included PostgreSQL. The old
-    postgres:// scheme is rewritten because SQLAlchemy 2 rejects it.
+    Replit supplies DATABASE_URL for its included PostgreSQL. Both the bare
+    `postgres://` and `postgresql://` schemes are rewritten to name the
+    psycopg 3 driver, since either form otherwise resolves to psycopg2, which
+    the deployment does not install.
     """
     url = os.environ.get("DATABASE_URL", "").strip() or DEFAULT_URL
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg://", 1)
+    elif url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
     return url
 
 

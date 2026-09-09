@@ -144,7 +144,7 @@ A merge or an applied rename moves every assertion, attribute, alias, and speake
 | Store | Used for | Notes |
 |---|---|---|
 | SQLite (`data/ripple.db`) | Default, and every test | `ripple/db/session.py` turns on `PRAGMA foreign_keys` per connection, since SQLite ignores them otherwise. |
-| PostgreSQL | The deployed Replit instance | Same SQLAlchemy models as SQLite; `DATABASE_URL` selects it, and a legacy `postgres://` scheme is rewritten to `postgresql+psycopg://`. |
+| PostgreSQL | The deployed Replit instance | Same SQLAlchemy models as SQLite; `DATABASE_URL` selects it, and both the `postgres://` and `postgresql://` schemes are rewritten to `postgresql+psycopg://` so the psycopg 3 driver is used. The pool pre-pings a connection on checkout and recycles it before the idle cutoff, since managed PostgreSQL drops an idle connection. |
 | `data/secrets.env` (local file, mode `0600`) | A provider credential entered in Settings, outside Replit | Never the database; `ripple/config/secrets.py` refuses to write it at all when running on Replit, where Replit Secrets is the only durable store. `RIPPLE_SECRETS_PATH` overrides the location, which is how the test suite isolates itself from a developer's live key. |
 | `data/traces/traces.jsonl` | TraceAct execution traces | Rotates at 32 MiB. |
 
@@ -159,13 +159,14 @@ The database never holds a credential: `AppConfiguration` stores only the select
 | [TraceAct](https://github.com/traceact/traceact) | Execution tracing for import, extraction, preview, accept, undo, and grounded query | Configured once in `ripple/tracing.py`; disabled in tests via `RIPPLE_TRACING=off`. |
 | [traceact-browser](https://github.com/traceact/traceact-browser) | Frontend visibility during development | A developer tool, not a runtime dependency; not in `pyproject.toml`. |
 | [replit-object-storage](https://pypi.org/project/replit.object-storage/) | Durable storage of imported originals in a deployment | The `[replit]` extra. `ripple/services/replit_store.py` imports it only when `REPL_ID` is set, and swallows its absence, so the base install and the test suite never pull it or its Google Cloud Storage dependency. |
+| [psycopg](https://pypi.org/project/psycopg/) | The PostgreSQL driver in a deployment | The `[replit]` extra, installed with its `[binary]` build so no compiler is needed. SQLite needs no driver, so the base install and the test suite never pull it. |
 | `tesseract` / `pdftoppm` (poppler) | OCR for scanned PDFs | Optional system binaries, checked at launch; a scanned PDF is rejected with a stated reason when they're absent rather than silently mis-parsed. |
 
 ## Deployment and infrastructure
 
 Local development runs through `launch.command`, which terminates any Ripple server already running (a stale instance is never reused), verifies Python 3.11+, creates `.venv` or rebuilds it once when its pip cannot answer, marks the virtual environment and `data/` as ignored by Dropbox sync, installs the app in editable mode, and starts `uvicorn` on the first free port from 8420. A port held by another Ripple instance is taken over; a port held by anything else is skipped. `launch.command` and `launch.bat` cover macOS and Windows; `launch.sh` doesn't exist.
 
-The deployment target is Replit Starter Autoscale, which supplies `DATABASE_URL` (PostgreSQL) and holds provider credentials in Replit Secrets. An imported script's original file is mirrored to Replit Object Storage there, since the deployment filesystem doesn't survive a redeploy; the local copy is a within-instance cache the download falls back from. The application hasn't been deployed there yet.
+The deployment target is Replit Autoscale, which supplies `DATABASE_URL` (PostgreSQL) and holds provider credentials in Replit Secrets. An imported script's original file is mirrored to Replit Object Storage there, since the deployment filesystem doesn't survive a redeploy; the local copy is a within-instance cache the download falls back from. It's live at [mohammedshehu.com/ripple](https://mohammedshehu.com/ripple). Managed PostgreSQL closes a connection left idle past its timeout, so the engine pre-pings a pooled connection before use and recycles it before that cutoff, and the first request after a quiet period reconnects rather than returning a server error.
 
 ## Security considerations
 

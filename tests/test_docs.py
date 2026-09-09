@@ -19,6 +19,7 @@ PUBLIC_DOCS = [
     "ARCHITECTURE.md",
     "CHANGELOG.md",
     "MANIFEST.md",
+    "BUGS.md",
 ]
 
 SHIPPED_SOURCE_GLOBS = [
