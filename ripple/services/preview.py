@@ -338,6 +338,10 @@ def _preview(
 
     used_models: set[str] = set()
     listed_total = 0
+    # The extraction pass runs inside the same per-scene loop as the judge, so
+    # its time is measured on its own and reported as its own stage rather than
+    # folded into the judgement's.
+    extract_seconds = 0.0
     for scene_id, scene_edits in sorted(by_scene.items(), key=lambda kv: str(kv[0])):
         scene = session.get(Scene, scene_id)
         listed_assertions, listed_attributes = _listed(session, scene_edits)
@@ -358,10 +362,12 @@ def _preview(
         # judgement misses: an element the edit introduces that the graph does
         # not hold. Its new items join the judgement's own, deduped by name
         # and type, so they surface in the diff and apply on accept.
+        extract_mark = time.perf_counter()
         new_entities, new_assertions = _extract_new_entities(
             session, script, scene, scene_edits, provider, model_id, audit
         )
         _merge_new_items(judgement, new_entities, new_assertions)
+        extract_seconds += time.perf_counter() - extract_mark
         judgements.append(judgement)
         scene_accepted, scene_proposed = _edges_from_verdicts(
             session, scene, judgement, listed_assertions, labels
@@ -373,7 +379,16 @@ def _preview(
                 session, judgement, listed_attributes, operations, labels
             )
         )
-    stage("Judge against the graph", mark)
+    loop_seconds = time.perf_counter() - mark
+    stages.append(
+        {
+            "name": "Judge against the graph",
+            "seconds": round(loop_seconds - extract_seconds, 2),
+        }
+    )
+    stages.append(
+        {"name": "Extract new elements", "seconds": round(extract_seconds, 2)}
+    )
 
     mark = time.perf_counter()
     diff = diff_edges(accepted, proposed_edges)
