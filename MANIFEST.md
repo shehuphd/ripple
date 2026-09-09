@@ -30,7 +30,7 @@ Every file in the repository and what it does. Directories the application write
 |---|---|
 | `ripple/__init__.py` | Package marker and version lookup. |
 | `ripple/text.py` | Display formatters the pages and services share (timestamps). |
-| `ripple/tracing.py` | TraceAct configuration: no automatic input capture, redaction presets. |
+| `ripple/tracing.py` | TraceAct configuration: full-payload capture of inputs and outputs, value-pattern credential redaction, no presets, a local rotating trace log. |
 
 ### Import (`ripple/adapters/`)
 

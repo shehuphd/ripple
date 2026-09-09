@@ -66,7 +66,7 @@ Open **Settings** from the sidebar. It has three sections: Models, Spend, and In
 
 Under the cap, **Billable actions** lists what has been billed, one row per action rather than one per call: a graph build covers its per-scene calls, a ripple preview covers its judge, extraction, continuity, and synthesis calls, and each question stands on its own with the question shown under it. Every column sorts, the table pages, and the search box filters it.
 
-**Interface** holds three groups. **Ask Ripple** governs the agent: whether omitting a scene also drafts patches for the neighbouring scenes or reports what breaks and stops, whether the plan renders before any drafting spend, how many tool calls one turn may make, and whether conversations persist per script. **Reader** chooses what opening a script shows first: the production graph (the default) or the reader itself. **Screensaver** governs the idle takeover: whether it runs at all, how long the tab has to sit untouched first (2, 5, 10 or 20 minutes, or Never, which keeps the shortcut and drops only the idle trigger), the shortcut that opens and closes it on demand (Ctrl+Opt+Space, rebindable to any chord of two modifiers and a key that the writing surface does not already answer; Escape, Space and Enter also close it, while a click throws another stone), and the least time between two thrown stones.
+**Interface** holds three groups. **Ask Ripple** governs the agent: whether omitting a scene also drafts patches for the neighbouring scenes or reports what breaks and stops, whether the plan renders before any drafting spend, how many tool calls one turn may make, and whether conversations persist per script. **Reader** chooses what opening a script shows first: the reader itself (the default) or the production graph. **Screensaver** governs the idle takeover: whether it runs at all, how long the tab has to sit untouched first (2, 5, 10 or 20 minutes, or Never, which keeps the shortcut and drops only the idle trigger), the shortcut that opens and closes it on demand (Ctrl+Opt+Space, rebindable to any chord of two modifiers and a key that the writing surface does not already answer; Escape, Space and Enter also close it, while a click throws another stone), and the least time between two thrown stones.
 
 ## The screensaver
 
@@ -101,7 +101,7 @@ Extraction reads entities (cast, props, wardrobe, locations, and the other depar
 
 ## The graph views
 
-Opening a script shows its production graph: every scene on a two-row spine in script order, every entity in a fixed wedge for its department. Filters narrow by department and minimum confidence.
+The production graph shows every scene on a two-row spine in script order, every entity in a fixed wedge for its department. Filters narrow by department and minimum confidence.
 
 - **Select** a node by clicking it or through the search box; everything unrelated dims, the node's edges draw, and the detail pane fills. Clicking the selected node again, or pressing Escape, deselects.
 - **Zoom and pan** with the mouse wheel, dragging, the on-canvas controls, or the keyboard (arrows pan, `+` and `-` zoom, `0` resets) when the canvas has focus.
