@@ -153,18 +153,23 @@ function renderJudgement(body) {
       `${j.assertion_verdicts === 1 ? '' : 's'} · ${d.changed.length} changed · ` +
       `${d.removed.length} removed · ${held} held · ${d.added.length} new</div>`);
   }
-  parts.push(rows.length
-    ? `<div class="judge-verdicts">${rows.join('')}</div>`
-    : '<div class="empty">Every judged assertion held unchanged.</div>');
+  // Only the verdict rows themselves; the tally above already states how many
+  // held, changed, and dropped, so a prose "every assertion held" or
+  // "dropped nothing" line beneath it only repeats the counts.
+  if (rows.length) {
+    parts.push(`<div class="judge-verdicts">${rows.join('')}</div>`);
+  } else if (!j) {
+    parts.push('<div class="empty">No graph to judge this against.</div>');
+  }
 
-  if (j && j.rejected && j.rejected.length) {
+  if (j && j.dropped) {
+    // The count, not the reasons: why a proposal failed verification is the
+    // pipeline's own vocabulary, and the trace is where it belongs.
     parts.push(
       `<div class="judge-drop"><div class="drop-hd">Verification dropped ` +
-      `${j.dropped || j.rejected.length}</div>` +
-      j.rejected.map((line) => `<div class="drop-row">${esc(line)}</div>`).join('') +
-      '</div>');
-  } else if (j) {
-    parts.push('<div class="judge-drop ok">Verification dropped nothing.</div>');
+      `${j.dropped} ${j.dropped === 1 ? 'proposal' : 'proposals'} the model ` +
+      `made</div><div class="drop-row">The full record is in the trace.` +
+      `</div></div>`);
   }
 
   box.innerHTML = parts.join('');

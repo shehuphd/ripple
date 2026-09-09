@@ -2956,106 +2956,20 @@ def _finding_payload(finding) -> dict:
 # What the judgement card says for each verification drop. The pipeline
 # records rejections as internal codes and audit phrasing; the card gets a
 # plain sentence for each, and the trace keeps the originals.
-DROP_LINES = {
-    "verdict names an unlisted id": (
-        "The model answered about a fact that wasn't under review."
-    ),
-    "duplicate verdict": (
-        "The model answered twice about one fact; the extra answer was ignored."
-    ),
-    "holds on vanished evidence, downgraded to removed": (
-        "A fact was called unchanged, but the line supporting it is gone; "
-        "recorded as removed."
-    ),
-    "removal not visible in the edited lines, downgraded to holds": (
-        "A fact was called removed, but the edited lines don't show that; "
-        "it was kept."
-    ),
-    "removal of an untouched fact the edit never names, downgraded to holds": (
-        "A fact from an untouched line was called removed; the edit never "
-        "mentions it, so it was kept."
-    ),
-    "changed without a new value, treated as holds": (
-        "An attribute was called changed without a new value; it was kept."
-    ),
-    "value not stated in the edited lines, treated as holds": (
-        "An attribute was called changed, but the edited lines never state "
-        "its value; it was kept."
-    ),
-    "not_an_object": "A malformed item in the reply was skipped.",
-    "missing_field": "A new fact arrived incomplete.",
-    "unknown_source_unit": "A new fact cited a line outside this edit.",
-    "bad_confidence": "An item came without a usable confidence.",
-    "below_confidence_floor": "A new fact came with too little confidence.",
-    "unresolved_endpoint": (
-        "A new fact referred to something the reply never introduced."
-    ),
-    "signature_mismatch": (
-        "A new fact connected things in a way the graph's rules don't allow."
-    ),
-    "duplicate_local_id": (
-        "Two new entities shared one id; the later one was skipped."
-    ),
-    "unreferenced": "A new entity appeared with no fact referring to it.",
-    "missing_local_id": "A new entity arrived without an id.",
-    "unknown_entity_type": "A new entity had a type Ripple doesn't track.",
-    "missing_canonical_name": "A new entity arrived without a name.",
-    "pronoun_or_group_name": (
-        "A new entity was named with a pronoun or a group label."
-    ),
-    "descriptive_location": (
-        "A new location's name described the place rather than naming it."
-    ),
-    "sentence_like_name": "A new entity's name read as a sentence.",
-    "missing_key": "A new attribute arrived without a name.",
-    "missing_value": "A new attribute arrived without a value.",
-    "duplicate_key": "Two attributes claimed one key; the later one was skipped.",
-    "attribute missing key or value": (
-        "A new attribute arrived without both a name and a value."
-    ),
-    "attribute below the floor": (
-        "A new attribute came with too little confidence."
-    ),
-    "attribute cites an unshown unit": (
-        "A new attribute cited a line outside this edit."
-    ),
-}
-
-
-def _drop_line(reason: str) -> str:
-    """One rejection reason as the judgement card shows it."""
-    if reason in DROP_LINES:
-        return DROP_LINES[reason]
-    if reason.startswith("unknown verdict"):
-        return "The model gave an answer outside the allowed verdicts."
-    return "Part of the reply didn't fit the expected shape and was skipped."
-
-
 def _judgement_payload(judgement) -> dict[str, Any]:
-    """The judgement summary with its drop reasons reworded for the card.
+    """The judgement summary the card renders.
 
-    summary() is phrased for the model-call audit record. The card gets the
-    same counts, each rejection translated, repeats collapsed with a tally;
-    the full record stays in the trace.
+    The count of dropped items is the reader's business: something the model
+    proposed did not survive verification. Why each one failed is not. Those
+    reasons are the pipeline's own vocabulary (an unresolved endpoint, a
+    downgraded verdict, a signature mismatch), and rendering them as prose
+    put sentences on the card that no reader can act on. The audit row and
+    the trace keep every reason in full.
     """
     summary = judgement.summary()
-    lines: list[str] = []
-    counts: dict[str, int] = {}
-    for _, reason in summary["rejected"]:
-        line = _drop_line(reason)
-        if line not in counts:
-            lines.append(line)
-        counts[line] = counts.get(line, 0) + 1
     summary["dropped"] = len(summary["rejected"])
-    summary["rejected"] = [_tallied(line, counts[line]) for line in lines]
+    del summary["rejected"]
     return summary
-
-
-def _tallied(line: str, count: int) -> str:
-    """A drop line, with how often it repeated when more than once."""
-    if count == 1:
-        return line
-    return f"{line} (twice)" if count == 2 else f"{line} ({count} times)"
 
 
 def _preview_payload(

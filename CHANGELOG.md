@@ -64,6 +64,8 @@ All notable changes to Ripple are documented here.
 
 ### Fixed
 
+- **The judgement card says how many the verification dropped, not why, and stops repeating the tally.** Each dropped proposal was translated into a sentence in the pipeline's own vocabulary ("A new fact referred to something the reply never introduced"), which no reader can act on, and beneath a tally that already read "4 held, 0 new" the card added "Every judged assertion held unchanged" and "Verification dropped nothing". The card now shows the verdict rows, the count of what verification dropped, and a link to the trace where the reasons live.
+
 - **A launcher rebuilds a virtual environment whose pip has stopped answering.** An interrupted upgrade, a moved interpreter, or a half-synced folder leaves a `.venv` whose python runs and whose pip does not, and both launchers went on to install into it and failed with a stack trace. They check pip first now and rebuild the environment when it cannot answer, once per run, so a machine that cannot build a working one says so instead of looping.
 
 - **The docs match the code again.** A Shiplock semantic audit against 1.0.0 found 22 disagreements across all five doc surfaces, most of them older than the release: ARCHITECTURE denied that `launch.bat` exists, named a `fixture.py` that does not, counted four adapters where five are registered, and described neither the second provider registry nor Ask Ripple's agent; the README's format list omitted stage plays; MANIFEST counted 22 tables against 25; USAGE listed three run states against four. Each is corrected, and windowed reads gained the tests they lacked.

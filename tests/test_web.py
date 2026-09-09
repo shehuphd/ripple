@@ -363,13 +363,15 @@ class TestDecisionFlow:
         assert judgement is not None, "a judged preview must carry its verdicts"
         assert "assertion_verdicts" in judgement
         assert "attribute_verdicts" in judgement
-        # The verification-drop list the card renders, one sentence per line.
-        assert isinstance(judgement["rejected"], list)
+        # How many the verification dropped, and nothing about why.
+        assert "dropped" in judgement
+        assert "rejected" not in judgement
 
-    def test_the_drop_list_reads_as_sentences_not_codes(self):
-        """The card must never show internal rejection codes or audit
-        phrasing: each reason is translated, repeats collapse into one line
-        with a tally, and the header count still covers every drop."""
+    def test_the_card_is_told_how_many_dropped_and_never_why(self):
+        """A rejection reason is the pipeline's own vocabulary. Translated
+        into prose it produced sentences no reader can act on ("A new fact
+        referred to something the reply never introduced"), so the payload
+        carries the count alone and the reasons stay in the trace."""
         from ripple.extraction.judge import JudgementReport
 
         report = JudgementReport()
@@ -382,20 +384,17 @@ class TestDecisionFlow:
         ]
         payload = web._judgement_payload(report)
         assert payload["dropped"] == 5
-        assert len(payload["rejected"]) == 4
-        joined = " ".join(payload["rejected"])
-        assert "unresolved_endpoint" not in joined
-        assert "downgraded" not in joined
-        assert "'maybe'" not in joined
-        assert "JSON" not in joined
-        assert (
-            "A fact was called removed, but the edited lines don't show that; "
-            "it was kept. (twice)" in payload["rejected"]
-        )
-        assert (
-            "A new fact referred to something the reply never introduced."
-            in payload["rejected"]
-        )
+        assert "rejected" not in payload
+        rendered = json.dumps(payload)
+        for internal in (
+            "unresolved_endpoint",
+            "downgraded",
+            "maybe",
+            "JSON",
+            "referred to something",
+            "no fact referring to it",
+        ):
+            assert internal not in rendered, internal
 
     def test_accepting_applies_the_text(self, client, judged):
         unit_id, preview = self._preview(client)
