@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import select
 
-from ripple.db.models import ModelCall
+from ripple.db.models import ChangeSet, ModelCall, Script
 from ripple.db.session import create_all, create_db_engine, session_factory
 from ripple.services.spend import (
     BudgetExceeded,
@@ -125,6 +125,46 @@ class TestBillableActions:
         assert len(rows) == 1
         assert rows[0]["action"] == "Ripple preview"
         assert rows[0]["tokens"] == 1000
+
+    def test_a_previews_extract_call_groups_with_the_preview(self, session):
+        """A preview's extraction call carries the change-set id its judge
+        does, so it joins the Ripple preview row instead of reading as a
+        phantom Graph build."""
+        from datetime import datetime, timedelta
+
+        script = Script(title="Ledger", import_status="accepted", current_version=1)
+        session.add(script)
+        session.flush()
+        change_set = ChangeSet(
+            script_id=script.id, kind="edit", base_script_version=1
+        )
+        session.add(change_set)
+        session.flush()
+
+        start = datetime(2026, 9, 1, 10, 0)
+        self.stamp(
+            session, "judge", start, script.id, tokens=300, change_set_id=change_set.id
+        )
+        self.stamp(
+            session,
+            "extract",
+            start + timedelta(seconds=4),
+            script.id,
+            tokens=400,
+            change_set_id=change_set.id,
+        )
+        self.stamp(
+            session,
+            "continuity",
+            start + timedelta(seconds=8),
+            script.id,
+            tokens=500,
+            change_set_id=change_set.id,
+        )
+        rows = actions(session)
+        assert [row["action"] for row in rows] == ["Ripple preview"]
+        assert rows[0]["tokens"] == 1200
+        assert rows[0]["call_count"] == 3
 
     def test_each_question_is_its_own_row(self, session):
         from datetime import datetime, timedelta

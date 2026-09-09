@@ -124,11 +124,13 @@ def actions(session: Session) -> list[dict]:
     """The ledger grouped by user action, newest first.
 
     A graph build is one row covering its per-scene calls, a ripple preview
-    one row covering its judge, continuity, and synthesis calls, and an ask
-    one row per question. Extraction calls are clustered by script and by
-    time rather than by run id, so a build whose run row has since gone still
-    reads as one action. The per-call record stays in `model_calls` and on
-    the Traces page.
+    one row covering its judge, extraction, continuity, and synthesis calls,
+    and an ask one row per question. A build's extraction calls are clustered
+    by script and by time rather than by run id, so a build whose run row has
+    since gone still reads as one action; a preview's extraction call carries
+    the change-set id its judge does, so it groups with the preview rather than
+    reading as a build of its own. The per-call record stays in `model_calls`
+    and on the Traces page.
     """
     from ripple.services import pricing
 
@@ -155,17 +157,20 @@ def actions(session: Session) -> list[dict]:
                 return entry
         return None
 
-    # A build is a burst of extraction calls, and a preview is a burst of the
-    # judge, continuity, and synthesis calls that answer one edit. Both are
-    # keyed per script per burst, closed when the next call of that kind on
-    # that script comes more than BUILD_GAP later. Time is what holds a burst
-    # together, so a build whose run row has gone, and a preview whose calls
-    # were recorded before change sets were linked, still read as one action.
+    # A build is a burst of extraction calls with no change set, and a preview
+    # whose calls predate change-set linking is a burst of judge, continuity,
+    # and synthesis calls that answer one edit. Both are keyed per script per
+    # burst, closed when the next call of that kind on that script comes more
+    # than BUILD_GAP later. Time is what holds a burst together, so a build
+    # whose run row has gone, and a preview whose calls were recorded before
+    # change sets were linked, still read as one action. A preview's own
+    # extraction call carries a change-set id, so it is left to the change-set
+    # grouping below rather than counted as a build.
     keys: dict[uuid.UUID, tuple] = {}
     open_bursts: dict[tuple, tuple] = {}
     last_seen: dict[tuple, datetime] = {}
     for call in calls:
-        if call.purpose == "extract":
+        if call.purpose == "extract" and call.change_set_id is None:
             kind = "build"
         elif call.purpose in ("agent", "draft"):
             # One Ask Ripple turn is one action: the orchestrator's calls and
