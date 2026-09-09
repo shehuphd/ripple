@@ -53,6 +53,16 @@ def create_db_engine(url: str | None = None, echo: bool = False) -> Engine:
             directory = os.path.dirname(path)
             if directory:
                 os.makedirs(directory, exist_ok=True)
+    else:
+        # Managed Postgres (Replit's is Neon-backed) closes a connection that
+        # has been idle for a few minutes. Without a liveness check the pool
+        # hands the next request a connection the server already dropped, and
+        # the first query on it fails before the pool can re-establish one:
+        # the page 500s, and a reload succeeds once the pool has healed. A
+        # pre-ping tests each connection on checkout and reconnects on its own;
+        # recycling retires a connection before the server's own idle cutoff.
+        kwargs["pool_pre_ping"] = True
+        kwargs["pool_recycle"] = 300
 
     engine = create_engine(resolved, **kwargs)
 

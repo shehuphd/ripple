@@ -1,6 +1,6 @@
 # Manifest
 
-Last updated: 2026-09-09 00:00:00 UTC
+Last updated: 2026-09-09 09:23:48 UTC
 
 Every file in the repository and what it does. Directories the application writes at runtime (`data/`, `.venv`) are gitignored and not listed.
 
@@ -63,7 +63,7 @@ Every file in the repository and what it does. Directories the application write
 | `db/ids.py` | Identifier coercion: strings to UUIDs, shared by routes, payloads, and stored history. |
 | `db/naming.py` | Entity name normalization, shared by extraction and the change-set service. |
 | `db/repository.py` | Query helpers: persistence, deletion previews, counts, shared graph labels. |
-| `db/session.py` | Engine and session setup, SQLite foreign-key and write-ahead pragmas. |
+| `db/session.py` | Engine and session setup: SQLite foreign-key and write-ahead pragmas, and a liveness check with recycling on the Postgres pool. |
 
 ### Extraction (`ripple/extraction/`)
 
@@ -178,6 +178,7 @@ Every file in the repository and what it does. Directories the application write
 | `tests/test_llm.py` | Provider contract and the KeyCall adapter. |
 | `tests/test_genai_provider.py` | The google-genai adapter: SDK mapping, error codes, and the Ask-path routing. |
 | `tests/test_models.py` | Schema constraints and vocabularies. |
+| `tests/test_session.py` | Engine construction: the Postgres connection pool tests and recycles connections; SQLite is left alone. |
 | `tests/test_pricing.py` | Cost lookup, reasoning at the output rate, and honest unknowns. |
 | `tests/test_prepass.py` | The deterministic pre-pass and the validator's provided-id and span-bound rules. |
 | `tests/support/__init__.py` | Marks the test support package. |
