@@ -285,6 +285,72 @@ class TestJudgedPreview:
         assert result.severity in ("medium", "high")
         assert "color" in result.summary
 
+    def test_renaming_a_cue_surfaces_even_when_the_model_finds_nothing(
+        self, session
+    ):
+        """A cue rename changes no stored fact, so the model judge holds every
+        edge and its continuity pass returns nothing. The deterministic pass
+        must still flag it, at a severity that is never 'none'."""
+        script = Script(title="Rename E2E", import_status="accepted")
+        session.add(script)
+        session.flush()
+        nadia = Entity(
+            script_id=script.id,
+            entity_type="cast",
+            canonical_name="NADIA",
+            normalized_name=normalize("NADIA"),
+        )
+        session.add(nadia)
+        session.flush()
+        cues = []
+        for index in range(2):
+            scene = Scene(
+                script_id=script.id,
+                sequence_index=index,
+                heading=f"INT. ROOM {index} - DAY",
+                display_scene_number=str(index + 1),
+            )
+            session.add(scene)
+            session.flush()
+            cue = ScriptUnit(
+                scene_id=scene.id,
+                unit_type="character",
+                sequence_index=0,
+                current_text="NADIA",
+                speaker_name="NADIA",
+                parser_method="fountain",
+            )
+            session.add(cue)
+            session.flush()
+            # A baseline the preview judges against: NADIA appears in each scene.
+            session.add(
+                Assertion(
+                    script_id=script.id,
+                    subject_kind="entity",
+                    subject_entity_id=nadia.id,
+                    predicate="appears_in",
+                    manner="on_stage",
+                    object_kind="scene",
+                    object_scene_id=scene.id,
+                    source_unit_id=cue.id,
+                    confidence=0.9,
+                )
+            )
+            cues.append(cue)
+        session.flush()
+
+        judge = FakeJudge()  # continuity_findings is empty: the model sees none
+        result = preview_changes(
+            session,
+            [UnitEdit(unit_id=str(cues[0].id), proposed_text="PRIYA")],
+            judge,
+            "fake-judge",
+        )
+        renames = [f for f in result.findings if f.finding_type == "cast_rename"]
+        assert len(renames) == 1, "a cue rename must always be flagged"
+        assert "renamed PRIYA" in renames[0].message
+        assert result.severity != "none"
+
     def test_the_word_diff_marks_the_changed_word(self, session):
         world = build_world(session)
         judge = FakeJudge()

@@ -9,12 +9,14 @@ no model involved at all.
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import select
 
 from ripple.db.models import Assertion, Entity, Scene, Script, ScriptUnit
 from ripple.db.naming import normalize
 from ripple.db.session import create_all, create_db_engine, session_factory
 from ripple.graph.continuity import (
     MAX_EVIDENCE_ITEMS,
+    detect_cast_renames,
     detect_orphaned_references,
     retrieve,
 )
@@ -153,6 +155,91 @@ def world(session):
         "forklift_establishes": forklift_establishes,
         "forklift_appears_in": forklift_appears_in,
     }
+
+
+class TestCastRenames:
+    """Renaming a character cue changes no stored fact, so the model judge
+    holds every edge and reports nothing. A cue rename is structural, and this
+    deterministic pass is what flags it at all."""
+
+    def _play(self, session):
+        """Three scenes, two speakers. NADIA speaks in every scene."""
+        script = Script(title="Rename Test", import_status="accepted")
+        session.add(script)
+        session.flush()
+        cues = []
+        for index in range(3):
+            scene = Scene(
+                script_id=script.id,
+                sequence_index=index,
+                heading=f"INT. ROOM {index} - DAY",
+                display_scene_number=str(index + 1),
+            )
+            session.add(scene)
+            session.flush()
+            cue = ScriptUnit(
+                scene_id=scene.id,
+                unit_type="character",
+                sequence_index=0,
+                current_text="NADIA",
+                speaker_name="NADIA",
+                parser_method="fountain",
+            )
+            line = ScriptUnit(
+                scene_id=scene.id,
+                unit_type="dialogue",
+                sequence_index=1,
+                current_text="A line.",
+                speaker_name="NADIA",
+                parser_method="fountain",
+            )
+            session.add_all([cue, line])
+            session.flush()
+            cues.append(cue)
+        return script, cues
+
+    def test_a_renamed_cue_is_flagged_with_the_lines_that_still_use_the_old_name(
+        self, session
+    ):
+        script, cues = self._play(session)
+        findings = detect_cast_renames(session, script.id, [(cues[0], "PRIYA")])
+        assert len(findings) == 1
+        finding = findings[0]
+        assert finding.old_label == "NADIA"
+        assert finding.new_label == "PRIYA"
+        # The two other cues still say NADIA.
+        assert len(finding.later_unit_ids) == 2
+        assert "renamed PRIYA" in finding.message
+        assert "2 other lines" in finding.message
+
+    def test_a_sole_occurrence_rename_names_the_rebuild(self, session):
+        script, cues = self._play(session)
+        # Delete the other two cues so this is the only line naming NADIA.
+        for cue in cues[1:]:
+            session.delete(cue)
+        session.flush()
+        finding = detect_cast_renames(session, script.id, [(cues[0], "PRIYA")])[0]
+        assert finding.later_unit_ids == []
+        assert "the only line" in finding.message
+        assert "Rebuild" in finding.message
+
+    def test_an_unchanged_cue_is_not_a_rename(self, session):
+        script, cues = self._play(session)
+        assert detect_cast_renames(session, script.id, [(cues[0], "NADIA")]) == []
+        # A case or extension change is the same speaker, not a rename.
+        assert detect_cast_renames(session, script.id, [(cues[0], "NADIA (V.O.)")]) == []
+
+    def test_a_dialogue_edit_is_never_a_rename(self, session):
+        """Only a character cue renames a speaker; editing a line of dialogue
+        that happens to name a character does not."""
+        script, cues = self._play(session)
+        line = session.scalars(
+            select(ScriptUnit).where(
+                ScriptUnit.scene_id == cues[0].scene_id,
+                ScriptUnit.unit_type == "dialogue",
+            )
+        ).first()
+        assert detect_cast_renames(session, script.id, [(line, "PRIYA speaks.")]) == []
 
 
 class TestOrphanedReferences:

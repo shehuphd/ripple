@@ -69,7 +69,13 @@ from ripple.extraction.judge import (
     validate_judgement,
 )
 from ripple.extraction.validate import MalformedResponse
-from ripple.graph.continuity import EvidencePacket, detect_orphaned_references, retrieve
+from ripple.graph.continuity import (
+    CastRename,
+    EvidencePacket,
+    detect_cast_renames,
+    detect_orphaned_references,
+    retrieve,
+)
 from ripple.graph.diff import Edge, EdgeRef, GraphDiff, diff_edges, to_operations
 from ripple.graph.predicates import SIGNATURES
 from ripple.llm.base import (
@@ -373,6 +379,11 @@ def _preview(
     orphans = detect_orphaned_references(
         session, script.id, removed_establishes, removed_ids
     )
+    # A character-cue rename changes no stored fact, so nothing above catches
+    # it. Detected here, deterministically, so an edit that renames a
+    # character is never reported as no change.
+    renames = detect_cast_renames(session, script.id, live_edits)
+    orphans = [*orphans, *renames]
     affected = [
         row.object_entity_id or row.subject_entity_id
         for row in accepted_rows
@@ -408,6 +419,10 @@ def _preview(
     if attribute_changes and severity in ("none", "low"):
         # A changed attribute is a department deliverable changing, which is
         # never a non-event even when no edge moved.
+        severity = "medium"
+    if renames and severity in ("none", "low"):
+        # Renaming a character is never a non-event, even a sole-occurrence
+        # rename that leaves the graph with no split to reconcile.
         severity = "medium"
     summary = deterministic_summary(diff, orphans)
     # An attribute change IS the graph change; "No graph change." beside it
@@ -447,10 +462,18 @@ def _preview(
     proposal.severity = severity
     finding_rows: list[tuple[Any, ContinuityFinding]] = []
     for orphan in orphans:
+        is_rename = isinstance(orphan, CastRename)
         row = ContinuityFinding(
             change_set_id=proposal.id,
-            finding_type="orphaned_reference",
-            severity="high",
+            finding_type="cast_rename" if is_rename else "orphaned_reference",
+            # A rename that leaves the old name on other lines is a split
+            # identity (high); a sole-occurrence rename is a clean change the
+            # graph has yet to catch up with (medium).
+            severity=(
+                ("high" if orphan.later_unit_ids else "medium")
+                if is_rename
+                else "high"
+            ),
             message=orphan.message,
             status="open",
         )
@@ -492,13 +515,21 @@ def _preview(
         for item in (*packet.earlier, *packet.later)
     }
     for orphan, row in finding_rows:
-        for rank, unit_id in enumerate(_ordered_unique(orphan.later_unit_ids)):
+        # A rename cites the line it renames first, so Review units opens on
+        # the edit itself before walking the lines that still hold the old
+        # name; a sole-occurrence rename cites only the edited line.
+        cited_units = _ordered_unique(orphan.later_unit_ids)
+        reasons = ["later_reference"] * len(cited_units)
+        if isinstance(orphan, CastRename):
+            cited_units = [orphan.edited_unit_id, *cited_units]
+            reasons = ["renamed_line", *reasons]
+        for rank, (unit_id, reason) in enumerate(zip(cited_units, reasons, strict=True)):
             session.add(
                 FindingEvidence(
                     finding_id=row.id,
                     script_unit_id=uuid_module.UUID(unit_id),
                     rank=rank,
-                    match_reason="later_reference",
+                    match_reason=reason,
                 )
             )
     for conflict, row in conflict_rows:
@@ -521,8 +552,23 @@ def _preview(
     # matching the shape the rebuild path returns.
     for orphan, row in finding_rows:
         row.entity_label = orphan.entity_label
-        row.later_unit_ids = orphan.later_unit_ids
-        row.later_scene_numbers = orphan.later_scene_numbers
+        if isinstance(orphan, CastRename):
+            row.later_unit_ids = _ordered_unique(
+                [orphan.edited_unit_id, *orphan.later_unit_ids]
+            )
+            row.later_scene_numbers = _ordered_unique(
+                [
+                    number
+                    for number in (
+                        orphan.edited_scene_number,
+                        *orphan.later_scene_numbers,
+                    )
+                    if number
+                ]
+            )
+        else:
+            row.later_unit_ids = orphan.later_unit_ids
+            row.later_scene_numbers = orphan.later_scene_numbers
     for conflict, row in conflict_rows:
         cited = [packet_units[i] for i in conflict.evidence_ids]
         row.later_unit_ids = _ordered_unique([unit for unit, _ in cited])

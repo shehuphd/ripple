@@ -21,6 +21,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ripple.adapters.base import parse_character_cue
 from ripple.db.models import (
     Assertion,
     ChangeSet,
@@ -30,6 +31,7 @@ from ripple.db.models import (
     Scene,
     ScriptUnit,
 )
+from ripple.db.naming import normalize
 from ripple.db.repository import graph_labels
 
 logger = logging.getLogger(__name__)
@@ -104,6 +106,136 @@ def _item_payload(item: EvidenceItem) -> dict[str, Any]:
         "confidence": round(item.confidence, 2),
         "why_retrieved": item.relation,
     }
+
+
+@dataclass(frozen=True)
+class CastRename:
+    """A character cue an edit renames: the speaker on a line changes.
+
+    Renaming a cue is structural, not a fact the model judges: MARGOT to
+    MAGGIE contradicts no stored assertion, so the judgement pass holds every
+    edge and reports nothing. The graph resolved speakers to entities when it
+    was built and re-resolves none on an edit, so the old name persists on
+    every other line and the new name never enters the graph until a rebuild.
+    This deterministic finding is what says a character was renamed at all.
+    """
+
+    old_label: str
+    new_label: str
+    edited_unit_id: str
+    edited_scene_number: str | None
+    later_unit_ids: list[str]
+    later_scene_numbers: list[str]
+
+    @property
+    def entity_label(self) -> str:
+        return self.old_label
+
+    @property
+    def message(self) -> str:
+        """What the script now says, in one line."""
+        if not self.later_unit_ids:
+            return (
+                f"{self.old_label} is renamed {self.new_label} on this line, "
+                f"the only line that named {self.old_label}. Rebuild the graph "
+                f"to record {self.new_label} as the character."
+            )
+        lines = len(self.later_unit_ids)
+        one_line = lines == 1
+        # An unnumbered scene has "—" for a label, so a written script would
+        # read "in scene —"; name the scenes only when they carry numbers.
+        numbered = [n for n in self.later_scene_numbers if n and n != "—"]
+        where = ""
+        if numbered:
+            one_scene = len(numbered) == 1
+            where = f" in scene{'' if one_scene else 's'} {', '.join(numbered)}"
+        return (
+            f"{self.old_label} is renamed {self.new_label} on this line, but "
+            f"{lines} other line{'' if one_line else 's'}{where} still "
+            f"name{'s' if one_line else ''} {self.old_label}."
+        )
+
+
+def detect_cast_renames(
+    session: Session,
+    script_id,
+    edits: list[tuple[Any, str]],
+) -> list[CastRename]:
+    """Find character cues an edit renames, and where the old name survives.
+
+    `edits` is `(unit, proposed_text)`. A cue is a rename when the edited unit
+    is a character cue whose current and proposed text both parse as cues and
+    name different speakers. The later lines are every other active character
+    cue in the script that still carries the old name, so the finding can say
+    the rename is partial and point at the rest.
+    """
+    findings: list[CastRename] = []
+    scene_order = _scene_order(session, script_id)
+    for unit, proposed in edits:
+        if unit.unit_type != "character":
+            continue
+        current_cue = parse_character_cue(unit.current_text or "")
+        proposed_cue = parse_character_cue(proposed or "")
+        if current_cue is None or proposed_cue is None:
+            continue
+        old_name, new_name = current_cue[0], proposed_cue[0]
+        if normalize(old_name) == normalize(new_name):
+            continue
+        old_key = normalize(old_name)
+        survivors = [
+            other
+            for other in session.scalars(
+                select(ScriptUnit)
+                .join(Scene, ScriptUnit.scene_id == Scene.id)
+                .where(
+                    Scene.script_id == script_id,
+                    ScriptUnit.unit_type == "character",
+                    ScriptUnit.id != unit.id,
+                )
+            )
+            if (parse := parse_character_cue(other.current_text or ""))
+            and normalize(parse[0]) == old_key
+        ]
+        edited_scene = session.get(Scene, unit.scene_id)
+        later_scenes = _ordered_scene_numbers(
+            session, [s.scene_id for s in survivors], scene_order
+        )
+        findings.append(
+            CastRename(
+                old_label=old_name,
+                new_label=new_name,
+                edited_unit_id=str(unit.id),
+                edited_scene_number=edited_scene.label if edited_scene else None,
+                later_unit_ids=[str(s.id) for s in survivors],
+                later_scene_numbers=later_scenes,
+            )
+        )
+    return findings
+
+
+def _ordered_scene_numbers(session, scene_ids, scene_order) -> list[str]:
+    """Distinct scene labels for the given scenes, in script order."""
+    seen: dict[Any, str] = {}
+    for scene_id in scene_ids:
+        if scene_id in seen:
+            continue
+        scene = session.get(Scene, scene_id)
+        if scene is not None:
+            seen[scene_id] = scene.label
+    ordered = sorted(
+        seen.items(),
+        key=lambda kv: scene_order.get(kv[0], (1_000_000, None))[0],
+    )
+    return _ordered_unique_labels([label for _, label in ordered])
+
+
+def _ordered_unique_labels(labels: list[str]) -> list[str]:
+    """Distinct labels, first occurrence order preserved."""
+    seen: list[str] = []
+    for label in labels:
+        if label not in seen:
+            seen.append(label)
+    return seen
 
 
 @dataclass(frozen=True)

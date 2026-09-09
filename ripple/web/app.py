@@ -2924,6 +2924,7 @@ def extraction_progress(run_id: str, session: Session = Depends(get_session)):
 FINDING_TITLES = {
     "orphaned_reference": "Orphaned reference",
     "continuity_conflict": "Continuity conflict",
+    "cast_rename": "Character renamed",
 }
 
 
@@ -2933,13 +2934,12 @@ def _finding_payload(finding) -> dict:
     Handles both the fresh rows (citations attached in memory) and the
     rebuild's stored rows (citations read from finding_evidence).
     """
+    finding_type = getattr(finding, "finding_type", "")
     entity_label = getattr(finding, "entity_label", "") or ""
-    if entity_label:
+    if entity_label and finding_type == "orphaned_reference":
         title = f"Later units still reference {entity_label}"
     else:
-        title = FINDING_TITLES.get(
-            getattr(finding, "finding_type", ""), "Continuity finding"
-        )
+        title = FINDING_TITLES.get(finding_type, "Continuity finding")
     return {
         "id": str(finding.id) if getattr(finding, "id", None) else None,
         "severity": getattr(finding, "severity", "high"),
