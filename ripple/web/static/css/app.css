@@ -96,8 +96,10 @@ button{font:inherit}
   table.scripts th:nth-child(5), table.scripts td:nth-child(5){display:none}
 }
 .bar .nav{display:flex;gap:4px;color:var(--t4)}
-.bar .toggle{background:none;border:0;color:var(--t3);cursor:pointer;padding:6px 7px;
-  border-radius:5px;font-size:15px;line-height:1}
+.bar .toggle{background:none;border:0;color:var(--t3);cursor:pointer;padding:6px 8px;
+  border-radius:5px;font-size:15px;line-height:1.2;
+  display:inline-flex;align-items:center;justify-content:center;
+  -webkit-appearance:none;appearance:none}
 .bar .toggle:hover{background:var(--raised);color:var(--t1)}
 .bar .toggle.on{color:var(--ac)}
 .bar .nav a{width:24px;height:24px;display:grid;place-items:center;border-radius:5px}
@@ -132,8 +134,14 @@ button{font:inherit}
 .content.panes{overflow:hidden;display:flex;flex-direction:column;min-height:0}
 
 /* Buttons and chips */
+/* inline-flex with a fixed line-height so a decorative glyph (⁙, ≋) cannot
+   inflate the box: every button is one height whether it carries a glyph or
+   not. The appearance reset stops Safari giving <button> its own metrics, so
+   an <a>, <span>, and <button> styled .btn all match. */
 .btn{background:var(--raised);color:var(--t1);border:.5px solid var(--bd2);border-radius:7px;
-  padding:7px 13px;font-size:13px;cursor:pointer;white-space:nowrap}
+  padding:7px 13px;font-size:13px;cursor:pointer;white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;line-height:1.2;
+  vertical-align:middle;font-family:inherit;-webkit-appearance:none;appearance:none}
 .btn:hover{background:#232630}
 .btn.pri{background:var(--ac);border-color:var(--ac);color:#04212a;font-weight:600}
 .btn.pri:hover{background:#3ab8d8}
