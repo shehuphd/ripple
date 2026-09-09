@@ -88,8 +88,6 @@ All notable changes to Ripple are documented here.
 
 - **In-script search matches across an accepted edit.** A search for a phrase straddling an accepted edit ("young man", where the edit had added "man and his little brother") found nothing, because the accepted words render inside a `<mark>` that splits the line into separate text nodes and the search matched one node at a time. It now searches each line's whole text and highlights the match even where it crosses the edit.
 
-- **The judgement card translates its drop reasons.** "Verification dropped" listed the pipeline's internal rejection reasons verbatim: audit phrasing like "removal not visible in the edited lines, downgraded to holds" and codes like "unresolved_endpoint". Each reason now renders as a sentence ("A fact was called removed, but the edited lines don't show that; it was kept."), repeats collapse into one line with a tally, and the trace keeps the originals.
-
 - **The screensaver footer reads "Back to Ripple".** "Exit" on a hosted page read as quitting the app rather than returning to it.
 
 - **The plan card stops leaking its own instructions.** A covered scene the plan left out was added back carrying the model-facing words "Not covered by the plan. Say what changes here, or that nothing does.", counted in the changing tally, and rode into drafting as an instruction. The added row now reads "No change planned.", counts as unchanged, and drafts nothing; the push to decide those scenes goes to the model alone, told to restate the plan if any of them should change.

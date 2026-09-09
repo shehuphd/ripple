@@ -9,8 +9,9 @@ persisted when a model call fails: a failed preview is a failure state with
 a retry, never an empty result.
 
 Cost properties this module owns:
-- One judgement call per affected scene per preview, however many units the
-  proposal edits.
+- Two model calls per affected scene per preview, a judgement and a
+  new-element extraction, plus one continuity call per preview, however many
+  units the proposal edits.
 - A repeated preview of an identical proposal returns the stored pending
   change set instead of calling the model again.
 - Acceptance applies the judged operations; nothing here or downstream

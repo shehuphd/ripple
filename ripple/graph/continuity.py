@@ -5,11 +5,13 @@ changes, application code gathers earlier and later assertions, aliases, direct
 neighbours, and the units supporting them, ranks them, and hands a bounded
 packet to the continuity agent. The agent judges; it does not search.
 
-One finding needs no agent. If an edit removes the only `establishes` edge for
+Two findings need no agent. If an edit removes the only `establishes` edge for
 an entity that later scenes still reference, that is arithmetic over the graph,
-not a judgement, and the application offers the
-user a choice about it. Determining it here means the warning survives a model
-being unavailable, slow, or wrong.
+not a judgement. If an edit renames a character on one line while the old name
+survives on others, that is a comparison of speakers, not a judgement either.
+Both are determined here, and the application offers the user a choice about
+each. Determining them here means the warning survives a model being
+unavailable, slow, or wrong.
 """
 
 from __future__ import annotations
