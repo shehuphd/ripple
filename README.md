@@ -81,6 +81,8 @@ Meaningful actions are traced with [TraceAct](https://github.com/traceact/tracea
 
 Set `RIPPLE_TRACING=off` to disable trace writing.
 
+Every model-facing prompt is versioned, and each call's trace and `model_calls` row is stamped with the version that produced it. [`registry/PROMPTS.md`](https://github.com/shehuphd/ripple/blob/main/registry/PROMPTS.md) is the review surface: the live version of each prompt, where its text lives, and what changed between versions. A test refuses a bumped constant that never reaches the registry.
+
 ## Hooks
 
 The repository carries its own git hooks, so the docs gate travels with it:

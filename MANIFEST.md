@@ -13,6 +13,7 @@ Every file in the repository and what it does. Directories the application write
 | `ARCHITECTURE.md` | System structure, data stores, integrations, a STRuFO run-through, and the domain glossary. |
 | `CHANGELOG.md` | Release history, newest first. |
 | `MANIFEST.md` | This file. |
+| `registry/PROMPTS.md` | The prompt registry: every live model-facing prompt version, where its text lives, and what changed between versions. Enforced by `tests/test_docs.py`. |
 | `LICENSE` | AGPL-3.0. |
 | `launch.command` | macOS launcher: stops any running instance, builds the venv or rebuilds it when its pip cannot answer, starts the server, opens a browser. `--test` runs the suite instead. |
 | `launch.bat` | Windows launcher: the same behaviour through the py launcher, netstat, and PowerShell. |

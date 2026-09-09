@@ -114,28 +114,36 @@ class TestManifest:
 
 
 class TestPromptRegistry:
-    """project/PROMPTS.md is the review surface for prompt versions; a bumped
+    """registry/PROMPTS.md is the review surface for prompt versions; a bumped
     constant that never reaches the registry defeats the audit trail."""
 
     def test_every_live_prompt_version_is_registered(self):
         from ripple.extraction.continuity_judge import CONTINUITY_PROMPT_VERSION
         from ripple.extraction.judge import JUDGE_PROMPT_VERSION
         from ripple.extraction.prompt import PROMPT_VERSION
+        from ripple.services.agent import (
+            AGENT_PROMPT_VERSION,
+            DRAFT_PROMPT_VERSION,
+            ROUTE_PROMPT_VERSION,
+        )
         from ripple.services.synthesizer import (
             QUERY_PROMPT_VERSION,
             SYNTHESIS_PROMPT_VERSION,
         )
 
-        registry = (REPO / "project" / "PROMPTS.md").read_text(encoding="utf-8")
+        registry = (REPO / "registry" / "PROMPTS.md").read_text(encoding="utf-8")
         for version in (
             PROMPT_VERSION,
             JUDGE_PROMPT_VERSION,
             CONTINUITY_PROMPT_VERSION,
             SYNTHESIS_PROMPT_VERSION,
             QUERY_PROMPT_VERSION,
+            AGENT_PROMPT_VERSION,
+            DRAFT_PROMPT_VERSION,
+            ROUTE_PROMPT_VERSION,
         ):
             assert f"`{version}`" in registry, (
-                f"{version} is live but not in project/PROMPTS.md"
+                f"{version} is live but not in registry/PROMPTS.md"
             )
 
 
