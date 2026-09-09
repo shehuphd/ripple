@@ -12,7 +12,7 @@ dependencies = [
     "rates>=0.0.4",
     "sqlalchemy>=2.0",
     "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
+    "uvicorn[standard]>=0.52.4",
     "jinja2>=3.1",
     "python-multipart>=0.0.9",
 ]
