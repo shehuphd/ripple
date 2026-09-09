@@ -40,8 +40,8 @@ replit = [
 Changelog = "https://github.com/shehuphd/ripple/blob/main/CHANGELOG.md"
 
 # Without this, setuptools' flat-layout discovery treats every top-level
-# directory as a package and fails on the data, planning, tests, and tools
-# directories.
+# directory as a package and fails on the demo-scripts, registry, tests, and
+# tools directories.
 [tool.setuptools.packages.find]
 include = ["ripple*"]
 

@@ -230,7 +230,7 @@ All notable changes to Ripple are documented here.
 
 - **Scenes can be added and omitted in the reader.** ＋ scene parses like an import and takes a lettered number (12A) with nothing renumbering; with a model selected only the new scene extracts. ⊘ marks OMITTED: facts deactivate as one audited change set, orphaned references become findings, and Restore reverses it all. Both bump the script version.
 
-- **Complete ground truths for the demo corpus.** The three dependencies.md files inventory every scene: 82, 66, and 51 entities and 480, 354, and 315 seeded assertions. A coverage harness cross-checks every mention, and the remaining unlinked ones are each deliberate and documented.
+- **Complete ground truths for the demo corpus.** The three dependencies.md files inventory every scene: 82, 66, and 50 entities and 480, 354, and 315 seeded assertions. A coverage harness cross-checks every mention, and the remaining unlinked ones are each deliberate and documented.
 
 - **Extraction demands completeness (`extract.v4`).** Every named object is a deliverable across all ten entity types, the attributes array is required, and the output cap doubles to 8,192 tokens.
 

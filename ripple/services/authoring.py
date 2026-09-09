@@ -542,7 +542,7 @@ def _unforced(text: str) -> tuple[str, str | None]:
 
     Explicit beats implicit: the marker says what the line is, and it is
     consumed rather than stored, so the saved text is the words alone. Six
-    of the seven are Fountain's own markers, which is what keeps an export
+    of the eight are Fountain's own markers, which is what keeps an export
     readable by any other tool; `"` for dialogue and `>>` for a shot fill
     the two elements Fountain leaves to position.
     """
